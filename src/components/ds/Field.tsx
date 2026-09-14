@@ -200,7 +200,12 @@ export function Switch({ checked, onChange, disabled, className, ...rest }: Swit
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        // MOB-002: pastila are 24px înălțime — asta e forma ei, nu ținta degetului. Pe telefon
+        // un pseudo-element transparent îi întinde zona de apăsare la 44px, fără să schimbe
+        // desenul: apeși „lângă" comutator și tot el se comută. Marginile unui element absolut se
+        // măsoară din caseta de padding, deci bordura transparentă de 2px mănâncă din fiecare
+        // capăt: cu 10px ieșeau 40px de țintă, sub prag. De aceea 12 (`-inset-y-3`), nu 10.
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 max-sm:before:absolute max-sm:before:-inset-x-2 max-sm:before:-inset-y-3 max-sm:before:content-['']",
         checked ? "bg-primary" : "bg-input",
         disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
         className,

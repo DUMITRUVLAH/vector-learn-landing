@@ -1892,7 +1892,7 @@ export function ParCreateForm() {
                           placeholder={empty ? "Adaugă un eveniment" : "Eveniment nou"}
                           aria-label={empty ? undefined : "Denumire eveniment nou"} autoFocus={!empty} />
                         <button type="button" onClick={addQuickEvent} aria-label="Adaugă eveniment"
-                          className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
+                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-input px-3 hover:bg-muted"><Plus className="h-4 w-4" /></button>
                       </div>
                     ) : (
                       <button type="button" onClick={() => setShowNewEvent(true)}

@@ -8,7 +8,7 @@
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
 import { useState, useEffect, useCallback, useRef } from "react";
-import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, RefreshCcw, X, FileText } from "lucide-react";
+import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, RefreshCcw, X, FileText, SlidersHorizontal } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
   Alert,
@@ -24,6 +24,7 @@ import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import { useRouter } from "@/router/HashRouter";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import {
   getParInbox,
   getParInboxDecided,
@@ -427,6 +428,144 @@ function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: 
 }
 
 
+// ─── Un rând de inbox, așa cum încape pe un telefon ──────────────────────────
+/**
+ * Inboxul e un tabel de 11 coloane. Pe un ecran de 390px se vedea o fereastră de două coloane —
+ * bifa și „Acțiuni" — iar TOT ce ține de decizie (beneficiarul, suma, pentru ce) rămânea dincolo
+ * de marginea dreaptă, la capătul unei derulări laterale. Adică ecranul care există ca să semnezi
+ * arăta trei iconițe de 28px și niciun motiv să apeși vreuna.
+ *
+ * Cardul pune aceleași date în ordinea în care le citește un aprobator — CINE, CÂT, PENTRU CE,
+ * cine a semnat deja — și abia apoi cele trei decizii, ca butoane late de un deget.
+ */
+interface InboxCardProps {
+  item: ParInboxItem;
+  decidedMode: boolean;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  onAction: (item: ParInboxItem, type: DecisionType) => void;
+  onOpen: (item: ParInboxItem) => void;
+  bulkResult?: { ok: boolean; error?: string; status?: string };
+}
+
+function InboxCard({ item, decidedMode, selected, onToggleSelect, onAction, onOpen, bulkResult }: InboxCardProps) {
+  const decisionMeta = MY_DECISION_META[item.my_decision ?? ""];
+  return (
+    <li className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {!decidedMode && (
+            // Ținta bifei e eticheta din jurul ei, nu pătratul de 16px: pe telefon se selectează
+            // cu degetul, iar o bifă de 16px cere o precizie pe care nu o are nimeni.
+            <label className="-m-2 flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center p-2">
+              <Checkbox checked={selected} onChange={() => onToggleSelect(item.id)} aria-label={`Selectează ${item.requestNo}`} />
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={() => onOpen(item)}
+            className="min-h-[44px] truncate font-mono text-sm font-medium text-foreground hover:text-primary hover:underline"
+            aria-label={`Deschide cererea ${item.requestNo}`}
+          >
+            {item.requestNo}
+          </button>
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="font-mono text-base font-semibold text-foreground">{inboxAmount(item)}</span>
+          {item.currency && item.currency !== "MDL" && item.totalMdlCents != null && (
+            <span className="block text-xs font-normal text-muted-foreground">≈ {formatMDL(item.totalMdlCents)}</span>
+          )}
+        </div>
+      </div>
+
+      {/* `empty:hidden`: cererea obișnuită n-are niciun semn (nu e urgentă, nu e retroactivă, n-are
+          nepotriviri), iar rândul gol lăsa o gaură cât un rând de text în mijlocul cardului. */}
+      <div className="flex flex-wrap items-center gap-1.5 empty:hidden">
+        {decidedMode && decisionMeta && (
+          <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold", decisionMeta.className)}>
+            {decisionMeta.label}
+            {item.my_decided_at ? ` · ${new Date(item.my_decided_at).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "2-digit" })}` : ""}
+          </span>
+        )}
+        {decidedMode && <ParStatusChip status={item.status} />}
+        {item.isUrgent && <ParUrgentBadge reason={item.urgentReason} reasonNote={item.urgentReasonNote} dueDate={item.urgentDueDate} />}
+        <ParBackdatedBadge dateOfRequest={item.dateOfRequest} submittedAt={item.submittedAt} />
+        {item.purpose !== DEFAULT_PURPOSE && (
+          <span className="rounded bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
+            {PURPOSE_LABEL[item.purpose] ?? item.purpose}
+          </span>
+        )}
+        {(item.document_warnings ?? 0) > 0 && (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning"
+            title="Verificarea documentelor a găsit diferențe față de datele cererii. Deschide cererea pentru detalii."
+          >
+            <AlertCircle className="h-3 w-3" aria-hidden="true" />
+            {item.document_warnings === 1 ? "1 nepotrivire" : `${item.document_warnings} nepotriviri`}
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-1 text-sm">
+        <p className="font-medium text-foreground">{item.payeeName ?? "Beneficiar nespecificat"}</p>
+        {item.endUse && <p className="text-muted-foreground">{item.endUse}</p>}
+        <p className="text-xs text-muted-foreground">
+          {[item.projectName, item.requestedByName ? `cerut de ${item.requestedByName}` : null,
+            item.submittedAt ? `depus ${new Date(item.submittedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "2-digit" })}` : null]
+            .filter(Boolean).join(" · ")}
+        </p>
+      </div>
+
+      <div className="text-xs">
+        <ApprovalsCell item={item} />
+      </div>
+
+      {item.attachments?.length ? (
+        <div className="flex flex-wrap gap-2">
+          {item.attachments.map((attachment) => (
+            <button
+              key={attachment.id}
+              type="button"
+              onClick={() => viewParAttachment(item.id, attachment.id, attachment.fileName)}
+              className="inline-flex min-h-[44px] max-w-full items-center gap-1.5 rounded-md border border-border px-3 text-sm text-primary"
+              title={`Deschide ${attachment.fileName}`}
+            >
+              <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{shortFileName(attachment.fileName)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {bulkResult && (
+        <p className={cn("text-xs font-medium", bulkResult.ok ? "text-success" : "text-destructive")}>
+          {bulkResult.ok
+            ? bulkResult.status === "pending_approval" ? "✓ Semnat · mai are un pas" : "✓ Aprobată"
+            : `✗ ${bulkResult.error ?? "Eroare"}`}
+        </p>
+      )}
+
+      {!decidedMode && (
+        // Decizia, nu iconița decizei: pe telefon cele trei rezultate se citesc pe nume și se
+        // apasă cu degetul. „Aprobă" primește rândul ei — e ce se întâmplă cu 9 cereri din 10.
+        <div className="space-y-2 border-t border-border pt-3">
+          <Button variant="success" className="w-full" onClick={() => onAction(item, "approve")} aria-label={`Aprobă ${item.requestNo}`}>
+            <CheckCircle className="h-4 w-4" aria-hidden="true" /> Aprobă
+          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => onAction(item, "request_changes")} aria-label={`Solicită modificări la ${item.requestNo}`}>
+              <MessageSquare className="h-4 w-4" aria-hidden="true" /> Modificări
+            </Button>
+            <Button variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10" onClick={() => onAction(item, "reject")} aria-label={`Respinge ${item.requestNo}`}>
+              <XCircle className="h-4 w-4" aria-hidden="true" /> Respinge
+            </Button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
 // ─── Cine a semnat și cine mai are de semnat ──────────────────────────────────
 /**
  * Un aprobator nu decide în gol: vrea să știe dacă cererea a trecut deja pe la cineva (și pe la
@@ -633,6 +772,14 @@ function BulkRejectModal({ ids, defaultSignatureName, onClose, onDone }: BulkApp
 export default function ParInbox() {
   const { navigate } = useRouter();
   const { t } = useT();
+  /**
+   * Pe telefon inboxul e o listă de carduri, nu un tabel — vezi `InboxCard`. Randăm doar una din
+   * cele două forme (nu amândouă ascunse cu CSS), ca un cititor de ecran și testele să nu
+   * găsească două butoane „Aprobă" pentru aceeași cerere.
+   */
+  const isPhone = useIsPhone();
+  /** Bara de filtre are 9 câmpuri: pe telefon ocupa tot primul ecran, înaintea primei cereri. */
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [items, setItems] = useState<ParInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -869,7 +1016,7 @@ export default function ParInbox() {
                 setSort({ key: key === "decided" ? "myDecidedAt" : "submittedAt", dir: "desc" });
               }}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors max-sm:min-h-[44px]",
                 tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -954,6 +1101,8 @@ export default function ParInbox() {
           });
           // Hand the on-screen list to the keyboard handler (see visibleRowsRef).
           visibleRowsRef.current = rows;
+          /** Câte filtre sunt puse acum — pe telefon bara e strânsă, iar altfel n-ai ști că filtrezi. */
+          const activeFilterCount = [projectFilter, payerFilter, eventFilter, requestorFilter, beneficiaryFilter, dateFrom, dateTo, minTotal, maxTotal].filter(Boolean).length;
           const arrow = (key: InboxSortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
           const Th = ({ k, label, align = "left", className }: { k: InboxSortKey; label: string; align?: "left" | "right"; className?: string }) => (
             <th className={cn("px-3 py-3 font-medium text-muted-foreground whitespace-nowrap", align === "right" ? "text-right" : "text-left", className)}>
@@ -964,12 +1113,32 @@ export default function ParInbox() {
           );
           return (
             <>
-              {/* Filter bar */}
+              {/* Filter bar — pe telefon, strânsă sub un buton: nouă câmpuri de filtrare umpleau
+                  tot primul ecran, iar prima cerere de decis începea abia sub el. */}
               <div className="rounded-lg border border-border bg-card p-3 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm text-muted-foreground">
                     {rows.length} din {viewItems.length} {viewItems.length === 1 ? "cerere" : "cereri"}
                   </p>
+                  {isPhone && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => setFiltersOpen((v) => !v)}
+                      aria-expanded={filtersOpen}
+                    >
+                      <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                      {filtersOpen ? "Ascunde filtrele" : "Filtre"}
+                      {activeFilterCount > 0 && (
+                        <span className="rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                <div className={cn("flex flex-wrap items-center gap-2", isPhone && !filtersOpen && "hidden")}>
                   <Select
                     value={projectFilter}
                     onChange={(e) => setProjectFilter(e.target.value)}
@@ -992,7 +1161,7 @@ export default function ParInbox() {
                   <Input className="w-28" type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" />
                   <Input className="w-28" type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" />
                 </div>
-                {selectedIds.size > 0 && (
+                {selectedIds.size > 0 && !isPhone && (
                   <div className="flex items-center gap-2">
                     <Button size="sm" onClick={() => setBulkOpen(true)}>
                       <CheckCircle className="h-4 w-4" aria-hidden="true" /> Aprobă {selectedIds.size} selectate
@@ -1004,8 +1173,10 @@ export default function ParInbox() {
                 )}
               </div>
 
-              {/* A shortcut nobody knows about saves nobody any time — say it out loud. */}
-              <p className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {/* A shortcut nobody knows about saves nobody any time — say it out loud.
+                  Pe telefon nu există tastatură fizică: rândul ocupa două rânduri de ecran ca să
+                  anunțe scurtături pe care nimeni nu le poate apăsa. */}
+              <p className={cn("mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground", isPhone && "hidden")}>
                 <span className="font-medium">Tastatură:</span>
                 {(decidedMode
                   ? [["j / k", "navighează"], ["Enter", "deschide"]]
@@ -1018,8 +1189,27 @@ export default function ParInbox() {
                 ))}
               </p>
 
+              {/* Pe telefon: carduri. De la tabletă în sus: tabelul complet, cu toate coloanele. */}
+              {isPhone && (
+                <ul className="space-y-3 pb-24" aria-label={decidedMode ? "Deciziile mele" : "Cereri de decis"}>
+                  {rows.map((item) => (
+                    <InboxCard
+                      key={item.id}
+                      item={item}
+                      decidedMode={decidedMode}
+                      selected={selectedIds.has(item.id)}
+                      onToggleSelect={toggleSelect}
+                      onAction={handleAction}
+                      onOpen={(i) => navigate(`/business/par/${i.id}`)}
+                      bulkResult={bulkResults[item.id]}
+                    />
+                  ))}
+                </ul>
+              )}
+
               {/* Excel-style table — same wrapper/padding as the Coadă finanțe table (ds/Table) so
                   the two screens an approver moves between don't read as two different products. */}
+              {!isPhone && (
               <div className="overflow-x-auto rounded-lg border border-border bg-card pb-20">
                 <table className="w-full border-collapse text-sm">
                   <thead>
@@ -1173,41 +1363,45 @@ export default function ParInbox() {
                   </tbody>
                 </table>
               </div>
+              )}
             </>
           );
         })()}
       </div>
 
-      {/* VF-102: sticky bulk-approve bar */}
+      {/* VF-102: sticky bulk-approve bar.
+          Pe telefon stă DEASUPRA barei de navigare (`bottom-16` = cele 64px ale ei): la `bottom-0`
+          acoperea cele patru tab-uri, deci o selecție de două cereri bloca ieșirea din ecran. Iar
+          cele trei butoane pe un rând nu încăpeau în 390px — se așază unul sub altul. */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur-sm shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <div className="fixed bottom-16 inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur-sm shadow-lg md:bottom-0">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} {selectedIds.size === 1 ? "cerere selectată" : "cereri selectate"}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
               <button
                 type="button"
-                onClick={() => setSelectedIds(new Set())}
-                className="px-3 py-2 text-sm rounded-md border border-input hover:bg-muted text-foreground min-h-[44px]"
+                onClick={() => setBulkOpen(true)}
+                className="col-span-2 inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 min-h-[44px] sm:order-3"
               >
-                Anulează
+                <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                Aprobă {selectedIds.size} selectate
               </button>
               <button
                 type="button"
                 onClick={() => setBulkRejectOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md border border-destructive/40 text-destructive hover:bg-destructive/10 min-h-[44px]"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md border border-destructive/40 text-destructive hover:bg-destructive/10 min-h-[44px] sm:order-2"
               >
                 <XCircle className="h-4 w-4" aria-hidden="true" />
-                Respinge {selectedIds.size} selectate
+                <span className="truncate">Respinge {selectedIds.size}</span>
               </button>
               <button
                 type="button"
-                onClick={() => setBulkOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 min-h-[44px]"
+                onClick={() => setSelectedIds(new Set())}
+                className="px-3 py-2 text-sm rounded-md border border-input hover:bg-muted text-foreground min-h-[44px] sm:order-1"
               >
-                <CheckCircle className="h-4 w-4" aria-hidden="true" />
-                Aprobă {selectedIds.size} selectate
+                Anulează
               </button>
             </div>
           </div>

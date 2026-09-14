@@ -51,6 +51,7 @@ import { ParPaymentProofCard } from "@/components/par/ParPaymentProofCard";
 import { ParVerifyCodeCard } from "@/components/par/ParVerifyCodeCard";
 import { useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import {
   getPar,
   approvePar,
@@ -151,9 +152,9 @@ function Section({ num, title, children }: SectionProps) {
   );
 }
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function Field({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
   return (
-    <div>
+    <div className={className}>
       <dt className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-0.5">{label}</dt>
       <dd className="text-sm text-foreground">{value || <span className="text-muted-foreground">—</span>}</dd>
     </div>
@@ -1042,6 +1043,8 @@ let navigate: (path: string) => void = () => {};
 
 export function ParDetailPage() {
   const router = useRouter();
+  /** Tabelul de articole devine listă pe telefon — vezi secțiunea 10. */
+  const isPhone = useIsPhone();
   navigate = router.navigate;
   const { path } = router;
   const { data: session } = useSession();
@@ -1187,7 +1190,7 @@ export function ParDetailPage() {
             <button
               type="button"
               onClick={() => router.navigate(backTarget)}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
+              className="mb-2 -ml-2 flex items-center gap-1.5 px-2 text-sm text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-[44px]"
               aria-label="Înapoi la lista PAR"
             >
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
@@ -1204,7 +1207,11 @@ export function ParDetailPage() {
               {` · Creat ${fmtDate(par.createdAt)}`}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {/* `flex-shrink-0` fără `flex-wrap`: cele patru butoane cereau 699px pe un rând, deci
+              PAGINA se făcea de 699px pe un ecran de 390 — tot ce urma se citea trăgând lateral,
+              iar bara de navigare de jos (`left-0 right-0`) se întindea și ea peste marginea
+              vizibilă. Se așază pe câte rânduri au nevoie. */}
+          <div className="flex flex-wrap items-center gap-2">
             <DuplicateButton parId={par.id} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
             <PdfDownloadButton par={par} />
@@ -1332,6 +1339,39 @@ export function ParDetailPage() {
 
         {/* SECTION 10: Line items */}
         <Section num="10" title="Articole solicitate">
+          {/* Pe telefon tabelul de șase coloane (`min-w-[500px]`) își tăia exact coloanele care
+              contează — prețul unitar și totalul cădeau dincolo de marginea din dreapta. Aceleași
+              cifre, una sub alta. */}
+          {isPhone ? (
+            <ul className="space-y-2" aria-label="Articole solicitate">
+              {(par.line_items ?? []).map((it: ParLineItem, idx) => (
+                <li key={it.id} className="rounded-md border border-border p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="font-medium text-foreground">{idx + 1}. {it.description}</span>
+                    <span className="shrink-0 font-semibold text-foreground">{fmtCurrency(it.lineTotalCents, par.currency)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {it.quantity} {it.unit ?? ""} × {fmtCurrency(it.unitPriceCents, par.currency)}
+                  </p>
+                </li>
+              ))}
+              {(par.line_items ?? []).length === 0 && (
+                <li className="rounded-md border border-border p-3 text-center text-sm text-muted-foreground">Niciun articol</li>
+              )}
+              <li className="flex items-center justify-between gap-3 rounded-md border-2 border-border bg-muted/30 p-3">
+                <span className="text-sm font-bold text-foreground">
+                  TOTAL ESTIMAT{par.currency !== "MDL" ? ` (${par.currency})` : " (MDL)"}
+                </span>
+                <span className="text-base font-bold text-primary">{fmtCurrency(par.totalEstimatedCents, par.currency)}</span>
+              </li>
+              {par.currency !== "MDL" && par.totalMdlCents != null && (
+                <li className="flex items-center justify-between gap-3 px-3 text-xs text-muted-foreground">
+                  <span>Echivalent MDL{par.exchangeRate ? ` (curs ${Number(par.exchangeRate).toFixed(4)})` : ""}</span>
+                  <span>{formatMDL(par.totalMdlCents)}</span>
+                </li>
+              )}
+            </ul>
+          ) : (
           <div className="overflow-x-auto -mx-4 px-4">
             <table className="w-full text-sm border-collapse min-w-[500px]" aria-label="Articole solicitate">
               <thead>
@@ -1383,6 +1423,7 @@ export function ParDetailPage() {
               </tfoot>
             </table>
           </div>
+          )}
           <p className="text-xs text-muted-foreground mt-2">
             * Dacă prețul final depășește estimatul cu mai mult de 10% și valoarea e peste pragul de micro-achiziție, cererea necesită re-aprobare înainte de plată.
           </p>
@@ -1408,10 +1449,14 @@ export function ParDetailPage() {
               value={par.payeeIdnp ? <code className="text-xs">{par.payeeIdnp}</code> : null}
             />
             <Field
+              // Un IBAN are 24 de caractere: în jumătatea de ecran a unei grile de două coloane
+              // ieșea peste coloana „Bancă" și cele două texte se suprapuneau. Pe telefon ia rândul
+              // întreg și se rupe unde trebuie.
+              className="col-span-2 sm:col-span-1"
               label="IBAN"
               value={par.payeeIban ? (
                 <span className="flex flex-col gap-0.5">
-                  <code className="text-xs">{par.payeeIban}</code>
+                  <code className="break-all text-xs">{par.payeeIban}</code>
                   {payeeIbanInfo?.isForeign && (
                     <span className="text-xs text-muted-foreground">
                       internațional — {payeeIbanInfo.countryName} (SWIFT/SEPA)
@@ -1560,7 +1605,7 @@ export function ParDetailPage() {
           <button
             type="button"
             onClick={() => setShowTimeline((v) => !v)}
-            className="flex items-center gap-2 text-sm font-semibold text-foreground w-full"
+            className="flex w-full items-center gap-2 text-sm font-semibold text-foreground max-sm:min-h-[44px]"
             aria-expanded={showTimeline}
             aria-controls="par-timeline-panel"
           >
