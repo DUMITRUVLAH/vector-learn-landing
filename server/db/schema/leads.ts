@@ -234,6 +234,7 @@ export const customFields = pgTable(
 );
 
 export type CustomField = typeof customFields.$inferSelect;
+export type NewCustomField = typeof customFields.$inferInsert;
 
 // ─── CRM-115: Lead field values (per lead) ────────────────────────────────────
 
@@ -262,3 +263,45 @@ export const leadFieldValues = pgTable(
 );
 
 export type LeadFieldValue = typeof leadFieldValues.$inferSelect;
+export type NewLeadFieldValue = typeof leadFieldValues.$inferInsert;
+
+// ─── Fișiere atașate unui lead (Faza 9) ──────────────────────────────────────
+
+/**
+ * Tabela există din migrarea 0002, dar n-a fost niciodată declarată în schema drizzle — deci
+ * codul n-o putea interoga. Faza 9 o aduce în cod și îi adaugă `storage_path`: conținutul stă în
+ * Supabase Storage (bucket `crm-lead-files`), nu în Postgres.
+ *
+ * De ce nu data-URL base64 în `file_url`, cum făcea crm-vector la început: base64 umflă fișierul
+ * cu +33%, iar listarea fișierelor unui lead ar trage tot conținutul din bază chiar dacă nimeni
+ * nu deschide nimic. Exact motivul pentru care atașamentele PAR au fost mutate în Storage
+ * (server/lib/storage/objectStore.ts). `file_url` rămâne, nullable, pentru rândurile vechi.
+ */
+export const leadAttachments = pgTable(
+  "lead_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    fileName: varchar("file_name", { length: 300 }).notNull(),
+    /** Calea obiectului în bucket-ul `crm-lead-files`. Sursa adevărului pentru fișierele noi. */
+    storagePath: varchar("storage_path", { length: 512 }),
+    /** Doar pentru rândurile vechi (data-URL sau link extern). Nullable de la migrarea 0168. */
+    fileUrl: varchar("file_url", { length: 1000 }),
+    mime: varchar("mime", { length: 100 }).notNull(),
+    sizeBytes: integer("size_bytes").notNull().default(0),
+    uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("la_tenant_idx").on(t.tenantId),
+    leadIdx: index("la_lead_idx").on(t.leadId),
+  })
+);
+
+export type LeadAttachment = typeof leadAttachments.$inferSelect;
+export type NewLeadAttachment = typeof leadAttachments.$inferInsert;

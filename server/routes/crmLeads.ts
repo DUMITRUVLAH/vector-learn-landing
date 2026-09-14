@@ -16,6 +16,8 @@
  * PATCH  /api/crm/leads/:id/pipeline      — mutare în altă pâlnie (etapa se reașază pe prima
  *                                            etapă a pâlniei țintă — cheile nu sunt comune)
  * GET    /api/crm/leads/:id/interactions  — istoricul lead-ului (note/apeluri/schimbări de etapă)
+ * GET    /api/crm/leads/:id/person-history — alte leaduri ale ACELEIAȘI persoane (telefon/email
+ *                                            normalizat) + comentariile lor
  * POST   /api/crm/leads/:id/interactions  — adaugă o interacțiune
  *
  * Reguli de business pe /:id/stage:
@@ -29,7 +31,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
 import { crmPipelineStages, type CrmPipelineStage } from "../db/schema/crmPipelineStages";
@@ -773,6 +775,76 @@ crmLeadsRoutes.get("/:id/interactions", async (c) => {
     .limit(100);
 
   return c.json({ items });
+});
+
+
+// ─── GET /:id/person-history — aceeași persoană, alte leaduri ────────────────
+
+/**
+ * Portare din crm-vector (`src/lib/crm/history.ts`).
+ *
+ * Aceeași persoană revine: a cerut o ofertă acum un an, a refuzat, acum sună din nou. Fără
+ * ecranul ăsta, omul de vânzări pornește de la zero și repetă oferta refuzată. Legătura se face
+ * pe telefonul/emailul NORMALIZATE — scrierea diferă („+373 69…" vs „069…"), persoana nu.
+ *
+ * Întoarce leadurile înrudite (fără cel curent) și comentariile lor, grupate pe lead. Nu e
+ * „deduplicare": leadurile rămân separate, doar că se văd unul din altul.
+ */
+crmLeadsRoutes.get("/:id/person-history", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const id = c.req.param("id");
+
+  const [lead] = await db
+    .select({
+      id: leads.id,
+      phoneNormalized: leads.phoneNormalized,
+      emailNormalized: leads.emailNormalized,
+    })
+    .from(leads)
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  const identifiers = [];
+  if (lead.phoneNormalized) identifiers.push(eq(leads.phoneNormalized, lead.phoneNormalized));
+  if (lead.emailNormalized) identifiers.push(eq(leads.emailNormalized, lead.emailNormalized));
+  // Fără telefon și fără email nu există „aceeași persoană" — două leaduri cu același nume pot fi
+  // doi oameni diferiți, iar o potrivire pe nume ar amesteca dosarele lor.
+  if (identifiers.length === 0) return c.json({ leads: [], notesByLead: {} });
+
+  const match = identifiers.length === 1 ? identifiers[0] : or(...identifiers);
+  const related = await db
+    .select(LEAD_COLS)
+    .from(leads)
+    .where(and(eq(leads.tenantId, tenantId), ne(leads.id, id), match))
+    .orderBy(desc(leads.createdAt))
+    .limit(50);
+
+  if (related.length === 0) return c.json({ leads: [], notesByLead: {} });
+
+  const notes = await db
+    .select()
+    .from(leadInteractions)
+    .where(
+      and(
+        eq(leadInteractions.tenantId, tenantId),
+        inArray(
+          leadInteractions.leadId,
+          related.map((l) => l.id)
+        ),
+        // Doar ce are valoare de comentariu: schimbările de etapă și zgomotul de sistem n-au ce
+        // spune cuiva care vrea să știe ce s-a discutat data trecută.
+        inArray(leadInteractions.type, ["note", "call", "email", "whatsapp", "sms", "meeting"]),
+        isNotNull(leadInteractions.body)
+      )
+    )
+    .orderBy(desc(leadInteractions.occurredAt))
+    .limit(100);
+
+  const notesByLead: Record<string, typeof notes> = {};
+  for (const n of notes) (notesByLead[n.leadId] ??= []).push(n);
+
+  return c.json({ leads: related, notesByLead });
 });
 
 // ─── POST /:id/interactions ───────────────────────────────────────────────────

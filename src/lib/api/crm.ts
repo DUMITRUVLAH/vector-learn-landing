@@ -628,3 +628,181 @@ export function updateCrmSavedView(id: string, body: UpdateCrmSavedViewBody): Pr
 export function deleteCrmSavedView(id: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/api/crm/saved-views/${id}`, { method: "DELETE" });
 }
+
+// ─── Persoane de contact pe lead ───────────────────────────────────────────────
+
+export interface CrmLeadContact {
+  id: string;
+  leadId: string;
+  fullName: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  /** 1 = principalul leadului. Cel mult unul — serverul îi scoate pe ceilalți la marcare. */
+  isPrimary: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listCrmLeadContacts(leadId: string): Promise<{ items: CrmLeadContact[] }> {
+  return api<{ items: CrmLeadContact[] }>(`/api/crm/contacts?leadId=${leadId}`);
+}
+
+export interface CreateCrmLeadContactBody {
+  leadId: string;
+  fullName: string;
+  role?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  isPrimary?: boolean;
+}
+
+export function createCrmLeadContact(body: CreateCrmLeadContactBody): Promise<CrmLeadContact> {
+  return api<CrmLeadContact>("/api/crm/contacts", { method: "POST", body: JSON.stringify(body) });
+}
+
+export type UpdateCrmLeadContactBody = Partial<Omit<CreateCrmLeadContactBody, "leadId">>;
+
+export function updateCrmLeadContact(id: string, body: UpdateCrmLeadContactBody): Promise<CrmLeadContact> {
+  return api<CrmLeadContact>(`/api/crm/contacts/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function deleteCrmLeadContact(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/contacts/${id}`, { method: "DELETE" });
+}
+
+// ─── Câmpuri personalizate ─────────────────────────────────────────────────────
+
+export type CrmCustomFieldType = "text" | "select" | "number";
+
+export interface CrmCustomField {
+  id: string;
+  /** Identificator stabil, derivat din etichetă. Imuabil — rapoartele se sprijină pe el. */
+  key: string;
+  label: string;
+  type: CrmCustomFieldType;
+  options: string[] | null;
+  orderIndex: number;
+}
+
+export interface CrmLeadFieldValue {
+  id: string;
+  leadId: string;
+  fieldId: string;
+  value: string | null;
+}
+
+export function listCrmCustomFields(): Promise<{ items: CrmCustomField[] }> {
+  return api<{ items: CrmCustomField[] }>("/api/crm/custom-fields");
+}
+
+export interface CreateCrmCustomFieldBody {
+  label: string;
+  type?: CrmCustomFieldType;
+  options?: string[];
+}
+
+/** 409 `field_key_taken` dacă eticheta produce o cheie deja folosită. */
+export function createCrmCustomField(body: CreateCrmCustomFieldBody): Promise<CrmCustomField> {
+  return api<CrmCustomField>("/api/crm/custom-fields", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateCrmCustomField(
+  id: string,
+  body: { label?: string; options?: string[]; orderIndex?: number }
+): Promise<CrmCustomField> {
+  return api<CrmCustomField>(`/api/crm/custom-fields/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+/** Șterge definiția ȘI valorile ei de pe toate leadurile. */
+export function deleteCrmCustomField(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/custom-fields/${id}`, { method: "DELETE" });
+}
+
+export function listCrmLeadFieldValues(leadId: string): Promise<{ items: CrmLeadFieldValue[] }> {
+  return api<{ items: CrmLeadFieldValue[] }>(`/api/crm/custom-fields/values?leadId=${leadId}`);
+}
+
+/** Valoare goală = ștergere (serverul nu ține rânduri goale). */
+export function setCrmLeadFieldValue(
+  leadId: string,
+  fieldId: string,
+  value: string | null
+): Promise<CrmLeadFieldValue | { ok: true; value: null }> {
+  return api<CrmLeadFieldValue | { ok: true; value: null }>("/api/crm/custom-fields/values", {
+    method: "PUT",
+    body: JSON.stringify({ leadId, fieldId, value }),
+  });
+}
+
+// ─── Fișiere pe lead ───────────────────────────────────────────────────────────
+
+export interface CrmLeadFile {
+  id: string;
+  leadId: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  uploadedBy: string | null;
+  createdAt: string;
+  /** Singura cale prin care se deschide fișierul — calea din Storage nu pleacă niciodată la client. */
+  previewUrl: string;
+}
+
+export function listCrmLeadFiles(leadId: string): Promise<{ items: CrmLeadFile[] }> {
+  return api<{ items: CrmLeadFile[] }>(`/api/crm/lead-files?leadId=${leadId}`);
+}
+
+/**
+ * Încarcă un fișier pe lead fără să-l treacă prin funcția serverless (unde corpul e plafonat la
+ * ~4,5 MB). Trei cereri, dar doar una duce date: serverul semnează, browserul urcă binarul direct
+ * în Storage, serverul confirmă după ce se uită la octeții reali.
+ */
+export async function uploadCrmLeadFile(
+  leadId: string,
+  file: File,
+  opts: { onStep?: (step: "upload" | "finalize") => void } = {}
+): Promise<CrmLeadFile> {
+  const { path, signedUrl } = await api<{ path: string; signedUrl: string }>("/api/crm/lead-files/sign", {
+    method: "POST",
+    body: JSON.stringify({ leadId, fileName: file.name, mime: file.type, sizeBytes: file.size }),
+  });
+
+  opts.onStep?.("upload");
+  // `credentials` lipsește înadins: URL-ul e deja semnat, iar trimiterea cookie-urilor noastre
+  // către alt origin nu le-ar face decât să fie expuse.
+  let put: Response;
+  try {
+    put = await fetch(signedUrl, {
+      method: "PUT",
+      headers: { "content-type": file.type || "application/octet-stream" },
+      body: file,
+    });
+  } catch {
+    throw new Error("Fișierul nu a ajuns la server (conexiune întreruptă). Reîncearcă.");
+  }
+  if (!put.ok) throw new Error("Încărcarea fișierului nu a reușit. Verifică conexiunea și reîncearcă.");
+
+  opts.onStep?.("finalize");
+  return api<CrmLeadFile>("/api/crm/lead-files/finalize", {
+    method: "POST",
+    body: JSON.stringify({ leadId, path, fileName: file.name, mime: file.type }),
+  });
+}
+
+export function deleteCrmLeadFile(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/lead-files/${id}`, { method: "DELETE" });
+}
+
+// ─── Istoricul persoanei (alte leaduri ale aceluiași om) ───────────────────────
+
+export interface CrmPersonHistoryResponse {
+  /** Leadurile înrudite (același telefon/email normalizat), fără cel curent. */
+  leads: CrmLead[];
+  /** Comentariile lor, grupate pe lead, cele mai noi primele. */
+  notesByLead: Record<string, CrmLeadInteraction[]>;
+}
+
+export function getCrmPersonHistory(leadId: string): Promise<CrmPersonHistoryResponse> {
+  return api<CrmPersonHistoryResponse>(`/api/crm/leads/${leadId}/person-history`);
+}
