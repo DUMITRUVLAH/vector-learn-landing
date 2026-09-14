@@ -2349,3 +2349,34 @@ export async function sendApprovalDigestNow(): Promise<{
 }> {
   return api("/api/par/cron/digest-now", { method: "POST" });
 }
+
+// ─── PARVERIFY-001: codul de verificare tipărit pe formular ──────────────────
+
+export interface ParVerifyCodeInfo {
+  /** `false` înainte de prima descărcare a formularului — tokenul se creează atunci, nu la creare. */
+  issued: boolean;
+  /** Forma tipăribilă, în grupe de patru: „K7M2-9QD4-3F8B-X2NV". */
+  code?: string;
+  /** Linkul complet din spatele codului QR. */
+  url?: string | null;
+  revokedAt?: string | null;
+  scanCount?: number;
+  lastUsedAt?: string | null;
+}
+
+/** Codul de pe formularul tipărit. Aceleași drepturi ca descărcarea PDF-ului. */
+export async function getParVerifyCode(parId: string): Promise<ParVerifyCodeInfo> {
+  return api<ParVerifyCodeInfo>(`/api/par/${parId}/verify-code`);
+}
+
+/**
+ * `revoke` închide linkul public (hârtie pierdută), `reissue` emite altul. Doar par_admin.
+ *
+ * Amândouă invalidează exemplarele tipărite până acum — de aceea ecranul cere confirmare înainte.
+ */
+export async function setParVerifyCode(
+  parId: string,
+  action: "revoke" | "reissue"
+): Promise<{ revoked?: boolean; issued?: boolean; code?: string }> {
+  return api(`/api/par/${parId}/verify-code`, { method: "POST", body: JSON.stringify({ action }) });
+}

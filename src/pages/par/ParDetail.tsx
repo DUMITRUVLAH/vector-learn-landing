@@ -48,6 +48,7 @@ import { ReceiptSection } from "@/components/par/ReceiptSection";
 import { ThreeWayMatchPanel } from "@/components/par/ThreeWayMatchPanel";
 import { ParEfacturaCard } from "@/components/par/ParEfacturaCard";
 import { ParPaymentProofCard } from "@/components/par/ParPaymentProofCard";
+import { ParVerifyCodeCard } from "@/components/par/ParVerifyCodeCard";
 import { useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import {
@@ -1528,6 +1529,10 @@ export function ParDetailPage() {
         <Section num="14–15" title="Semnături și aprobări">
           <ParApprovalChain approvals={approvals} parStatus={par.status} />
         </Section>
+
+        {/* PARVERIFY-001: codul de pe hârtie stă lângă aprobările pe care le dovedește — cine sună
+            cu formularul în mână întreabă despre ele, nu despre un cod abstract. */}
+        <ParVerifyCodeCard parId={par.id} isAdmin={currentRoles.includes("par_admin")} />
 
         {/* SECTION 16: Finance */}
         {par.payment && (
