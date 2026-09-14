@@ -24,11 +24,17 @@ import { crmPipelines, type NewCrmPipeline } from "../db/schema/crmPipelines";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { leads } from "../db/schema/leads";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import { ensureTenantPipeline, nextPipelineOrderIndex } from "../lib/crm/pipelines";
+import { logCrmAudit } from "../lib/crm/audit";
 import { ensureTenantStages } from "../lib/crm/stages";
 
 export const crmPipelinesRoutes = new Hono<{ Variables: AuthVariables }>();
 crmPipelinesRoutes.use("/*", requireAuth);
+// Pâlniile sunt procesul comercial al firmei: le vede toată lumea, le schimbă administratorii.
+crmPipelinesRoutes.post("/*", requireCrmPermission("pipelines.manage"));
+crmPipelinesRoutes.patch("/*", requireCrmPermission("pipelines.manage"));
+crmPipelinesRoutes.delete("/*", requireCrmPermission("pipelines.manage"));
 
 const createPipelineSchema = z.object({
   name: z.string().trim().min(1, "Numele pâlniei este obligatoriu").max(200),
@@ -92,6 +98,15 @@ crmPipelinesRoutes.post("/", zValidator("json", createPipelineSchema), async (c)
     return c.json({ error: "pipeline_stages_seed_failed" }, 500);
   }
 
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "pipeline.created",
+    target: "crm_pipeline",
+    targetId: row.id,
+    after: { name: row.name },
+  });
+
   return c.json(row, 201);
 });
 
@@ -110,6 +125,16 @@ crmPipelinesRoutes.patch("/:id", zValidator("json", updatePipelineSchema), async
 
   // Cross-tenant → 404, nu 403: nu confirmăm existența unei pâlnii din alt workspace.
   if (!row) return c.json({ error: "not_found" }, 404);
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "pipeline.renamed",
+    target: "crm_pipeline",
+    targetId: id,
+    after: { name },
+  });
+
   return c.json(row);
 });
 
@@ -134,5 +159,14 @@ crmPipelinesRoutes.delete("/:id", async (c) => {
   if (cnt > 0) return c.json({ error: "pipeline_not_empty", leads: cnt }, 409);
 
   await db.delete(crmPipelines).where(and(eq(crmPipelines.id, id), eq(crmPipelines.tenantId, user.tenantId)));
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "pipeline.deleted",
+    target: "crm_pipeline",
+    targetId: id,
+  });
+
   return c.json({ ok: true });
 });

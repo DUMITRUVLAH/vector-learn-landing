@@ -37,6 +37,7 @@ import { users } from "../db/schema/users";
 import { crmCompanies } from "../db/schema/crmCompanies";
 import { crmAssignmentRules, crmSalesSettings, crmAssignmentLog } from "../db/schema/crmAutomations";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import {
   ASSIGNMENT_STRATEGIES,
   isAssignmentStrategy,
@@ -50,6 +51,11 @@ import {
 
 export const crmAssignmentRoutes = new Hono<{ Variables: AuthVariables }>();
 crmAssignmentRoutes.use("/*", requireAuth);
+// Distribuirea hotărăște cui îi pică leadurile — și, implicit, cine ia comisionul.
+crmAssignmentRoutes.post("/rules", requireCrmPermission("assignment.manage"));
+crmAssignmentRoutes.post("/rules/*", requireCrmPermission("assignment.manage"));
+crmAssignmentRoutes.patch("/*", requireCrmPermission("assignment.manage"));
+crmAssignmentRoutes.delete("/*", requireCrmPermission("assignment.manage"));
 
 /** Setările implicite ale unui om fără rând în `crm_sales_settings`. */
 const DEFAULT_DAILY_CAPACITY = 20;

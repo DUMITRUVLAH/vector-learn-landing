@@ -43,6 +43,7 @@ import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
 import { crmPipelines, type CrmPipeline } from "../db/schema/crmPipelines";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { enrollByStage } from "../lib/crm/cadences";
+import { logCrmAudit } from "../lib/crm/audit";
 
 /**
  * Coloanele pe care le întoarce API-ul — EXACT cele din `CrmLead` (src/lib/api/crm.ts).
@@ -558,6 +559,16 @@ crmLeadsRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
     .select()
     .from(leads)
     .where(and(eq(leads.id, row.id), eq(leads.tenantId, user.tenantId)));
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "lead.created",
+    target: "crm_lead",
+    targetId: row.id,
+    after: { fullName: row.fullName, stage: (fresh ?? row).stage, source: row.source },
+  });
+
   return c.json(fresh ?? row, 201);
 });
 
@@ -600,6 +611,17 @@ crmLeadsRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => 
     .set(updates)
     .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)))
     .returning();
+
+  // Jurnalul păstrează DOAR câmpurile atinse: o copie a leadului întreg la fiecare salvare ar
+  // umple `audit_log` cu date care nu s-au schimbat.
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "lead.updated",
+    target: "crm_lead",
+    targetId: id,
+    after: body,
+  });
 
   return c.json(row);
 });
@@ -660,6 +682,16 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
     userId: user.id,
   };
   await db.insert(leadInteractions).values(interaction);
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "lead.stage_changed",
+    target: "crm_lead",
+    targetId: id,
+    before: { stage: fromStage },
+    after: { stage, lostReason: lostReason ?? null },
+  });
 
   await runAutomations({
     tenantId: user.tenantId,
@@ -756,6 +788,16 @@ crmLeadsRoutes.patch("/:id/pipeline", zValidator("json", pipelineChangeSchema), 
     userId: user.id,
   };
   await db.insert(leadInteractions).values(interaction);
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "lead.pipeline_changed",
+    target: "crm_lead",
+    targetId: id,
+    before: { pipelineId: existing.pipelineId, stage: existing.stage },
+    after: { pipelineId: target.id, stage: landing.key },
+  });
 
   return c.json(row);
 });

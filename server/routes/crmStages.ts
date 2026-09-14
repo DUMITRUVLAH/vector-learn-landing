@@ -27,12 +27,18 @@ import { db } from "../db/client";
 import { crmPipelineStages, type NewCrmPipelineStage } from "../db/schema/crmPipelineStages";
 import { leads } from "../db/schema/leads";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import { ensureTenantStages } from "../lib/crm/stages";
+import { logCrmAudit } from "../lib/crm/audit";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { crmPipelines } from "../db/schema/crmPipelines";
 
 export const crmStagesRoutes = new Hono<{ Variables: AuthVariables }>();
 crmStagesRoutes.use("/*", requireAuth);
+// Etapele sunt tot proces, nu conținut: o coloană ștearsă din greșeală mută leadurile altcuiva.
+crmStagesRoutes.post("/*", requireCrmPermission("pipelines.manage"));
+crmStagesRoutes.patch("/*", requireCrmPermission("pipelines.manage"));
+crmStagesRoutes.delete("/*", requireCrmPermission("pipelines.manage"));
 
 // ─── Derivarea cheii dintr-o etichetă ──────────────────────────────────────────
 
@@ -161,6 +167,15 @@ crmStagesRoutes.post("/", zValidator("json", createStageSchema), async (c) => {
   const [row] = await db.insert(crmPipelineStages).values(values).onConflictDoNothing().returning();
   if (!row) return c.json({ error: "stage_key_taken" }, 409);
 
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "stage.created",
+    target: "crm_stage",
+    targetId: row.id,
+    after: { key: row.key, label: row.label, pipelineId: row.pipelineId },
+  });
+
   return c.json(row, 201);
 });
 
@@ -232,6 +247,15 @@ crmStagesRoutes.patch("/:id", zValidator("json", updateStageSchema), async (c) =
     .where(and(eq(crmPipelineStages.id, id), eq(crmPipelineStages.tenantId, user.tenantId)))
     .returning();
 
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "stage.updated",
+    target: "crm_stage",
+    targetId: id,
+    after: body,
+  });
+
   return c.json(row);
 });
 
@@ -281,6 +305,15 @@ crmStagesRoutes.delete("/:id", async (c) => {
   await db
     .delete(crmPipelineStages)
     .where(and(eq(crmPipelineStages.id, id), eq(crmPipelineStages.tenantId, user.tenantId)));
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "stage.deleted",
+    target: "crm_stage",
+    targetId: id,
+    before: { key: existing.key },
+  });
 
   return c.json({ ok: true });
 });

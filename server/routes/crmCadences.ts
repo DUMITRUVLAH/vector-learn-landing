@@ -37,11 +37,18 @@ import {
 } from "../db/schema/crmCadences";
 import { leads } from "../db/schema/leads";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import { enrollLeadInCadence, processDueEnrollments } from "../lib/crm/cadences";
 import { previewDueReengagements, runReengagement } from "../lib/crm/reengagement";
+import { logCrmAudit } from "../lib/crm/audit";
 
 export const crmCadencesRoutes = new Hono<{ Variables: AuthVariables }>();
 crmCadencesRoutes.use("/*", requireAuth);
+// Cadențele și reactivarea scriu singure taskuri și etichete pe clienți reali — nu sunt ceva ce
+// poate porni oricine trece pe ecran.
+crmCadencesRoutes.post("/*", requireCrmPermission("cadences.manage"));
+crmCadencesRoutes.patch("/*", requireCrmPermission("cadences.manage"));
+crmCadencesRoutes.delete("/*", requireCrmPermission("cadences.manage"));
 
 const stepSchema = z.object({
   dayOffset: z.number().int().min(0).max(365),
@@ -119,6 +126,16 @@ crmCadencesRoutes.post("/reengagement/rules", zValidator("json", ruleSchema), as
   }
 
   const [row] = await db.insert(crmReengagementRules).values(values).returning();
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "reengagement_rule.created",
+    target: "crm_reengagement_rule",
+    targetId: row.id,
+    after: { name: row.name, afterMonths: row.afterMonths, action: row.action },
+  });
+
   return c.json(row, 201);
 });
 
@@ -143,6 +160,16 @@ crmCadencesRoutes.patch("/reengagement/rules/:id", zValidator("json", updateRule
     .where(and(eq(crmReengagementRules.id, id), eq(crmReengagementRules.tenantId, user.tenantId)))
     .returning();
   if (!row) return c.json({ error: "not_found" }, 404);
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "reengagement_rule.updated",
+    target: "crm_reengagement_rule",
+    targetId: id,
+    after: body,
+  });
+
   return c.json(row);
 });
 
@@ -154,6 +181,16 @@ crmCadencesRoutes.delete("/reengagement/rules/:id", async (c) => {
     .where(and(eq(crmReengagementRules.id, id), eq(crmReengagementRules.tenantId, user.tenantId)))
     .returning();
   if (!deleted) return c.json({ error: "not_found" }, 404);
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "reengagement_rule.deleted",
+    target: "crm_reengagement_rule",
+    targetId: id,
+    before: { name: deleted.name },
+  });
+
   return c.json({ ok: true });
 });
 
@@ -279,6 +316,16 @@ crmCadencesRoutes.post("/", zValidator("json", createCadenceSchema), async (c) =
   if (body.steps !== undefined) values.steps = body.steps;
 
   const [row] = await db.insert(crmCadences).values(values).returning();
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "cadence.created",
+    target: "crm_cadence",
+    targetId: row.id,
+    after: { name: row.name, steps: row.steps?.length ?? 0 },
+  });
+
   return c.json(row, 201);
 });
 
@@ -310,5 +357,15 @@ crmCadencesRoutes.delete("/:id", async (c) => {
     .where(and(eq(crmCadences.id, id), eq(crmCadences.tenantId, user.tenantId)))
     .returning();
   if (!deleted) return c.json({ error: "not_found" }, 404);
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "cadence.deleted",
+    target: "crm_cadence",
+    targetId: id,
+    before: { name: deleted.name },
+  });
+
   return c.json({ ok: true });
 });

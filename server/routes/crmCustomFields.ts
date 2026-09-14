@@ -24,6 +24,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, customFields, leadFieldValues, type NewCustomField } from "../db/schema/leads";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { logCrmAudit } from "../lib/crm/audit";
 
 export const crmCustomFieldsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmCustomFieldsRoutes.use("/*", requireAuth);
@@ -185,6 +186,16 @@ crmCustomFieldsRoutes.post("/", zValidator("json", createFieldSchema), async (c)
   if (body.options !== undefined) values.options = body.options;
 
   const [row] = await db.insert(customFields).values(values).returning();
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "custom_field.created",
+    target: "crm_custom_field",
+    targetId: row.id,
+    after: { key: row.key, label: row.label, type: row.type },
+  });
+
   return c.json(row, 201);
 });
 
@@ -229,5 +240,15 @@ crmCustomFieldsRoutes.delete("/:id", async (c) => {
     .returning();
 
   if (!deleted) return c.json({ error: "not_found" }, 404);
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "custom_field.deleted",
+    target: "crm_custom_field",
+    targetId: id,
+    before: { key: deleted.key, label: deleted.label },
+  });
+
   return c.json({ ok: true });
 });

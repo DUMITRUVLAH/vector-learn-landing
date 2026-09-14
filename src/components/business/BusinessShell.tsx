@@ -46,7 +46,7 @@ import {
   ChevronDown,
   Search,
   Menu,
-  X, Activity, KanbanSquare, Package, CalendarClock} from "lucide-react";
+  X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon} from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
@@ -175,6 +175,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Comunicare", href: "/business/crm/comunicare", icon: MessageCircle, tone: "blue" },
       { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
       { label: "Cadențe", href: "/business/crm/cadente", icon: RefreshCw, tone: "amber" },
+      { label: "Jurnal", href: "/business/crm/jurnal", icon: HistoryIcon, tone: "violet" },
       { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3, tone: "violet" },
     ],
   },

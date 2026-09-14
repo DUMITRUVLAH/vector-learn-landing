@@ -69,6 +69,8 @@ listCrmTagSuggestions.mockResolvedValue({ items: [] });
 listCrmLostReasons.mockResolvedValue({ items: [] });
 
 vi.mock("@/lib/api/crm", () => ({
+  // Drepturile utilizatorului: ecranele CRM le cer ca să știe ce butoane să arate.
+  getCrmPermissions: vi.fn().mockResolvedValue({ role: "admin", permissions: ["leads.view_all", "leads.edit", "pipelines.manage", "products.manage", "cadences.manage", "automations.manage", "assignment.manage", "audit.view"] }),
   getCrmToday: (...args: unknown[]) => getCrmToday(...args),
   getCrmStages: (...args: unknown[]) => getCrmStages(...args),
   getCrmLeadDetail: (...args: unknown[]) => getCrmLeadDetail(...args),

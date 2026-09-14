@@ -24,9 +24,15 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmProducts } from "../db/schema/crmProducts";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 
 export const crmProductsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmProductsRoutes.use("/*", requireAuth);
+// Cataloagele sunt prețurile firmei: se citesc de oricine lucrează în CRM, se SCHIMBĂ doar de
+// cine administrează (matricea din server/lib/crm/permissions.ts).
+crmProductsRoutes.post("/*", requireCrmPermission("products.manage"));
+crmProductsRoutes.patch("/*", requireCrmPermission("products.manage"));
+crmProductsRoutes.delete("/*", requireCrmPermission("products.manage"));
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 

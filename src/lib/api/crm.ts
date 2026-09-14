@@ -962,3 +962,64 @@ export function runCrmReengagement(): Promise<{ ok: true; due: number; applied: 
     method: "POST",
   });
 }
+
+// ─── Roluri și jurnal ──────────────────────────────────────────────────────────
+
+export type CrmPermission =
+  | "leads.view_all"
+  | "leads.view_own"
+  | "leads.edit"
+  | "leads.delete"
+  | "leads.export"
+  | "reports.view_team"
+  | "reports.view_own"
+  | "documents.create"
+  | "products.manage"
+  | "pipelines.manage"
+  | "automations.manage"
+  | "assignment.manage"
+  | "cadences.manage"
+  | "audit.view";
+
+export interface CrmPermissionsResponse {
+  role: string;
+  permissions: CrmPermission[];
+}
+
+/**
+ * Ce poate face utilizatorul curent. Interfața ascunde ce n-are rost să arate — dar ascunderea NU
+ * e apărarea: fiecare rută administrativă are propria poartă pe server.
+ */
+export function getCrmPermissions(): Promise<CrmPermissionsResponse> {
+  return api<CrmPermissionsResponse>("/api/crm/permissions");
+}
+
+export interface CrmAuditEntry {
+  id: string;
+  /** „crm.lead.stage_changed", „crm.pipeline.deleted", … */
+  actionType: string;
+  targetType: string;
+  targetId: string | null;
+  oldValue: unknown;
+  newValue: unknown;
+  occurredAt: string;
+  actorId: string | null;
+  /** Numele omului — un uuid în dreptul unei modificări nu spune nimic. */
+  actorName: string | null;
+}
+
+export interface ListCrmAuditParams {
+  targetId?: string;
+  targetType?: string;
+  limit?: number;
+}
+
+/** Cere dreptul `audit.view` — altfel serverul răspunde 403. */
+export function listCrmAudit(params: ListCrmAuditParams = {}): Promise<{ items: CrmAuditEntry[] }> {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") qs.set(key, String(value));
+  }
+  const suffix = qs.toString();
+  return api<{ items: CrmAuditEntry[] }>(`/api/crm/audit${suffix ? `?${suffix}` : ""}`);
+}

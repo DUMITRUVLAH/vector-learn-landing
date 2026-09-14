@@ -28,6 +28,7 @@ import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmLeadTasks } from "../db/schema/crmTasks";
 import { crmAutomations, crmAutomationRuns } from "../db/schema/crmAutomations";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import {
   planRuns,
   triggerMatches,
@@ -41,6 +42,11 @@ import {
 
 export const crmAutomationsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmAutomationsRoutes.use("/*", requireAuth);
+// O regulă de automatizare mișcă singură leadurile altora: se citește de oricine, se schimbă de
+// cine administrează.
+crmAutomationsRoutes.post("/*", requireCrmPermission("automations.manage"));
+crmAutomationsRoutes.patch("/*", requireCrmPermission("automations.manage"));
+crmAutomationsRoutes.delete("/*", requireCrmPermission("automations.manage"));
 
 const conditionSchema = z.object({
   field: z.string().min(1).max(60),

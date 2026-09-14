@@ -16,11 +16,14 @@ import {
   BarChart3,
   FileText,
   RefreshCw,
+  History,
   ArrowRight,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
+import { useCrmPermissions } from "@/hooks/useCrmPermissions";
+import type { CrmPermission } from "@/lib/api/crm";
 
 interface CrmModuleTile {
   id: string;
@@ -29,6 +32,8 @@ interface CrmModuleTile {
   href: string;
   icon: typeof KanbanSquare;
   available: boolean;
+  /** Dacă e setat, tile-ul apare doar pentru cine are dreptul (jurnalul e de administrator). */
+  requires?: CrmPermission;
 }
 
 const CRM_MODULES: CrmModuleTile[] = [
@@ -105,6 +110,15 @@ const CRM_MODULES: CrmModuleTile[] = [
     available: true,
   },
   {
+    id: "jurnal",
+    label: "Jurnal",
+    description: "Cine ce a schimbat: leaduri, pâlnii, etape, reguli — cu nume și dată.",
+    href: "/business/crm/jurnal",
+    icon: History,
+    available: true,
+    requires: "audit.view",
+  },
+  {
     id: "documente",
     label: "Documente",
     description: "Oferte și contracte generate direct din datele leadului, cu motorul de acte FinFlow.",
@@ -115,6 +129,10 @@ const CRM_MODULES: CrmModuleTile[] = [
 ];
 
 export function CrmHomePage() {
+  const { can } = useCrmPermissions();
+  // Un tile care duce la un 403 e o promisiune falsă — se ascunde, nu se dezactivează.
+  const visibleModules = CRM_MODULES.filter((mod) => !mod.requires || can(mod.requires));
+
   return (
     <BusinessShell
       pageTitle="CRM"
@@ -125,7 +143,7 @@ export function CrmHomePage() {
         role="list"
         aria-label="Module CRM"
       >
-        {CRM_MODULES.map((mod) => {
+        {visibleModules.map((mod) => {
           const Icon = mod.icon;
 
           if (!mod.available) {

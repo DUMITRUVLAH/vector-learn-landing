@@ -44,6 +44,7 @@ import { LeadListView } from "@/components/crm/LeadListView";
 import { SavedViewsMenu } from "@/components/crm/SavedViewsMenu";
 import { RemindersBell } from "@/components/crm/RemindersBell";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useCrmPermissions } from "@/hooks/useCrmPermissions";
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
 
@@ -134,6 +135,10 @@ export function CrmPipelinePage() {
   }, [loadPipeline]);
 
   const { members: teamMembers } = useTeamMembers();
+  // Butoanele administrative apar doar pentru cine le poate folosi. Ascunderea e curtoazie:
+  // apărarea e pe server (`requireCrmPermission`), nu aici.
+  const { can } = useCrmPermissions();
+  const canManagePipelines = can("pipelines.manage");
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.id, m.fullName]));
 
   /** Comutarea vederii, cu preferința salvată. Stocarea poate arunca (mod privat) — vederea se
@@ -353,14 +358,18 @@ export function CrmPipelinePage() {
             onToast={setToast}
             refreshToken={listRefreshToken}
           />
-          <Button variant="outline" onClick={() => setShowPipelineManager(true)}>
-            <GitBranch className="h-4 w-4" aria-hidden="true" />
-            Pâlnii
-          </Button>
-          <Button variant="outline" onClick={() => setShowStageEditor(true)}>
-            <Settings className="h-4 w-4" aria-hidden="true" />
-            Etape
-          </Button>
+          {canManagePipelines && (
+            <>
+              <Button variant="outline" onClick={() => setShowPipelineManager(true)}>
+                <GitBranch className="h-4 w-4" aria-hidden="true" />
+                Pâlnii
+              </Button>
+              <Button variant="outline" onClick={() => setShowStageEditor(true)}>
+                <Settings className="h-4 w-4" aria-hidden="true" />
+                Etape
+              </Button>
+            </>
+          )}
           <Button onClick={() => setShowAddLead(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Adaugă lead

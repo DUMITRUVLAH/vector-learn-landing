@@ -135,6 +135,8 @@ import { crmCustomFieldsRoutes } from "./routes/crmCustomFields";
 import { crmLeadFilesRoutes } from "./routes/crmLeadFiles";
 import { crmCadencesRoutes } from "./routes/crmCadences";
 import { crmCronRoutes } from "./routes/crmCron";
+import { crmAuditRoutes } from "./routes/crmAudit";
+import { crmPermissionsRoutes } from "./routes/crmPermissions";
 import { crmReportsRoutes } from "./routes/crmReports";
 import { crmCompaniesRoutes } from "./routes/crmCompanies";
 import { crmTagsRoutes } from "./routes/crmTags";
@@ -400,6 +402,8 @@ app.route("/api/crm/contacts", crmContactsRoutes);
 app.route("/api/crm/custom-fields", crmCustomFieldsRoutes);
 app.route("/api/crm/lead-files", crmLeadFilesRoutes);
 app.route("/api/crm/cadences", crmCadencesRoutes);
+app.route("/api/crm/audit", crmAuditRoutes);
+app.route("/api/crm/permissions", crmPermissionsRoutes);
 // Cron zilnic: aprinde cadențele scadente + reactivarea. Fără sesiune de browser — apărarea lui
 // e CRON_SECRET (vezi ruta).
 app.route("/api/crm/cron", crmCronRoutes);
