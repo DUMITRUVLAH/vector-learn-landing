@@ -171,6 +171,43 @@ const prodText = await visit("/business/crm/produse", /Produse|produs/i, "pagina
 if (/Produs E2E/.test(prodText)) ok("produsul creat prin API apare în pagină");
 else bad("produsul creat nu apare în listă");
 
+// ── 4b. Fișa leadului și etapele configurabile (Faza 2) ─────────────────────
+const stagesRes = await ctx.request.get(`${BASE}/api/crm/stages`);
+if (stagesRes.ok()) {
+  const items = (await stagesRes.json()).items ?? [];
+  if (items.length === 5) ok(`etapele vin din bază, configurabile (${items.map((s) => s.label).join(", ")})`);
+  else bad("etapele configurate", `am primit ${items.length}`);
+} else bad("GET /api/crm/stages", `HTTP ${stagesRes.status()}`);
+
+// O etapă nouă, personalizată, marcată ca „pierdut" — cu ALT nume decât „lost".
+const custom = await ctx.request.post(`${BASE}/api/crm/stages`, {
+  data: { label: "Refuzat de client", color: "rose", isLost: true },
+});
+let customStage = null;
+if (custom.ok()) { customStage = await custom.json(); ok("se poate adăuga o etapă nouă din interfață"); }
+else bad("POST /api/crm/stages", `HTTP ${custom.status()}`);
+
+if (leadId && customStage) {
+  const key = customStage.key ?? customStage.stage?.key;
+  // Regula „motivul e obligatoriu" trebuie să țină de flagul is_lost, nu de numele etapei.
+  const noReason = await ctx.request.patch(`${BASE}/api/crm/leads/${leadId}/stage`, { data: { stage: key } });
+  if (noReason.status() === 400) ok("[blocant] o etapă proprie marcată „pierdut” cere motivul, deși nu se numește „lost”");
+  else bad("etapă proprie is_lost", `HTTP ${noReason.status()} (așteptat 400)`);
+
+  const detail = await ctx.request.get(`${BASE}/api/crm/leads/${leadId}/detail`);
+  if (detail.ok()) {
+    const d = await detail.json();
+    if (d.lead && Array.isArray(d.interactions)) ok(`fișa leadului vine într-o singură cerere (${d.interactions.length} interacțiuni)`);
+    else bad("forma răspunsului /detail", JSON.stringify(d).slice(0, 120));
+  } else bad("GET /detail", `HTTP ${detail.status()}`);
+
+  // O etapă cu lead-uri în ea nu are voie să fie ștearsă.
+  await ctx.request.patch(`${BASE}/api/crm/leads/${leadId}/stage`, { data: { stage: key, lostReason: "Test e2e" } });
+  const del = await ctx.request.delete(`${BASE}/api/crm/stages/${customStage.id}`);
+  if (del.status() === 409) ok("[blocant] o etapă care conține lead-uri nu poate fi ștearsă");
+  else bad("ștergere etapă cu lead-uri", `HTTP ${del.status()} (așteptat 409)`);
+}
+
 // ── 5. Curățenie: arhivăm produsul de test ──────────────────────────────────
 if (createdId) {
   const arch = await ctx.request.post(`${BASE}/api/crm/products/${createdId}/archive`);

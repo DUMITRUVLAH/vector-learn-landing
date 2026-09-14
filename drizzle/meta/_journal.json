@@ -1128,6 +1128,13 @@
       "when": 1787000203015,
       "tag": "0161_crm_products",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1787000203016,
+      "tag": "0162_crm_pipeline_stages",
+      "breakpoints": true
     }
   ]
 }

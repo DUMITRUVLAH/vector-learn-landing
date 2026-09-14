@@ -470,6 +470,36 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "leads_tenant_idx" ON "leads" ("tenant_id")`,
     `CREATE INDEX IF NOT EXISTS "leads_stage_idx" ON "leads" ("tenant_id","stage")`,
     `CREATE INDEX IF NOT EXISTS "li_lead_idx" ON "lead_interactions" ("lead_id","occurred_at")`,
+    // CRM Faza 2: etape configurabile. `leads.stage` trece din enum în varchar —
+    // healul generic NU schimbă tipuri, deci conversia stă aici, gardată, ca să
+    // fie sigură dacă migrarea 0162 n-a apucat să ruleze pe prod.
+    `DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'leads' AND column_name = 'stage' AND data_type = 'USER-DEFINED'
+      ) THEN
+        ALTER TABLE "leads" ALTER COLUMN "stage" DROP DEFAULT;
+        ALTER TABLE "leads" ALTER COLUMN "stage" TYPE varchar(64) USING "stage"::text;
+        ALTER TABLE "leads" ALTER COLUMN "stage" SET DEFAULT 'new';
+      END IF;
+    END $$`,
+    `CREATE TABLE IF NOT EXISTS "crm_pipeline_stages" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "key" varchar(64) NOT NULL,
+      "label" varchar(100) NOT NULL,
+      "color" varchar(40) NOT NULL DEFAULT 'sky',
+      "order_index" integer NOT NULL DEFAULT 0,
+      "is_won" boolean NOT NULL DEFAULT false,
+      "is_lost" boolean NOT NULL DEFAULT false,
+      "is_default" boolean NOT NULL DEFAULT false,
+      "probability_pct" integer NOT NULL DEFAULT 10,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "crm_stages_tenant_idx" ON "crm_pipeline_stages" ("tenant_id","order_index")`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "crm_stages_tenant_key_uniq" ON "crm_pipeline_stages" ("tenant_id","key")`,
     // Migrarea 0149: flag de urgență pe cerere. is_urgent e NOT NULL DEFAULT false — healul
     // generic de mai sus adaugă coloana FĂRĂ modificatori, deci rândurile existente ar rămâne
     // NULL. Explicit aici, ca la par_budget_codes.currency (migrarea 0147).

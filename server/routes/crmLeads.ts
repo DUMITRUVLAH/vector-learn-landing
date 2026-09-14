@@ -1,12 +1,15 @@
 /**
- * CRM Faza 1 — Leads / Pipeline API
+ * CRM Faza 1+2 — Leads / Pipeline API
  *
  * Mounted at /api/crm/leads (app.ts: app.route("/api/crm/leads", crmLeadsRoutes))
  *
  * GET    /api/crm/leads/pipeline          — lead-uri grupate pe etapă (kanban), plafonate la
- *                                            50/coloană, dar cu numărători/sume pe SETUL COMPLET
+ *                                            50/coloană, dar cu numărători/sume pe SETUL COMPLET.
+ *                                            Coloanele vin din `crm_pipeline_stages`, per tenant
+ *                                            (nu mai sunt hardcodate) — vezi server/lib/crm/stages.ts.
  * GET    /api/crm/leads                   — listă paginată, cu căutare + filtre + sortare
  * GET    /api/crm/leads/:id               — un lead (404 dacă nu e în tenant)
+ * GET    /api/crm/leads/:id/detail        — lead + istoric + etapa curentă, într-o singură cerere
  * POST   /api/crm/leads                   — creare
  * PATCH  /api/crm/leads/:id               — actualizare parțială
  * PATCH  /api/crm/leads/:id/stage         — schimbare etapă (cu regulile de business de mai jos)
@@ -14,7 +17,11 @@
  * POST   /api/crm/leads/:id/interactions  — adaugă o interacțiune
  *
  * Reguli de business pe /:id/stage:
- *  - mutarea în "lost" fără `lostReason` nenul → 400 { error: "lost_reason_required" }
+ *  - cheia țintă trebuie să existe în `crm_pipeline_stages` a tenantului → altfel
+ *    400 { error: "unknown_stage" }
+ *  - mutarea într-o etapă cu flagul `is_lost` fără `lostReason` nenul →
+ *    400 { error: "lost_reason_required" } — regula urmărește FLAGUL, nu literalul "lost": un
+ *    workspace poate redenumi sau adăuga alte etape de tip „pierdut"
  *  - orice schimbare de etapă scrie un rând în lead_interactions (type: "stage_change")
  */
 import { Hono } from "hono";
@@ -23,8 +30,10 @@ import { z } from "zod";
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
+import { crmPipelineStages, type CrmPipelineStage } from "../db/schema/crmPipelineStages";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
+import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
 
 /**
  * Coloanele pe care le întoarce API-ul — EXACT cele din `CrmLead` (src/lib/api/crm.ts).
@@ -70,8 +79,9 @@ crmLeadsRoutes.use("/*", requireAuth);
 
 // ─── Enum-uri locale (oglindesc valorile din server/db/schema/leads.ts) ───────
 
-const LEAD_STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
-type LeadStage = (typeof LEAD_STAGES)[number];
+// NU mai există un `LEAD_STAGES` static: etapele sunt per-tenant, în `crm_pipeline_stages`
+// (migrarea 0162). Orice validare de etapă interoghează acum baza — vezi /pipeline și
+// PATCH /:id/stage mai jos.
 
 const LEAD_SOURCES = [
   "webform",
@@ -98,10 +108,6 @@ const INTERACTION_TYPES = [
 
 const INTERACTION_DIRECTIONS = ["inbound", "outbound", "internal"] as const;
 
-function isLeadStage(value: string): value is LeadStage {
-  return (LEAD_STAGES as readonly string[]).includes(value);
-}
-
 function isLeadSource(value: string): value is (typeof LEAD_SOURCES)[number] {
   return (LEAD_SOURCES as readonly string[]).includes(value);
 }
@@ -116,7 +122,10 @@ const leadFieldsSchema = z.object({
   dealName: z.string().max(300).optional().nullable(),
   interestCourse: z.string().max(200).optional().nullable(),
   source: z.enum(LEAD_SOURCES).optional(),
-  stage: z.enum(LEAD_STAGES).optional(),
+  // Liber, nu mai e un enum static — cheia trebuie să existe în `crm_pipeline_stages` a
+  // tenantului, dar POST/PATCH generice pe lead nu forțează validarea asta (doar PATCH
+  // /:id/stage, ruta dedicată schimbării de etapă, o face — vezi mai jos).
+  stage: z.string().min(1).max(64).optional(),
   valueCents: z.number().int().min(0).optional(),
   assignedTo: z.string().uuid().optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
@@ -126,7 +135,7 @@ const createLeadSchema = leadFieldsSchema;
 const updateLeadSchema = leadFieldsSchema.partial();
 
 const stageChangeSchema = z.object({
-  stage: z.enum(LEAD_STAGES),
+  stage: z.string().min(1, "Etapa este obligatorie").max(64),
   lostReason: z.string().max(500).optional(),
 });
 
@@ -142,15 +151,28 @@ const createInteractionSchema = z.object({
 crmLeadsRoutes.get("/pipeline", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
+  // Vizibil și în catch: dacă etapele s-au citit cu succes înainte ca o interogare ULTERIOARĂ să
+  // pice (schemă în urma codului), degradăm cu etapele REALE ale tenantului — nu cu cele 5
+  // implicite hardcodate — ca o pâlnie redenumită/particularizată să nu-și piardă coloanele.
+  let stageRows: CrmPipelineStage[] = [];
   try {
+    // Workspace nou / migrarea 0162 nu l-a atins încă → primește cele 5 etape implicite acum, nu
+    // rămâne cu o pâlnie goală.
+    await ensureTenantStages(tenantId);
+
+    stageRows = await db
+      .select()
+      .from(crmPipelineStages)
+      .where(eq(crmPipelineStages.tenantId, tenantId))
+      .orderBy(asc(crmPipelineStages.orderIndex));
+    const stageKeys = stageRows.map((s) => s.key);
 
     // O SINGURĂ interogare pentru carduri, nu una pe etapă.
     // De ce contează: pe Vercel pool-ul e `max: 3` cu `connect_timeout: 10`
-    // (server/db/client.ts). Varianta cu `Promise.all` peste cele 5 etape cerea
-    // 5 conexiuni simultan dintr-un pool de 3, plus agregatul — pe un cold start
-    // asta înseamnă cereri care așteaptă o conexiune și pot depăși timeout-ul.
-    // Aducem lead-urile o dată, grupate în JS; plafonul de 50/coloană e o
-    // preocupare de afișare, nu un motiv să lovim baza de cinci ori.
+    // (server/db/client.ts). O variantă cu o interogare per etapă ar cere N conexiuni
+    // simultan dintr-un pool de 3 — și N nu mai e o constantă de cod, e câte etape
+    // și-a configurat tenantul. Aducem lead-urile o dată, grupate în JS; plafonul de
+    // 50/coloană e o preocupare de afișare, nu un motiv să lovim baza de N ori.
     const recent = await db
       .select(LEAD_COLS)
       .from(leads)
@@ -158,13 +180,16 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       .orderBy(desc(leads.createdAt))
       .limit(500);
 
-    const grouped = {} as Record<LeadStage, typeof recent>;
-    LEAD_STAGES.forEach((stage) => {
-      grouped[stage] = [];
-    });
+    const grouped: Record<string, typeof recent> = {};
+    const counts: Record<string, number> = {};
+    const valueSums: Record<string, number> = {};
+    for (const key of stageKeys) {
+      grouped[key] = [];
+      counts[key] = 0;
+      valueSums[key] = 0;
+    }
     for (const lead of recent) {
-      const stage = lead.stage as LeadStage;
-      const column = grouped[stage];
+      const column = grouped[lead.stage];
       if (column && column.length < 50) column.push(lead);
     }
 
@@ -185,32 +210,40 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       .where(eq(leads.tenantId, tenantId))
       .groupBy(leads.stage);
 
-    const counts = {} as Record<LeadStage, number>;
-    const valueSums = {} as Record<LeadStage, number>;
-    LEAD_STAGES.forEach((stage) => {
-      counts[stage] = 0;
-      valueSums[stage] = 0;
-    });
-
     let totalValueCents = 0;
     for (const row of aggRows) {
-      const stage = row.stage as LeadStage;
       const sum = Number(row.sumValue ?? 0);
-      counts[stage] = Number(row.cnt ?? 0);
-      valueSums[stage] = sum;
       totalValueCents += sum;
+      // Un lead poate purta o cheie de etapă care nu (mai) e o coloană cunoscută — ex. import
+      // direct în bază cu o cheie greșită. Intră oricum în total (nimic nu dispare din valoarea
+      // pâlniei), dar nu are coloană proprie în `grouped`/`counts`/`valueSums`.
+      if (row.stage in counts) {
+        counts[row.stage] = Number(row.cnt ?? 0);
+        valueSums[row.stage] = sum;
+      }
     }
 
-    return c.json({ grouped, counts, valueSums, totalValueCents });
+    return c.json({ stages: stageRows, grouped, counts, valueSums, totalValueCents });
   } catch (e) {
     if (isMissingSchemaError(e)) {
       // Schema din bază e în urma codului: răspundem cu o tablă goală, ca
       // utilizatorul să vadă „niciun lead" în loc de o eroare roșie. Logăm tare,
       // fiindcă asta înseamnă că `sync-schema` n-a apucat să vindece încă.
       console.error("[crm/pipeline] schemă incompletă în bază:", e instanceof Error ? e.message : e);
-      const empty = Object.fromEntries(LEAD_STAGES.map((st) => [st, [] as unknown[]]));
-      const zeros = Object.fromEntries(LEAD_STAGES.map((st) => [st, 0]));
-      return c.json({ grouped: empty, counts: zeros, valueSums: zeros, totalValueCents: 0, schemaLag: true });
+      // Dacă am apucat să citim etapele reale ale tenantului înainte de eroare, le folosim.
+      // Altfel (chiar tabela de etape lipsește) cădem pe cele 5 implicite, doar ca UI-ul să aibă
+      // ce arăta — nu e un răspuns despre baza REALĂ, e strict fallback de afișare.
+      const fallbackStages: readonly { key: string }[] = stageRows.length > 0 ? stageRows : DEFAULT_STAGES;
+      const empty = Object.fromEntries(fallbackStages.map((st) => [st.key, [] as unknown[]]));
+      const zeros = Object.fromEntries(fallbackStages.map((st) => [st.key, 0]));
+      return c.json({
+        stages: fallbackStages,
+        grouped: empty,
+        counts: zeros,
+        valueSums: zeros,
+        totalValueCents: 0,
+        schemaLag: true,
+      });
     }
     // TEMPORAR (bug „internal_error" pe prod): întoarcem și motivul, altfel
     // clientul vede doar codul generic din `app.onError`, iar mesajul real
@@ -269,7 +302,10 @@ crmLeadsRoutes.get("/", async (c) => {
     if (searchCondition) conditions.push(searchCondition);
   }
 
-  if (stage && isLeadStage(stage)) conditions.push(eq(leads.stage, stage));
+  // Etapele sunt per-tenant și dinamice — nu mai există un set static contra căruia să validăm
+  // aici. Un filtru pe o cheie inexistentă e inofensiv: `eq` pe un varchar nu poate face SQL
+  // injection, doar întoarce o listă goală.
+  if (stage) conditions.push(eq(leads.stage, stage));
   if (source && isLeadSource(source)) conditions.push(eq(leads.source, source));
   if (assignedTo) conditions.push(eq(leads.assignedTo, assignedTo));
 
@@ -309,6 +345,42 @@ crmLeadsRoutes.get("/:id", async (c) => {
 
   if (!row) return c.json({ error: "not_found" }, 404);
   return c.json(row);
+});
+
+// ─── GET /:id/detail — lead + istoric + etapă, o singură cerere ──────────────
+
+/**
+ * UI-ul deschide un sertar (drawer) de detaliu pe click — trei cereri separate (lead,
+ * interacțiuni, etapă) pentru un singur click sunt risipă pe un pool serverless de 3 conexiuni.
+ * Lead-ul și interacțiunile sunt independente (rulează în paralel); eticheta/culoarea etapei
+ * depinde de `lead.stage`, deci se citește DUPĂ ce știm lead-ul.
+ */
+crmLeadsRoutes.get("/:id/detail", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+
+  const [leadRows, interactions] = await Promise.all([
+    db
+      .select(LEAD_COLS)
+      .from(leads)
+      .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId))),
+    db
+      .select()
+      .from(leadInteractions)
+      .where(and(eq(leadInteractions.tenantId, user.tenantId), eq(leadInteractions.leadId, id)))
+      .orderBy(desc(leadInteractions.occurredAt))
+      .limit(100),
+  ]);
+
+  const lead = leadRows[0];
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  const [stage] = await db
+    .select()
+    .from(crmPipelineStages)
+    .where(and(eq(crmPipelineStages.tenantId, user.tenantId), eq(crmPipelineStages.key, lead.stage)));
+
+  return c.json({ lead, interactions, stage: stage ?? null });
 });
 
 // ─── POST / ───────────────────────────────────────────────────────────────────
@@ -386,9 +458,20 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
   const id = c.req.param("id");
   const { stage, lostReason } = c.req.valid("json");
 
-  // Regulă de business: nu se poate marca un lead ca "pierdut" fără un motiv — altfel raportul
-  // de lead-uri pierdute rămâne mut despre DE CE s-a pierdut vânzarea.
-  if (stage === "lost" && (!lostReason || lostReason.trim().length === 0)) {
+  // Cheia țintă trebuie să existe printre etapele TENANTULUI curent — o cheie necunoscută (ștearsă,
+  // typo din UI, dintr-un alt workspace) nu are voie să scrie un `leads.stage` „orfan", fără nicio
+  // coloană din pâlnie care să-l mai arate.
+  const [targetStage] = await db
+    .select({ key: crmPipelineStages.key, isLost: crmPipelineStages.isLost })
+    .from(crmPipelineStages)
+    .where(and(eq(crmPipelineStages.tenantId, user.tenantId), eq(crmPipelineStages.key, stage)));
+  if (!targetStage) return c.json({ error: "unknown_stage" }, 400);
+
+  // Regulă de business: nu se poate marca un lead „pierdut" fără un motiv — altfel raportul de
+  // lead-uri pierdute rămâne mut despre DE CE s-a pierdut vânzarea. Cheia deciziei e flagul
+  // `is_lost`, NU literalul "lost": un workspace poate redenumi etapa implicită sau adăuga alte
+  // etape de tip „pierdut" (ex. „Anulat de client"), și regula trebuie să le urmărească pe toate.
+  if (targetStage.isLost && (!lostReason || lostReason.trim().length === 0)) {
     return c.json({ error: "lost_reason_required" }, 400);
   }
 
@@ -401,7 +484,7 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
   const fromStage = existing.stage;
 
   const updates: Partial<NewLead> = { stage, updatedAt: new Date() };
-  if (stage === "lost") updates.lostReason = lostReason ?? null;
+  if (targetStage.isLost) updates.lostReason = lostReason ?? null;
 
   const [row] = await db
     .update(leads)

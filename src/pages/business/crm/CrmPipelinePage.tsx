@@ -1,20 +1,28 @@
 /**
- * CRM (Faza 1) — Pipeline: kanban de leaduri pe cele 5 stadii fixe.
- * Spec: `backlog/crm/CRM-CORE.md` §4-5 (state machine + layout + anatomia cardului).
+ * CRM (Faza 1) — Pipeline: kanban de leaduri pe etapele CONFIGURATE ale workspace-ului.
+ * Spec: `backlog/crm/CRM-CORE.md` §4-6 (state machine + layout + anatomia cardului + fișa lead).
  *
- * Desktop (≥lg): grilă de 5 coloane cu drag & drop HTML5 nativ.
- * Mobil (<lg): aceleași secțiuni, listă simplă — fără drag, mutarea stadiului
- * se face din select-ul de sub fiecare card (e și alternativa de la tastatură
- * pentru desktop).
+ * Desktop (≥lg): grilă de N coloane (N = etapele tenantului) cu drag & drop HTML5 nativ.
+ * Mobil (<lg): aceleași secțiuni, listă simplă — fără drag, mutarea stadiului se face din
+ * select-ul de sub fiecare card (e și alternativa de la tastatură pentru desktop).
  *
- * DnD: id-ul leadului circulă prin `e.dataTransfer`, niciodată prin state —
- * altfel handler-ul de `drop` citește o valoare învechită (stale closure).
+ * Etapele NU mai sunt un `const` fix de 5: vin din `GET /api/crm/leads/pipeline` (`stages`),
+ * sunt personalizabile din „⚙ Etape" (`StageEditorDialog`), iar promptul de motiv-pierdere se
+ * declanșează pe flag-ul `isLost` al etapei țintă, nu pe cheia literală „lost".
+ *
+ * Click pe cartonaș → `LeadDetailSheet` (fișa leadului). Închiderea fișei / editorului de etape
+ * reîncarcă board-ul SILENȚIOS (`{ silent: true }`) — niciodată cu spinner-ul de pagină întreagă,
+ * vezi `src/__tests__/crm/kanban-optimistic-move.test.ts` pentru motivul exact.
+ *
+ * DnD: id-ul leadului circulă prin `e.dataTransfer`, niciodată prin state — altfel handler-ul de
+ * `drop` citește o valoare învechită (stale closure).
  */
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Phone, Mail, Loader2, AlertCircle, Users } from "lucide-react";
+import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
-import { Alert, Button, Dialog, EmptyState, Input, Label, Select } from "@/components/ds";
+import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { useBusinessSession } from "@/hooks/useBusinessSession";
 import {
   getCrmPipeline,
   createCrmLead,
@@ -22,55 +30,26 @@ import {
   type CrmLead,
   type CrmLeadStage,
   type CrmLeadSource,
+  type CrmStage,
 } from "@/lib/api/crm";
-import {
-  CRM_STAGES,
-  CRM_SOURCE_LABEL,
-  CRM_LOST_REASON_PRESETS,
-  crmStageLabel,
-  crmSourceLabel,
-  type CrmStageConfig,
-} from "@/components/crm/constants";
-
-// ─── Formatters ───────────────────────────────────────────────────────────────
-
-/**
- * Schema `leads` (`server/db/schema/leads.ts`) nu are un câmp de monedă per lead —
- * `valueCents` e un întreg simplu, în moneda unică a tenantului. Faza 1 fixează
- * MDL (clientul e din Moldova); dacă apare multi-monedă pe leaduri, se adaugă
- * atunci o coloană `currency` reală, nu se ghicește aici.
- */
-const LEAD_CURRENCY = "MDL";
-
-/** Aceeași convenție locală ca în restul FinDesk (vezi `FinCalendarPage.tsx`). */
-function formatCents(cents: number, currency: string): string {
-  return new Intl.NumberFormat("ro-MD", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cents / 100);
-}
-
-/** „1500" / „1.500,50" → cenți. Analog `leiToCents` din `FinInvoiceCreateModal.tsx`. */
-function leadValueToCents(text: string): number {
-  const n = parseFloat((text || "").replace(",", "."));
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : 0;
-}
-
-/** Titlul cardului: `dealName` (dacă e setat) înlocuiește `fullName` — vezi schema leads. */
-function leadTitle(lead: CrmLead): string {
-  return lead.dealName || lead.fullName;
-}
+import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, crmSourceLabel, stageColorClasses } from "@/components/crm/constants";
+import { formatCents, leadValueToCents, leadTitle } from "@/components/crm/format";
+import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
+import { LeadDetailSheet } from "@/components/crm/LeadDetailSheet";
+import { StageEditorDialog } from "@/components/crm/StageEditorDialog";
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
 
 // ─── Pagina principală ─────────────────────────────────────────────────────────
 
 export function CrmPipelinePage() {
+  const { data: session } = useBusinessSession();
+  const currentUserId = session?.user.id ?? null;
+
   const [grouped, setGrouped] = useState<Record<string, CrmLead[]>>({});
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [valueSums, setValueSums] = useState<Record<string, number>>({});
+  const [stages, setStages] = useState<CrmStage[]>(CRM_DEFAULT_STAGES as CrmStage[]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,8 +57,15 @@ export function CrmPipelinePage() {
   const [hoverStage, setHoverStage] = useState<string | null>(null);
 
   const [showAddLead, setShowAddLead] = useState(false);
-  const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string } | null>(null);
+  const [showStageEditor, setShowStageEditor] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; toStage: string } | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+
+  // ─── Filtre (client-side, peste ce a întors deja /pipeline — fără cereri noi) ───
+  const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [onlyMine, setOnlyMine] = useState(false);
 
   const loadPipeline = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent ?? false;
@@ -90,6 +76,8 @@ export function CrmPipelinePage() {
       setGrouped(res.grouped ?? {});
       setCounts(res.counts ?? {});
       setValueSums(res.valueSums ?? {});
+      const nextStages = res.stages && res.stages.length > 0 ? res.stages : (CRM_DEFAULT_STAGES as CrmStage[]);
+      setStages([...nextStages].sort((a, b) => a.orderIndex - b.orderIndex));
     } catch (err) {
       // La reîncărcare silențioasă (după o mutare optimistă reușită), nu stricăm ecranul cu o
       // eroare — mutarea a mers deja pe server, board-ul local rămâne corect.
@@ -110,6 +98,21 @@ export function CrmPipelinePage() {
   }, [toast]);
 
   const allLeads = Object.values(grouped).flat();
+
+  function matchesFilters(lead: CrmLead): boolean {
+    if (onlyMine && currentUserId && lead.assignedTo !== currentUserId) return false;
+    if (sourceFilter !== "all" && lead.source !== sourceFilter) return false;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      const haystack = [lead.fullName, lead.dealName, lead.phone, lead.email, lead.company]
+        .filter((v): v is string => Boolean(v))
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  }
+  const hasActiveFilters = search.trim() !== "" || sourceFilter !== "all" || onlyMine;
 
   /**
    * Mută leadul instant în state local (înainte de răspunsul serverului) și recalculează
@@ -164,7 +167,7 @@ export function CrmPipelinePage() {
     const revert = moveLeadLocal(leadId, toStage);
     try {
       await moveCrmLeadStage(leadId, { stage: toStage, lostReason });
-      setToast({ kind: "success", message: `Lead mutat la „${crmStageLabel(toStage)}”.` });
+      setToast({ kind: "success", message: `Lead mutat la „${crmStageLabel(stages, toStage)}”.` });
       void loadPipeline({ silent: true });
     } catch (err) {
       revert();
@@ -175,11 +178,14 @@ export function CrmPipelinePage() {
     }
   }
 
-  /** → „lost" cere mereu motivul; restul tranzițiilor se aplică direct (orice → orice). */
+  /** → o etapă `isLost` cere mereu motivul (verificat pe FLAG, nu pe cheia „lost" — o etapă
+   *  redenumită sau custom marcată „pierdut" trebuie să ceară motivul la fel); restul
+   *  tranzițiilor se aplică direct (orice → orice). */
   function requestStageChange(lead: CrmLead, toStage: CrmLeadStage) {
     if (toStage === lead.stage) return;
-    if (toStage === "lost") {
-      setLostReasonFor({ leadId: lead.id });
+    const target = stages.find((s) => s.key === toStage);
+    if (target?.isLost) {
+      setLostReasonFor({ leadId: lead.id, toStage });
       return;
     }
     void applyStageChange(lead.id, toStage);
@@ -198,18 +204,25 @@ export function CrmPipelinePage() {
   }
 
   const totalLeads = allLeads.length;
-  const paidCount = counts["paid"] ?? 0;
-  const conversionRate = totalLeads > 0 ? Math.round((paidCount / totalLeads) * 100) : 0;
+  const wonKeys = new Set(stages.filter((s) => s.isWon).map((s) => s.key));
+  const wonCount = allLeads.filter((l) => wonKeys.has(l.stage)).length;
+  const conversionRate = totalLeads > 0 ? Math.round((wonCount / totalLeads) * 100) : 0;
 
   return (
     <BusinessShell
       pageTitle="Pipeline"
       pageDescription={`${totalLeads} lead${totalLeads === 1 ? "" : "uri"} · conversie ${conversionRate}%`}
       actions={
-        <Button onClick={() => setShowAddLead(true)}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Adaugă lead
-        </Button>
+        <>
+          <Button variant="outline" onClick={() => setShowStageEditor(true)}>
+            <Settings className="h-4 w-4" aria-hidden="true" />
+            Etape
+          </Button>
+          <Button onClick={() => setShowAddLead(true)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Adaugă lead
+          </Button>
+        </>
       }
     >
       {loading ? (
@@ -239,13 +252,56 @@ export function CrmPipelinePage() {
         />
       ) : (
         <>
-          {/* Desktop ≥lg: grilă de 5 coloane cu drag & drop */}
+          {/* Bara de filtre — client-side, peste datele deja încărcate din /pipeline. */}
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="sm:w-72">
+              <Label htmlFor="crm-filter-search" className="sr-only">
+                Caută leaduri
+              </Label>
+              <Input
+                id="crm-filter-search"
+                icon={<Search className="h-4 w-4" aria-hidden="true" />}
+                placeholder="Caută nume, telefon, email, companie..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="sm:w-48">
+              <Label htmlFor="crm-filter-source" className="sr-only">
+                Filtrează după sursă
+              </Label>
+              <Select id="crm-filter-source" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+                <option value="all">Toate sursele</option>
+                {Object.entries(CRM_SOURCE_LABEL).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {currentUserId && (
+              <label className="inline-flex h-10 items-center gap-2 text-sm font-medium text-foreground max-sm:h-11">
+                <Switch checked={onlyMine} onChange={setOnlyMine} aria-label="Arată doar leadurile mele" />
+                Doar ale mele
+              </label>
+            )}
+          </div>
+
+          {/* Desktop ≥lg: grilă de N coloane cu drag & drop */}
           <div
             className="hidden gap-4 lg:grid"
-            style={{ gridTemplateColumns: `repeat(${CRM_STAGES.length}, minmax(220px, 1fr))` }}
+            style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(220px, 1fr))` }}
           >
-            {CRM_STAGES.map((stage) => {
-              const leads = grouped[stage.key] ?? [];
+            {stages.map((stage) => {
+              const columnLeads = (grouped[stage.key] ?? []).filter(matchesFilters);
+              // Contorul/suma serverului acoperă TOATE lead-urile tenantului; `grouped` e plafonat
+              // la 50/coloană (vezi `crmLeads.ts`). Fără filtre arătăm contorul real al serverului;
+              // cu filtre active, arătăm ce s-a găsit în cardurile deja încărcate (nu mai cerem
+              // server-ul din nou — regula explicită de mai sus, „fără cereri noi").
+              const columnCount = hasActiveFilters ? columnLeads.length : counts[stage.key] ?? 0;
+              const columnValueSum = hasActiveFilters
+                ? columnLeads.reduce((sum, l) => sum + (l.valueCents ?? 0), 0)
+                : valueSums[stage.key] ?? 0;
               const isHover = hoverStage === stage.key && draggedId !== null;
               return (
                 <div
@@ -262,14 +318,14 @@ export function CrmPipelinePage() {
                   )}
                   aria-label={`Coloana ${stage.label}`}
                 >
-                  <StageHeader stage={stage} count={counts[stage.key] ?? 0} valueSum={valueSums[stage.key] ?? 0} />
+                  <StageHeader stage={stage} count={columnCount} valueSum={columnValueSum} />
                   <div className="flex min-h-[96px] flex-col gap-2">
-                    {leads.length === 0 ? (
+                    {columnLeads.length === 0 ? (
                       <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted-foreground">
-                        Trage aici
+                        {hasActiveFilters ? "Niciun rezultat" : "Trage aici"}
                       </div>
                     ) : (
-                      leads.map((lead) => (
+                      columnLeads.map((lead) => (
                         <LeadCard
                           key={lead.id}
                           lead={lead}
@@ -280,6 +336,8 @@ export function CrmPipelinePage() {
                             setHoverStage(null);
                           }}
                           onChangeStage={(next) => requestStageChange(lead, next)}
+                          onOpen={() => setSelectedLeadId(lead.id)}
+                          stages={stages}
                         />
                       ))
                     )}
@@ -291,16 +349,22 @@ export function CrmPipelinePage() {
 
           {/* Mobil (<lg): aceleași secțiuni, fără drag — mutarea vine din select. */}
           <div className="flex flex-col gap-4 lg:hidden">
-            {CRM_STAGES.map((stage) => {
-              const leads = grouped[stage.key] ?? [];
+            {stages.map((stage) => {
+              const columnLeads = (grouped[stage.key] ?? []).filter(matchesFilters);
+              const columnCount = hasActiveFilters ? columnLeads.length : counts[stage.key] ?? 0;
+              const columnValueSum = hasActiveFilters
+                ? columnLeads.reduce((sum, l) => sum + (l.valueCents ?? 0), 0)
+                : valueSums[stage.key] ?? 0;
               return (
                 <div key={stage.key} className="flex flex-col gap-2 rounded-2xl bg-muted/40 p-3">
-                  <StageHeader stage={stage} count={counts[stage.key] ?? 0} valueSum={valueSums[stage.key] ?? 0} />
-                  {leads.length === 0 ? (
-                    <p className="px-1 py-2 text-xs text-muted-foreground">Niciun lead în acest stadiu.</p>
+                  <StageHeader stage={stage} count={columnCount} valueSum={columnValueSum} />
+                  {columnLeads.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-muted-foreground">
+                      {hasActiveFilters ? "Niciun rezultat în acest stadiu." : "Niciun lead în acest stadiu."}
+                    </p>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      {leads.map((lead) => (
+                      {columnLeads.map((lead) => (
                         <LeadCard
                           key={lead.id}
                           lead={lead}
@@ -308,6 +372,8 @@ export function CrmPipelinePage() {
                           onDragStart={() => {}}
                           onDragEnd={() => {}}
                           onChangeStage={(next) => requestStageChange(lead, next)}
+                          onOpen={() => setSelectedLeadId(lead.id)}
+                          stages={stages}
                         />
                       ))}
                     </div>
@@ -335,8 +401,29 @@ export function CrmPipelinePage() {
         onConfirm={(reason) => {
           const target = lostReasonFor;
           setLostReasonFor(null);
-          if (target) void applyStageChange(target.leadId, "lost", reason);
+          if (target) void applyStageChange(target.leadId, target.toStage, reason);
         }}
+      />
+
+      <LeadDetailSheet
+        leadId={selectedLeadId}
+        stages={stages}
+        onClose={() => {
+          setSelectedLeadId(null);
+          // Fișa poate fi închisă după modificări (etapă/detalii) — board-ul se resincronizează
+          // silențios, niciodată cu spinner-ul de pagină întreagă.
+          void loadPipeline({ silent: true });
+        }}
+        onChanged={() => void loadPipeline({ silent: true })}
+        onToast={setToast}
+      />
+
+      <StageEditorDialog
+        open={showStageEditor}
+        stages={stages}
+        onClose={() => setShowStageEditor(false)}
+        onChanged={() => void loadPipeline({ silent: true })}
+        onToast={setToast}
       />
 
       {toast && (
@@ -358,25 +445,16 @@ export function CrmPipelinePage() {
 
 // ─── Antetul pastelat de coloană ────────────────────────────────────────────────
 
-function StageHeader({
-  stage,
-  count,
-  valueSum,
-}: {
-  stage: CrmStageConfig;
-  count: number;
-  valueSum: number;
-}) {
+function StageHeader({ stage, count, valueSum }: { stage: CrmStage; count: number; valueSum: number }) {
+  const { bg, fg } = stageColorClasses(stage.color);
   return (
-    <div className={cn("rounded-lg p-3", stage.bg)}>
+    <div className={cn("rounded-lg p-3", bg)}>
       <div className="flex items-baseline justify-between">
-        <p className={cn("text-xs font-bold", stage.fg)}>{stage.label}</p>
-        <span className={cn("text-sm font-bold tabular-nums", stage.fg)}>{count}</span>
+        <p className={cn("text-xs font-bold", fg)}>{stage.label}</p>
+        <span className={cn("text-sm font-bold tabular-nums", fg)}>{count}</span>
       </div>
       {valueSum > 0 && (
-        <p className={cn("mt-0.5 text-[11px] font-semibold tabular-nums opacity-80", stage.fg)}>
-          {formatCents(valueSum, LEAD_CURRENCY)}
-        </p>
+        <p className={cn("mt-0.5 text-[11px] font-semibold tabular-nums opacity-80", fg)}>{formatCents(valueSum)}</p>
       )}
     </div>
   );
@@ -390,12 +468,16 @@ function LeadCard({
   onDragStart,
   onDragEnd,
   onChangeStage,
+  onOpen,
+  stages,
 }: {
   lead: CrmLead;
   isDragging: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onChangeStage: (stage: CrmLeadStage) => void;
+  onOpen: () => void;
+  stages: readonly CrmStage[];
 }) {
   const title = leadTitle(lead);
   const subtitle = lead.company || lead.interestCourse;
@@ -414,20 +496,28 @@ function LeadCard({
         isDragging && "opacity-50"
       )}
     >
-      <p className="truncate text-xs font-semibold text-foreground">{title}</p>
-      {subtitle && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{subtitle}</p>}
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <span className="text-[10px] text-muted-foreground">{crmSourceLabel(lead.source)}</span>
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          {lead.phone && <Phone className="h-3 w-3" aria-label="Are telefon" />}
-          {lead.email && <Mail className="h-3 w-3" aria-label="Are email" />}
+      {/* Buton real (nu doar onClick pe div-ul draggable) — tastatură + cititor de ecran, și nu
+          intră în conflict cu select-ul de stadiu de mai jos, care rămâne un element FRATE, nu
+          copil al butonului (un `<select>` în interiorul unui `<button>` ar fi HTML invalid). */}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Deschide lead ${title}`}
+      >
+        <p className="truncate text-xs font-semibold text-foreground">{title}</p>
+        {subtitle && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{subtitle}</p>}
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <span className="text-[10px] text-muted-foreground">{crmSourceLabel(lead.source)}</span>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            {lead.phone && <Phone className="h-3 w-3" aria-label="Are telefon" />}
+            {lead.email && <Mail className="h-3 w-3" aria-label="Are email" />}
+          </div>
         </div>
-      </div>
-      {lead.valueCents > 0 && (
-        <p className="mt-1 text-[11px] font-bold tabular-nums text-foreground">
-          {formatCents(lead.valueCents, LEAD_CURRENCY)}
-        </p>
-      )}
+        {lead.valueCents > 0 && (
+          <p className="mt-1 text-[11px] font-bold tabular-nums text-foreground">{formatCents(lead.valueCents)}</p>
+        )}
+      </button>
       <div className="mt-2">
         <Label htmlFor={`crm-stage-${lead.id}`} className="sr-only">
           Mutare stadiu pentru {title}
@@ -435,9 +525,9 @@ function LeadCard({
         <Select
           id={`crm-stage-${lead.id}`}
           value={lead.stage}
-          onChange={(e) => onChangeStage(e.target.value as CrmLeadStage)}
+          onChange={(e) => onChangeStage(e.target.value)}
         >
-          {CRM_STAGES.map((s) => (
+          {stages.map((s) => (
             <option key={s.key} value={s.key}>
               {s.label}
             </option>
@@ -569,86 +659,6 @@ function AddLeadDialog({
             />
           </div>
         </div>
-      </div>
-    </Dialog>
-  );
-}
-
-// ─── Dialog „Motiv pierdere" ────────────────────────────────────────────────────
-
-function LostReasonDialog({
-  open,
-  onCancel,
-  onConfirm,
-}: {
-  open: boolean;
-  onCancel: () => void;
-  onConfirm: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [custom, setCustom] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setReason("");
-    setCustom("");
-  }, [open]);
-
-  const effectiveReason = reason === "Altul" ? custom.trim() : reason;
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onCancel}
-      title="Motiv pierdere"
-      description="Selectează motivul pentru care leadul a fost pierdut. Câmp obligatoriu."
-      footer={
-        <>
-          <Button variant="ghost" onClick={onCancel}>
-            Anulează
-          </Button>
-          <Button variant="destructive" disabled={!effectiveReason} onClick={() => onConfirm(effectiveReason)}>
-            Marchează pierdut
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-1 gap-2" role="radiogroup" aria-label="Motiv pierdere">
-          {CRM_LOST_REASON_PRESETS.map((preset) => (
-            <label
-              key={preset}
-              className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-sm transition-colors",
-                reason === preset
-                  ? "border-primary bg-primary/10 font-semibold text-primary"
-                  : "border-border hover:bg-muted/40"
-              )}
-            >
-              <input
-                type="radio"
-                name="crm-lost-reason"
-                value={preset}
-                checked={reason === preset}
-                onChange={() => setReason(preset)}
-                className="sr-only"
-              />
-              {preset}
-            </label>
-          ))}
-        </div>
-        {reason === "Altul" && (
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="crm-lost-custom">Detalii</Label>
-            <Input
-              id="crm-lost-custom"
-              value={custom}
-              onChange={(e) => setCustom(e.target.value)}
-              placeholder="Descrie motivul..."
-              autoFocus
-            />
-          </div>
-        )}
       </div>
     </Dialog>
   );

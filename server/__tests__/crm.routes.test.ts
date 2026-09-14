@@ -1,12 +1,18 @@
 /**
  * @vitest-environment node
  *
- * CRM Faza 1 — Leads/Pipeline + Produse, pe o bază PGlite reală (migrările chiar rulate, nu un
- * mock peste tabele).
+ * CRM Faza 1+2 — Leads/Pipeline + Produse + Etape de pâlnie, pe o bază PGlite reală (migrările
+ * chiar rulate, nu un mock peste tabele).
  *
  * Testele de PRODUSE se auto-suspendă (`describe.skipIf`) dacă `crm_products` nu există încă în
  * migrările replay-uite la momentul rulării — schema/migrarea sunt livrate separat, în paralel;
  * nu inventăm tabela aici, doar așteptăm ca ea să apară pe branch.
+ *
+ * tenantA/tenantB (mai jos) primesc cele 5 etape implicite chiar în `beforeAll`, ca niște
+ * workspace-uri care EXISTAU deja la migrarea 0162 — exact premisa pe care se bazează testele
+ * mai vechi din fișier (scrise înainte de feature-ul de etape). Testele NOI pentru
+ * `ensureTenantStages` își creează propriul tenant, fără nicio etapă, ca să verifice explicit
+ * seed-ul lazy — vezi `createFreshTenant()`.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
@@ -87,8 +93,10 @@ beforeAll(async () => {
   testDb = drizzle(pglite, { schema });
 
   const { crmLeadsRoutes } = await import("../routes/crmLeads");
+  const { crmStagesRoutes } = await import("../routes/crmStages");
   app = new Hono();
   app.route("/api/crm/leads", crmLeadsRoutes);
+  app.route("/api/crm/stages", crmStagesRoutes);
 
   // Ruta + schema de produse pot să nu existe încă (livrate separat, în paralel) — vezi detecția
   // (top-level await) de mai sus, care a stabilit deja `hasCrmProducts`.
@@ -117,6 +125,16 @@ beforeAll(async () => {
     .values({ tenantId: tenantB, email: "bogdan@test-b.md", passwordHash: "x", name: "Bogdan", role: "admin" })
     .returning();
   userB = uB.id;
+
+  // tenantA/tenantB reprezintă workspace-uri EXISTENTE — la fel ca migrarea 0162, care a semănat
+  // cele 5 etape implicite pentru orice tenant existent la acel moment. `GET /api/crm/stages`
+  // seamănă lazy (ensureTenantStages) dacă tenantul n-are încă nicio etapă, deci un singur apel
+  // aici e suficient ca să le dea acest set clasic — pe care testele mai vechi din fișier
+  // (scrise înainte de feature-ul de etape) îl presupun implicit.
+  currentUser = { id: userA, tenantId: tenantA, role: "admin", email: "andreea@test-a.md" };
+  await app.request("/api/crm/stages");
+  currentUser = { id: userB, tenantId: tenantB, role: "admin", email: "bogdan@test-b.md" };
+  await app.request("/api/crm/stages");
 }, 240_000);
 
 afterAll(async () => {
@@ -138,6 +156,46 @@ async function createLead(overrides: Record<string, unknown> = {}) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ fullName: "Ion Vasilescu", ...overrides }),
+  });
+  expect(res.status).toBe(201);
+  return res.json();
+}
+
+// ─── Helpere pentru testele de etape (crm_pipeline_stages) ───────────────────
+
+let freshTenantSeq = 0;
+
+/**
+ * Un tenant NOU, fără nicio etapă — spre deosebire de tenantA/tenantB (seed-uite în beforeAll ca
+ * niște workspace-uri deja existente). Folosit de orice test care creează/redenumește/șterge/
+ * reordonează etape, ca să nu polueze setul clasic de 5 pe care alte teste îl presupun.
+ */
+async function createFreshTenant(): Promise<{ tenantId: string; userId: string; email: string }> {
+  freshTenantSeq += 1;
+  const n = freshTenantSeq;
+  const [t] = await testDb
+    .insert(tenants)
+    .values({ name: `CRM Stage Test ${n}`, slug: `crm-stage-test-${n}` })
+    .returning();
+  const email = `stage-test-${n}@test.md`;
+  const [u] = await testDb
+    .insert(users)
+    .values({ tenantId: t.id, email, passwordHash: "x", name: `Tester ${n}`, role: "admin" })
+    .returning();
+  return { tenantId: t.id, userId: u.id, email };
+}
+
+/** Comută `currentUser` (mock-ul de requireAuth) pe un tenant creat cu createFreshTenant(). */
+function loginAs(tenant: { tenantId: string; userId: string; email: string }) {
+  currentUser = { id: tenant.userId, tenantId: tenant.tenantId, role: "admin", email: tenant.email };
+}
+
+/** Creează o etapă ca tenantul/userul curent și întoarce rândul creat (201 garantat). */
+async function createStage(overrides: Record<string, unknown> = {}) {
+  const res = await app.request("/api/crm/stages", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ label: "Etapă de test", ...overrides }),
   });
   expect(res.status).toBe(201);
   return res.json();
@@ -451,5 +509,325 @@ describe("Valori mari în pipeline", () => {
     // Suma trebuie să fie exactă, nu trunchiată sau întoarsă ca text.
     expect(typeof body.totalValueCents).toBe("number");
     expect(body.totalValueCents).toBeGreaterThanOrEqual(2 * big);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM Faza 2 — Etape de pâlnie (crm_pipeline_stages, /api/crm/stages)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── ensureTenantStages — seed lazy pentru un workspace fără etape ───────────
+
+describe("ensureTenantStages — seed automat pentru un workspace fără etape", () => {
+  it("[blocant] un workspace fără etape primește automat cele 5 implicite", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const res = await app.request("/api/crm/stages");
+    expect(res.status).toBe(200);
+    const { items } = await res.json();
+
+    expect(items).toHaveLength(5);
+    expect(items.map((s: { key: string }) => s.key)).toEqual(["new", "contacted", "trial", "paid", "lost"]);
+    expect(
+      items.every((s: { isDefault: boolean; tenantId: string }) => s.isDefault && s.tenantId === fresh.tenantId)
+    ).toBe(true);
+    expect(items.find((s: { key: string }) => s.key === "paid").isWon).toBe(true);
+    expect(items.find((s: { key: string }) => s.key === "lost").isLost).toBe(true);
+
+    // Idempotent: a doua citire nu dublează etapele.
+    const again = await (await app.request("/api/crm/stages")).json();
+    expect(again.items).toHaveLength(5);
+  });
+
+  it("[blocant] /pipeline seamănă și el cele 5 etape pentru un workspace fără niciuna", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const body = await (await app.request("/api/crm/leads/pipeline")).json();
+    expect(body.stages).toHaveLength(5);
+    expect(Object.keys(body.grouped)).toHaveLength(5);
+    expect(body.stages.map((s: { key: string }) => s.key)).toEqual(["new", "contacted", "trial", "paid", "lost"]);
+  });
+});
+
+// ─── POST / — creare ──────────────────────────────────────────────────────────
+
+describe("POST /api/crm/stages", () => {
+  it("cheia se derivă din etichetă (diacritice, spații) când nu e dată explicit", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const stage = await createStage({ label: "Ofertă trimisă" });
+    expect(stage.key).toBe("oferta_trimisa");
+    expect(stage.label).toBe("Ofertă trimisă");
+    expect(stage.isDefault).toBe(false);
+    expect(stage.tenantId).toBe(fresh.tenantId);
+  });
+
+  it("o cheie deja folosită în tenant e refuzată cu 409 stage_key_taken", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    await createStage({ label: "Prima", key: "duplicat" });
+
+    const second = await app.request("/api/crm/stages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "A doua", key: "duplicat" }),
+    });
+    expect(second.status).toBe(409);
+    expect((await second.json()).error).toBe("stage_key_taken");
+  });
+});
+
+// ─── PATCH /:id — imuabilitatea cheii ─────────────────────────────────────────
+
+describe("PATCH /api/crm/stages/:id", () => {
+  it("cheia unei etape nu poate fi schimbată după creare", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const created = await createStage({ label: "Negociere", key: "negociere" });
+
+    const res = await app.request(`/api/crm/stages/${created.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key: "alta_cheie" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("stage_key_immutable");
+
+    const { items } = await (await app.request("/api/crm/stages")).json();
+    expect(items.find((s: { id: string }) => s.id === created.id).key).toBe("negociere");
+  });
+
+  it("eticheta, culoarea și probabilitatea se pot schimba normal", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const created = await createStage({ label: "Etapă inițială" });
+
+    const res = await app.request(`/api/crm/stages/${created.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Etapă redenumită", color: "mint", probabilityPct: 75 }),
+    });
+    expect(res.status).toBe(200);
+    const updated = await res.json();
+    expect(updated.label).toBe("Etapă redenumită");
+    expect(updated.color).toBe("mint");
+    expect(updated.probabilityPct).toBe(75);
+    expect(updated.key).toBe(created.key); // neschimbată
+  });
+});
+
+// ─── POST /reorder ────────────────────────────────────────────────────────────
+
+describe("POST /api/crm/stages/reorder", () => {
+  it("reordonarea etapelor se reflectă în ordinea coloanelor din /pipeline", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    // GET seamănă (ensureTenantStages) și întoarce cele 5 implicite, în ordinea clasică.
+    const { items } = await (await app.request("/api/crm/stages")).json();
+    const reversedIds = [...items].reverse().map((s: { id: string }) => s.id);
+
+    const res = await app.request("/api/crm/stages/reorder", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: reversedIds }),
+    });
+    expect(res.status).toBe(200);
+    const { items: reordered } = await res.json();
+    expect(reordered.map((s: { key: string }) => s.key)).toEqual(["lost", "paid", "trial", "contacted", "new"]);
+
+    const pipeline = await (await app.request("/api/crm/leads/pipeline")).json();
+    expect(pipeline.stages.map((s: { key: string }) => s.key)).toEqual([
+      "lost",
+      "paid",
+      "trial",
+      "contacted",
+      "new",
+    ]);
+  });
+});
+
+// ─── DELETE /:id — nu orfanizează lead-uri, nu șterge etape implicite ────────
+
+describe("DELETE /api/crm/stages/:id", () => {
+  it("[blocant] o etapă cu lead-uri în ea nu poate fi ștearsă", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    // Etapă PERSONALIZATĂ (nu implicită) — ca testul să verifice STRICT regula „are lead-uri",
+    // nu regula „e implicită" (o etapă implicită e oricum nedeletabilă, indiferent de lead-uri —
+    // vezi testul de mai jos).
+    const stage = await createStage({ label: "Ofertă în lucru" });
+    await createLead({ stage: stage.key });
+
+    const res = await app.request(`/api/crm/stages/${stage.id}`, { method: "DELETE" });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe("stage_not_empty");
+    expect(body.leads).toBe(1);
+
+    // Etapa n-a fost ștearsă de fapt.
+    const { items: unchanged } = await (await app.request("/api/crm/stages")).json();
+    expect(unchanged.find((s: { id: string }) => s.id === stage.id)).toBeTruthy();
+  });
+
+  it("o etapă implicită nu poate fi ștearsă, chiar dacă e goală", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const { items } = await (await app.request("/api/crm/stages")).json();
+    const contacted = items.find((s: { key: string }) => s.key === "contacted");
+
+    const res = await app.request(`/api/crm/stages/${contacted.id}`, { method: "DELETE" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("stage_is_default");
+  });
+
+  it("o etapă personalizată, goală, se poate șterge", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const created = await createStage({ label: "Etapă de test, ștearsă" });
+
+    const res = await app.request(`/api/crm/stages/${created.id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+
+    const { items } = await (await app.request("/api/crm/stages")).json();
+    expect(items.find((s: { id: string }) => s.id === created.id)).toBeUndefined();
+  });
+});
+
+// ─── Regula „motiv pierdere” — flagul is_lost, nu literalul "lost" ───────────
+
+describe("Regula „motiv pierdere” urmărește flagul is_lost, nu cheia „lost”", () => {
+  it("[blocant] o etapă personalizată cu is_lost=true cere motiv, deși cheia nu e „lost”", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const customStage = await createStage({ label: "Anulat de client", isLost: true });
+    expect(customStage.key).not.toBe("lost");
+    expect(customStage.isLost).toBe(true);
+
+    const lead = await createLead(); // implicit pe "new" — default de coloană, independent de etape
+
+    const withoutReason = await app.request(`/api/crm/leads/${lead.id}/stage`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stage: customStage.key }),
+    });
+    expect(withoutReason.status).toBe(400);
+    expect((await withoutReason.json()).error).toBe("lost_reason_required");
+
+    const withReason = await app.request(`/api/crm/leads/${lead.id}/stage`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stage: customStage.key, lostReason: "Buget anulat" }),
+    });
+    expect(withReason.status).toBe(200);
+    const updated = await withReason.json();
+    expect(updated.stage).toBe(customStage.key);
+    expect(updated.lostReason).toBe("Buget anulat");
+  });
+
+  it("schimbarea către o cheie de etapă inexistentă e refuzată cu 400 unknown_stage", async () => {
+    const fresh = await createFreshTenant();
+    loginAs(fresh);
+
+    const lead = await createLead();
+    const res = await app.request(`/api/crm/leads/${lead.id}/stage`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stage: "nu_exista" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("unknown_stage");
+  });
+});
+
+// ─── Izolare multi-tenant — etape ─────────────────────────────────────────────
+
+describe("Izolare multi-tenant — etape", () => {
+  it("[blocant] o etapă dintr-un alt workspace nu e vizibilă și nu poate fi modificată", async () => {
+    const tenantX = await createFreshTenant();
+    const tenantY = await createFreshTenant();
+
+    loginAs(tenantX);
+    const stageX = await createStage({ label: "Etapă privată X" });
+
+    loginAs(tenantY);
+
+    const listY = await (await app.request("/api/crm/stages")).json();
+    expect(listY.items.find((s: { id: string }) => s.id === stageX.id)).toBeUndefined();
+
+    const patchRes = await app.request(`/api/crm/stages/${stageX.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Furat" }),
+    });
+    expect(patchRes.status).toBe(404);
+
+    const deleteRes = await app.request(`/api/crm/stages/${stageX.id}`, { method: "DELETE" });
+    expect(deleteRes.status).toBe(404);
+
+    // Reordonarea din Y ignoră id-uri din X — nu dă eroare, dar nu le atinge.
+    const reorderRes = await app.request("/api/crm/stages/reorder", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: [stageX.id] }),
+    });
+    expect(reorderRes.status).toBe(200);
+
+    // Etapa X, văzută din tenantul ei, e neatinsă.
+    loginAs(tenantX);
+    const listX = await (await app.request("/api/crm/stages")).json();
+    const found = listX.items.find((s: { id: string }) => s.id === stageX.id);
+    expect(found.label).toBe("Etapă privată X");
+  });
+});
+
+// ─── GET /:id/detail — lead + istoric + etapă, o singură cerere ─────────────
+
+describe("GET /api/crm/leads/:id/detail", () => {
+  it("întoarce leadul, istoricul lui și etapa curentă într-o singură cerere", async () => {
+    const lead = await createLead({ fullName: "Client Detaliu" });
+
+    await app.request(`/api/crm/leads/${lead.id}/stage`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stage: "contacted" }),
+    });
+    await app.request(`/api/crm/leads/${lead.id}/interactions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "note", body: "Notă pentru detaliu" }),
+    });
+
+    const res = await app.request(`/api/crm/leads/${lead.id}/detail`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body.lead.id).toBe(lead.id);
+    expect(body.lead.stage).toBe("contacted");
+    expect(body.stage.key).toBe("contacted");
+    expect(body.stage.label).toBe("Contactat");
+    expect(body.interactions.some((i: { type: string }) => i.type === "stage_change")).toBe(true);
+    expect(
+      body.interactions.some(
+        (i: { type: string; body: string }) => i.type === "note" && i.body === "Notă pentru detaliu"
+      )
+    ).toBe(true);
+  });
+
+  it("un lead dintr-un alt tenant întoarce 404", async () => {
+    const lead = await createLead();
+    currentUser = { id: userB, tenantId: tenantB, role: "admin", email: "bogdan@test-b.md" };
+    const res = await app.request(`/api/crm/leads/${lead.id}/detail`);
+    expect(res.status).toBe(404);
   });
 });

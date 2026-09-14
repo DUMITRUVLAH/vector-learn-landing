@@ -38,7 +38,10 @@ export const leads = pgTable(
     email: varchar("email", { length: 255 }),
     emailNormalized: varchar("email_normalized", { length: 255 }),
     interestCourse: varchar("interest_course", { length: 200 }),
-    stage: leadStageEnum("stage").notNull().default("new"),
+    /** Cheia etapei din `crm_pipeline_stages`. Varchar, nu enum: etapele sunt
+     *  proces comercial per workspace, nu constante de produs (migrarea 0162).
+     *  `leadStageEnum` rămâne exportat — alt cod încă îl referențiază. */
+    stage: varchar("stage", { length: 64 }).notNull().default("new"),
     source: leadSourceEnum("source").notNull().default("manual"),
     assignedTo: uuid("assigned_to").references(() => users.id, { onDelete: "set null" }),  // [CRM-103]
     utmSource: varchar("utm_source", { length: 100 }),

@@ -12,8 +12,15 @@ import { api } from "@/lib/api";
 
 // ─── Leaduri ──────────────────────────────────────────────────────────────────
 
-/** Stadiile fixe ale pipeline-ului de leaduri (CRM-CORE §4) — orice → orice e permis. */
-export type CrmLeadStage = "new" | "contacted" | "trial" | "paid" | "lost";
+/**
+ * Cheia etapei curente a leadului (CRM-CORE §4 — orice → orice e permis prin drag).
+ *
+ * NU mai e un union fix de 5 valori: migrarea 0162 face `leads.stage` un `varchar` liber,
+ * pentru că etapele sunt configurabile per workspace din `StageEditorDialog` (secțiunea
+ * „Etape pipeline" mai jos). Etapele implicite (`new|contacted|trial|paid|lost`) rămân doar ca
+ * fallback de afișare în `constants.ts` — orice cheie întoarsă de server e validă aici.
+ */
+export type CrmLeadStage = string;
 
 /** Sursele de lead acceptate de server (`server/db/schema/leads.ts` — `leadSourceEnum`). */
 export type CrmLeadSource =
@@ -53,10 +60,78 @@ export interface CrmPipelineResponse {
   counts: Record<string, number>;
   valueSums: Record<string, number>;
   totalValueCents: number;
+  /**
+   * Etapele configurate ale pipeline-ului, ordonate — sursa de adevăr pentru coloanele
+   * board-ului (nu mai `CRM_DEFAULT_STAGES`). Opțional strict defensiv: dacă backend-ul e în
+   * urma codului (endpoint nou), câmpul poate lipsi — apelantul cade atunci pe
+   * `CRM_DEFAULT_STAGES` din `components/crm/constants.ts`.
+   */
+  stages?: CrmStage[];
 }
 
 export function getCrmPipeline(): Promise<CrmPipelineResponse> {
   return api<CrmPipelineResponse>("/api/crm/leads/pipeline");
+}
+
+// ─── Etape pipeline (configurabile per workspace) ──────────────────────────────
+
+/** Token pastel din design-system.md — singurele culori oferite de `StageEditorDialog`. */
+export type CrmStageColor = "sky" | "lavender" | "peach" | "mint" | "rose";
+
+export interface CrmStage {
+  id: string;
+  /** Cheia stabilă scrisă în `leads.stage` — imuabilă după creare (400 `stage_key_immutable`). */
+  key: string;
+  label: string;
+  color: CrmStageColor;
+  orderIndex: number;
+  /** O mutare către o etapă `isWon` contează ca „lead câștigat" (rata de conversie a board-ului). */
+  isWon: boolean;
+  /** O mutare către o etapă `isLost` cere `lostReason` — verificată pe FLAG, nu pe cheia „lost". */
+  isLost: boolean;
+  /** Etapă seed (una din cele 5 implicite) — nu se poate șterge (400 `stage_is_default`). */
+  isDefault: boolean;
+  probabilityPct: number;
+}
+
+export interface ListCrmStagesResponse {
+  items: CrmStage[];
+}
+
+export function getCrmStages(): Promise<ListCrmStagesResponse> {
+  return api<ListCrmStagesResponse>("/api/crm/stages");
+}
+
+export interface CreateCrmStageBody {
+  label: string;
+  color?: CrmStageColor;
+  probabilityPct?: number;
+  isWon?: boolean;
+  isLost?: boolean;
+}
+
+/** Poate răspunde 409 `stage_key_taken` dacă eticheta produce o cheie deja folosită. */
+export function createCrmStage(body: CreateCrmStageBody): Promise<CrmStage> {
+  return api<CrmStage>("/api/crm/stages", { method: "POST", body: JSON.stringify(body) });
+}
+
+export type UpdateCrmStageBody = Partial<CreateCrmStageBody>;
+
+/** `key` nu se trimite niciodată aici — e imuabilă (server respinge cu 400 `stage_key_immutable`
+ *  dacă ar veni schimbată). */
+export function updateCrmStage(id: string, body: UpdateCrmStageBody): Promise<CrmStage> {
+  return api<CrmStage>(`/api/crm/stages/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+/** `ids` = ordinea completă, nouă, a etapelor. Întoarce lista rescrisă (sursă de adevăr pentru
+ *  `orderIndex`), ca UI-ul optimist să se poată realinia la ce a scris efectiv serverul. */
+export function reorderCrmStages(ids: string[]): Promise<ListCrmStagesResponse> {
+  return api<ListCrmStagesResponse>("/api/crm/stages/reorder", { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+/** Poate răspunde 409 `{ error: "stage_not_empty", leads: n }` sau 400 `stage_is_default`. */
+export function deleteCrmStage(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/stages/${id}`, { method: "DELETE" });
 }
 
 export interface CrmLeadListParams {
@@ -91,15 +166,34 @@ export function getCrmLead(id: string): Promise<CrmLead> {
   return api<CrmLead>(`/api/crm/leads/${id}`);
 }
 
+export interface CrmLeadDetailResponse {
+  lead: CrmLead;
+  /** Cel mai recent PRIMUL (server: `orderBy(desc(occurredAt))`). */
+  interactions: CrmLeadInteraction[];
+  /** Configurația etapei curente a leadului — `null` dacă etapa a fost ștearsă între timp. */
+  stage: CrmStage | null;
+}
+
+/** Fișa leadului într-un singur round-trip: lead + istoric + etapa curentă. Folosit de
+ *  `LeadDetailSheet` — evită 1 GET pentru lead + 1 GET pentru interacțiuni + 1 GET pentru etape. */
+export function getCrmLeadDetail(id: string): Promise<CrmLeadDetailResponse> {
+  return api<CrmLeadDetailResponse>(`/api/crm/leads/${id}/detail`);
+}
+
 export interface CreateCrmLeadBody {
   fullName: string;
-  dealName?: string;
-  phone?: string;
-  email?: string;
-  company?: string;
-  interestCourse?: string;
+  /** Câmpurile de mai jos sunt `optional().nullable()` pe server: `undefined` = neschimbat la
+   *  PATCH, `null` = golit explicit, string = setat. Un string gol NU trebuie trimis pentru
+   *  `email` — validarea `.email()` de pe server îl respinge (vezi `emptyToNull` din `format.ts`). */
+  dealName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  company?: string | null;
+  interestCourse?: string | null;
   source?: CrmLeadSource;
   valueCents?: number;
+  /** `user_id` responsabil (uuid) — `null` = neasignat. */
+  assignedTo?: string | null;
 }
 
 export function createCrmLead(body: CreateCrmLeadBody): Promise<CrmLead> {
