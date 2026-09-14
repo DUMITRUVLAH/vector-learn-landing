@@ -74,10 +74,10 @@ const CRM_MODULES: CrmModuleTile[] = [
   {
     id: "comunicare",
     label: "Comunicare",
-    description: "Apeluri, email și WhatsApp, direct din lead, cu istoric în timeline.",
+    description: "Apeluri, email și WhatsApp din fișa leadului — fiecare atingere rămâne în cronologie.",
     href: "/business/crm/comunicare",
     icon: MessageCircle,
-    available: false,
+    available: true,
   },
   {
     id: "automatizari",

@@ -68,6 +68,7 @@ const CrmCompaniesPage = lazyWithTimeout(() => import("./pages/business/crm/CrmC
 const CrmImportPage = lazyWithTimeout(() => import("./pages/business/crm/CrmImportPage").then((m) => ({ default: m.CrmImportPage })));
 const CrmDocumentsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmDocumentsPage").then((m) => ({ default: m.CrmDocumentsPage })));
 const CrmAutomationsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmAutomationsPage").then((m) => ({ default: m.CrmAutomationsPage })));
+const CrmCommsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmCommsPage").then((m) => ({ default: m.CrmCommsPage })));
 const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
 const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
 const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
@@ -326,6 +327,7 @@ function Routes() {
   if (path.startsWith("/business/crm/import")) return <BusinessGuardPage><CrmImportPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/documente")) return <BusinessGuardPage><CrmDocumentsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/automatizari")) return <BusinessGuardPage><CrmAutomationsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/comunicare")) return <BusinessGuardPage><CrmCommsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm")) return <BusinessGuardPage><CrmHomePage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;

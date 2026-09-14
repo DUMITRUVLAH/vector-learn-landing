@@ -250,23 +250,15 @@ describe("CRM (Faza 1) — CrmHomePage", () => {
     expect(documente).toHaveAttribute("href", "#/business/crm/documente");
   });
 
-  it("submodulele neterminate apar ca „În curând” și NU sunt linkuri", () => {
+  it("niciun submodul nu mai e blocat — tot ce se vede pe ecran funcționează", () => {
+    // Testul ăsta a fost, rând pe rând, lista modulelor neterminate. Acum e
+    // invers: un tile „în curând" peste o pagină care merge ar fi o funcție
+    // ascunsă degeaba, iar unul peste o pagină care NU merge ar fi o minciună.
     render(<CrmHomePage />);
-
-    // Tile-urile blocate sunt `<div>`-uri mute, fără tag `<a>`.
-    const comunicare = screen.getByLabelText(/Comunicare — în curând/i);
-    expect(comunicare.tagName).toBe("DIV");
-
-    // Ce a fost livrat între timp NU mai are voie să apară ca „în curând" —
-    // un tile blocat peste o pagină care merge e o funcție ascunsă degeaba.
-    expect(screen.queryByLabelText(/Rapoarte — în curând/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Astăzi — în curând/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Clienți.*— în curând/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Import — în curând/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Documente — în curând/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Automatizări — în curând/i)).not.toBeInTheDocument();
-    // A rămas un singur modul neînceput: Comunicarea (telefonie, email, WhatsApp).
-    expect(screen.getAllByText("În curând")).toHaveLength(1);
+    expect(screen.queryAllByText("În curând")).toHaveLength(0);
+    for (const m of [/Rapoarte/, /Astăzi/, /Clienți/, /Import/, /Documente/, /Automatizări/, /Comunicare/]) {
+      expect(screen.queryByLabelText(new RegExp(`${m.source}.*— în curând`, "i"))).not.toBeInTheDocument();
+    }
   });
 });
 

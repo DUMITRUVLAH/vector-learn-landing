@@ -138,6 +138,7 @@ import { crmImportRoutes } from "./routes/crmImport";
 import { crmDocumentsRoutes } from "./routes/crmDocuments";
 import { crmAutomationsRoutes } from "./routes/crmAutomations";
 import { crmAssignmentRoutes } from "./routes/crmAssignment";
+import { crmCommsRoutes } from "./routes/crmComms";
 import { publicErrorMessage } from "./lib/publicError";
 import { docsRoutes } from "./routes/docs";
 import { denyWhenImpersonating, logImpersonatedWrites } from "./middleware/impersonationGuard";
@@ -397,6 +398,7 @@ app.route("/api/crm/import", crmImportRoutes);
 app.route("/api/crm/documents", crmDocumentsRoutes);
 app.route("/api/crm/automations", crmAutomationsRoutes);
 app.route("/api/crm/assignment", crmAssignmentRoutes);
+app.route("/api/crm/comms", crmCommsRoutes);
 // DG-102: registrul de acte (generare documente → PDF → PAR)
 app.route("/api/docs", docsRoutes);
 

@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils";
 import { Link } from "@/router/HashRouter";
 import { docPath } from "@/lib/docs/paths";
 import { NewDocumentDialog } from "./NewDocumentDialog";
+import { SendEmailDialog } from "./SendEmailDialog";
+import { whatsappLink, logCrmTouch } from "@/lib/api/crmComms";
 import {
   listCrmDocuments,
   CRM_DOC_KIND_LABELS,
@@ -195,6 +197,7 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
   // Acte (oferte/contracte) — lista e a motorului de acte, CRM-ul doar o arată.
   const [documents, setDocuments] = useState<CrmDocument[]>([]);
   const [newDocOpen, setNewDocOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   // Taskuri
   const [tasks, setTasks] = useState<CrmLeadTask[]>([]);
@@ -633,10 +636,32 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
                     Sună
                   </QuickActionLink>
                 )}
-                {lead.email && (
-                  <QuickActionLink href={`mailto:${lead.email}`} icon={<Mail className="h-4 w-4" aria-hidden="true" />}>
-                    Email
+                {/* Trimiterea se face din aplicație, nu prin `mailto:`. Un mailto
+                    deschide Outlook și nu lasă nicio urmă — peste o lună,
+                    cronologia arată tăcere acolo unde au plecat cinci mesaje. */}
+                <Button variant="outline" size="sm" onClick={() => setEmailOpen(true)}>
+                  <Mail className="h-4 w-4" aria-hidden="true" />
+                  Scrie email
+                </Button>
+                {whatsappLink(lead.phone) && (
+                  <QuickActionLink
+                    href={whatsappLink(lead.phone) as string}
+                    icon={<MessageCircle className="h-4 w-4" aria-hidden="true" />}
+                  >
+                    WhatsApp
                   </QuickActionLink>
+                )}
+                {lead.phone && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      await logCrmTouch({ leadId: lead.id, channel: "whatsapp", body: "I-am scris pe WhatsApp" });
+                      onChanged();
+                    }}
+                  >
+                    Am scris pe WhatsApp
+                  </Button>
                 )}
                 <Button variant="outline" size="sm" onClick={() => void logCall()} disabled={loggingCall}>
                   {loggingCall ? (
@@ -970,6 +995,15 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
           if (target) void applyStageChange(target, reason);
         }}
       />
+      {emailOpen && lead && (
+        <SendEmailDialog
+          leadId={lead.id}
+          leadName={lead.company || lead.fullName}
+          defaultTo={lead.email}
+          onClose={() => setEmailOpen(false)}
+          onSent={onChanged}
+        />
+      )}
       {newDocOpen && lead && (
         <NewDocumentDialog
           leadId={lead.id}
