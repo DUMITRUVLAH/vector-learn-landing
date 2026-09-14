@@ -128,6 +128,7 @@ import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 import { crmHealthRoutes } from "./routes/crmHealth";
 import { crmLeadsRoutes } from "./routes/crmLeads";
 import { crmStagesRoutes } from "./routes/crmStages";
+import { crmReportsRoutes } from "./routes/crmReports";
 import { crmProductsRoutes } from "./routes/crmProducts";
 import { publicErrorMessage } from "./lib/publicError";
 import { docsRoutes } from "./routes/docs";
@@ -377,6 +378,7 @@ app.route("/api/docmerge", docmergeTemplatesRoutes);
 // Diagnostic de schemă, fără autentificare și fără date de tenant (vezi fișierul).
 app.route("/api/crm/health", crmHealthRoutes);
 app.route("/api/crm/stages", crmStagesRoutes);
+app.route("/api/crm/reports", crmReportsRoutes);
 app.route("/api/crm/leads", crmLeadsRoutes);
 app.route("/api/crm/products", crmProductsRoutes);
 // DG-102: registrul de acte (generare documente → PDF → PAR)
