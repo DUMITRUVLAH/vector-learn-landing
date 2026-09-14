@@ -53,6 +53,31 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
       ),
   },
   {
+    name: "crm_pipeline_stages",
+    run: () =>
+      db.execute(
+        sql`SELECT id, tenant_id, key, label, color, order_index, is_won, is_lost,
+                   is_default, probability_pct, created_at, updated_at
+            FROM crm_pipeline_stages LIMIT 0`
+      ),
+  },
+  {
+    name: "leads_stage_este_text",
+    run: async () => {
+      // Migrarea 0162 scoate `leads.stage` din enum. Dacă a rămas enum, etapele
+      // personalizate nu se pot salva deloc — și ar pica abia la prima încercare.
+      const r = await db.execute(
+        sql`SELECT data_type FROM information_schema.columns
+            WHERE table_name = 'leads' AND column_name = 'stage'`
+      );
+      const rows = (Array.isArray(r) ? r : (r as { rows: unknown[] }).rows) as { data_type: string }[];
+      const type = rows[0]?.data_type;
+      if (type !== "character varying") {
+        throw new Error(`leads.stage este încă ${type ?? "necunoscut"}, nu varchar`);
+      }
+    },
+  },
+  {
     name: "crm_products",
     run: () =>
       db.execute(
