@@ -17,6 +17,7 @@ import { Hono } from "hono";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads } from "../db/schema/leads";
+import { tenants } from "../db/schema/tenants";
 
 export const crmHealthRoutes = new Hono();
 
@@ -69,6 +70,24 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
  */
 const NIL_TENANT = "00000000-0000-0000-0000-000000000000";
 
+/** Exact coloanele cerute de ruta /pipeline. */
+const LEAD_PROBE_COLS = {
+  id: leads.id,
+  fullName: leads.fullName,
+  dealName: leads.dealName,
+  phone: leads.phone,
+  email: leads.email,
+  company: leads.company,
+  interestCourse: leads.interestCourse,
+  source: leads.source,
+  stage: leads.stage,
+  valueCents: leads.valueCents,
+  assignedTo: leads.assignedTo,
+  lostReason: leads.lostReason,
+  createdAt: leads.createdAt,
+  updatedAt: leads.updatedAt,
+} as const;
+
 /**
  * Probele de mai sus verifică schema prin SQL brut. Asta e diferit: rulează
  * EXACT interogările drizzle din `/pipeline`, fiindcă un SELECT brut poate trece
@@ -119,6 +138,47 @@ async function probePipelineQuery(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
+/**
+ * Proba pe tenant NUL trece, dar producția pică — singura diferență rămasă e că
+ * acolo există rânduri. Rulăm interogările reale pentru fiecare workspace și
+ * raportăm DOAR câte lead-uri are și, dacă pică, mesajul erorii. Niciun câmp al
+ * vreunui lead nu părăsește serverul.
+ */
+async function probeEachTenant(): Promise<
+  { id: string; leads: number; ok: boolean; error?: string }[]
+> {
+  const out: { id: string; leads: number; ok: boolean; error?: string }[] = [];
+  const rows = await db.select({ id: tenants.id }).from(tenants).limit(25);
+  for (const t of rows) {
+    try {
+      const cards = await db
+        .select(LEAD_PROBE_COLS)
+        .from(leads)
+        .where(eq(leads.tenantId, t.id))
+        .orderBy(desc(leads.createdAt))
+        .limit(500);
+      const agg = await db
+        .select({
+          stage: leads.stage,
+          cnt: sql<number>`count(*)::int`,
+          sumValue: sql<number>`coalesce(sum(${leads.valueCents}), 0)::int`,
+        })
+        .from(leads)
+        .where(eq(leads.tenantId, t.id))
+        .groupBy(leads.stage);
+      // Serializarea e parte din calea reală de cod — dacă un rând nu poate fi
+      // transformat în JSON, aici se vede, nu în producție.
+      JSON.stringify({ cards, agg });
+      out.push({ id: t.id.slice(0, 8), leads: cards.length, ok: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[crm/health] tenant ${t.id}:`, msg);
+      out.push({ id: t.id.slice(0, 8), leads: -1, ok: false, error: msg.slice(0, 300) });
+    }
+  }
+  return out;
+}
+
 crmHealthRoutes.get("/", async (c) => {
   const tables: Record<string, { ok: boolean; problem?: string }> = {};
   for (const probe of PROBES) {
@@ -139,6 +199,7 @@ crmHealthRoutes.get("/", async (c) => {
   };
 
   const pipelineQuery = await probePipelineQuery();
+  const perTenant = await probeEachTenant();
   const ok = Object.values(tables).every((t) => t.ok) && pipelineQuery.ok;
-  return c.json({ ok, build, tables, pipelineQuery }, ok ? 200 : 503);
+  return c.json({ ok, build, tables, pipelineQuery, perTenant }, ok ? 200 : 503);
 });
