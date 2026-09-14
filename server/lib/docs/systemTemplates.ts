@@ -186,4 +186,49 @@ ${SIGNATURES}`.trim(),
 <hr>
 <p>{{noi.administrator}}</p><p>_______________________</p>`.trim(),
   },
+  {
+    // Documentul central al unui CRM: ce trimiți clientului ca să te aleagă. Nu
+    // exista în bibliotecă fiindcă modulele de până acum lucrau după contract
+    // („Cerere de ofertă" e invers — o ceri, n-o dai).
+    kind: "oferta_comerciala",
+    name: "Ofertă comercială",
+    category: "Vânzări",
+    bodyHtml: `
+<h1>OFERTĂ COMERCIALĂ nr. {{document.numar}}</h1>
+<p>{{document.loc}}, {{document.data}}</p>
+<p>Către: <strong>{{contraparte.denumire}}</strong>, în atenția {{contraparte.administrator}}.</p>
+<p>Vă mulțumim pentru interesul arătat. Vă propunem următoarele:</p>
+<p>{{tabel.pozitii}}</p>
+<p>Valoare totală: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}).</p>
+<p>Oferta este valabilă 30 de zile de la data emiterii. Prețurile includ TVA acolo unde este indicat.</p>
+<p>Pentru orice detaliu, vă stau la dispoziție: {{utilizator.nume}}, {{utilizator.functie}}.</p>
+<hr>
+<p>{{noi.denumire}}</p><p>{{noi.administrator}}</p><p>_______________________</p>`.trim(),
+  },
+  {
+    // Perechea ofertei: ce semnezi după ce clientul a spus da. Trimite la ofertă
+    // prin „{{document.baza}}", ca lanțul ofertă → contract să rămână trasabil.
+    kind: "contract_servicii",
+    name: "Contract în baza ofertei acceptate",
+    category: "Vânzări",
+    bodyHtml: `
+<h1>CONTRACT nr. {{document.numar}}</h1>
+<p>{{document.loc}}, {{document.data}}</p>
+<p><strong>{{noi.denumire}}</strong>, IDNO {{noi.idno}}, cu sediul în {{noi.adresa}}, reprezentată de {{noi.administrator}}, denumită în continuare <em>Prestator</em>, pe de o parte, și</p>
+<p><strong>{{contraparte.denumire}}</strong>, cod fiscal {{contraparte.idno}}, cu sediul în {{contraparte.adresa}}, reprezentată de {{contraparte.administrator}}, denumită în continuare <em>Beneficiar</em>, pe de altă parte,</p>
+<p>au convenit încheierea prezentului contract, în baza {{document.baza}}.</p>
+<h2>1. Obiectul contractului</h2>
+<p>Prestatorul se obligă să livreze Beneficiarului:</p>
+<p>{{tabel.pozitii}}</p>
+<h2>2. Prețul și modalitatea de plată</h2>
+<p>Valoarea contractului: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}).</p>
+<p>Plata se efectuează prin transfer în contul {{noi.iban}}, deschis la {{noi.banca}}.</p>
+<h2>3. Durata</h2>
+<p>Contractul intră în vigoare la data semnării și produce efecte până la executarea integrală a obligațiilor.</p>
+<hr>
+<table><tbody><tr>
+<td><p><strong>Prestator</strong></p><p>{{noi.denumire}}</p><p>{{noi.administrator}}</p><p>_______________________</p><p>L.Ș.</p></td>
+<td><p><strong>Beneficiar</strong></p><p>{{contraparte.denumire}}</p><p>{{contraparte.administrator}}</p><p>_______________________</p><p>L.Ș.</p></td>
+</tr></tbody></table>`.trim(),
+  },
 ];

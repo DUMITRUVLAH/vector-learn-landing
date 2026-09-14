@@ -98,10 +98,10 @@ const CRM_MODULES: CrmModuleTile[] = [
   {
     id: "documente",
     label: "Documente",
-    description: "Oferte și contracte generate direct din datele leadului.",
+    description: "Oferte și contracte generate direct din datele leadului, cu motorul de acte FinFlow.",
     href: "/business/crm/documente",
     icon: FileText,
-    available: false,
+    available: true,
   },
 ];
 

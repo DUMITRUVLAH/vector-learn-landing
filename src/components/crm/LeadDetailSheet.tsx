@@ -11,7 +11,7 @@
  * fiecare deschidere — nu depinde de cardul din board, ca să poată fi refolosită și dintr-o
  * listă/căutare viitoare.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Phone,
   Mail,
@@ -29,9 +29,20 @@ import {
   Check,
   Undo2,
   X,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import { Sheet, Button, Input, Label, Select, Textarea, Badge, Alert, Skeleton, Separator } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { Link } from "@/router/HashRouter";
+import { docPath } from "@/lib/docs/paths";
+import { NewDocumentDialog } from "./NewDocumentDialog";
+import {
+  listCrmDocuments,
+  CRM_DOC_KIND_LABELS,
+  CRM_DOC_STATUS_LABELS,
+  type CrmDocument,
+} from "@/lib/api/crmDocuments";
 import {
   getCrmLeadDetail,
   updateCrmLead,
@@ -181,6 +192,10 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
   const [addingNote, setAddingNote] = useState(false);
   const [loggingCall, setLoggingCall] = useState(false);
 
+  // Acte (oferte/contracte) — lista e a motorului de acte, CRM-ul doar o arată.
+  const [documents, setDocuments] = useState<CrmDocument[]>([]);
+  const [newDocOpen, setNewDocOpen] = useState(false);
+
   // Taskuri
   const [tasks, setTasks] = useState<CrmLeadTask[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -239,6 +254,26 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
       cancelled = true;
     };
   }, [leadId]);
+
+  /**
+   * Actele se încarcă SEPARAT, nu în `Promise.all`-ul de mai sus. Dacă modulul
+   * de acte n-ar răspunde (tenant fără schema de docgen, de pildă), o cerere
+   * picată în grup ar goli toată fișa leadului — numele, telefonul, istoricul.
+   * Aici, cel mai rău caz e o listă de acte goală.
+   */
+  const reloadDocuments = useCallback(() => {
+    if (!leadId) {
+      setDocuments([]);
+      return;
+    }
+    listCrmDocuments(leadId)
+      .then((res) => setDocuments(res.items))
+      .catch(() => setDocuments([]));
+  }, [leadId]);
+
+  useEffect(() => {
+    reloadDocuments();
+  }, [reloadDocuments]);
 
   function retryLoad() {
     if (!leadId) return;
@@ -748,6 +783,39 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
 
             <Separator />
 
+            {/* Acte: oferte și contracte pornite din acest lead. Se deschid în
+                editorul de acte al FinFlow — acolo se finalizează și se trimit. */}
+            <section className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Oferte și contracte</h3>
+                <Button size="sm" variant="outline" onClick={() => setNewDocOpen(true)}>
+                  <FileText className="h-4 w-4" aria-hidden="true" />
+                  Act nou
+                </Button>
+              </div>
+              {documents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Niciun act încă. „Act nou" pornește o ofertă cu datele acestui lead.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {documents.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
+                      <Link to={docPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
+                        {d.docNumber ? `${CRM_DOC_KIND_LABELS[d.kind as keyof typeof CRM_DOC_KIND_LABELS] ?? d.kind} nr. ${d.docNumber}` : d.title}
+                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </Link>
+                      <Badge variant={d.status === "draft" ? "secondary" : "default"}>
+                        {CRM_DOC_STATUS_LABELS[d.status] ?? d.status}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <Separator />
+
             {/* Detalii */}
             <section className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
@@ -902,6 +970,14 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
           if (target) void applyStageChange(target, reason);
         }}
       />
+      {newDocOpen && lead && (
+        <NewDocumentDialog
+          leadId={lead.id}
+          leadName={lead.company || lead.fullName}
+          onClose={() => setNewDocOpen(false)}
+          onCreated={reloadDocuments}
+        />
+      )}
     </>
   );
 }

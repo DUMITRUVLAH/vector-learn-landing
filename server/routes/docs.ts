@@ -93,7 +93,11 @@ const lineSchema = z.object({
 });
 
 const counterpartySchema = z.object({
-  kind: z.enum(["vendor", "fin_party", "inline"]).default("vendor"),
+  // „crm_lead" = contrapartea e o fișă din CRM, nu o intrare din registrul de
+  // furnizori. Se comportă ca „inline" (rechizitele vin în `snapshot`, nu dintr-un
+  // registru), dar păstrează pe act de unde a venit — altfel n-am mai ști, peste
+  // un an, că oferta asta a plecat dintr-un lead anume.
+  kind: z.enum(["vendor", "fin_party", "inline", "crm_lead"]).default("vendor"),
   id: z.string().uuid().nullish(),
   name: z.string().max(300).nullish(),
   /** Rechizitele: idno, iban, banca, bic, adresa, administrator, codTva. */
@@ -317,10 +321,17 @@ docsRoutes.get("/documents", async (c) => {
 
 // ─── Creare ───────────────────────────────────────────────────────────────────
 
-docsRoutes.post("/documents", zValidator("json", createSchema), async (c) => {
-  const user = c.get("user");
-  const body = c.req.valid("json");
-
+/**
+ * Creează un act din datele deja validate. Extras din handler ca să poată fi
+ * refolosit de modulul CRM (oferte/contracte pornite dintr-un lead) FĂRĂ a
+ * duplica motorul: numerotarea, contextul, randarea șablonului, înghețarea
+ * rechizitelor și jurnalul rămân într-un singur loc. Un al doilea motor de acte
+ * ar diverge de primul în câteva luni și n-am mai ști care e cel adevărat.
+ */
+export async function createDocumentRecord(
+  user: { id: string; tenantId: string; name?: string },
+  body: z.infer<typeof createSchema>
+) {
   const { rows, totalCents } = computeLineTotals(body.lines ?? []);
   const vendorId = body.counterparty?.kind === "vendor" ? body.counterparty?.id ?? null : null;
 
@@ -386,7 +397,13 @@ docsRoutes.post("/documents", zValidator("json", createSchema), async (c) => {
 
   // Numărul actului se rezervă abia la finalizare, deci lipsa lui acum e normală — nu o raportăm.
   const missing = missingFields(placeholders, context).filter((f) => f !== "document.numar");
-  return c.json({ ...doc, lines: rows, missing }, 201);
+  return { ...doc, lines: rows, missing };
+}
+
+docsRoutes.post("/documents", zValidator("json", createSchema), async (c) => {
+  const user = c.get("user");
+  const created = await createDocumentRecord(user as { id: string; tenantId: string; name?: string }, c.req.valid("json"));
+  return c.json(created, 201);
 });
 
 // ─── Un act, cu tot ce ține de el ─────────────────────────────────────────────

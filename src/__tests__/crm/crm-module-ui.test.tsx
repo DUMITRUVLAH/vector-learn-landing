@@ -243,6 +243,11 @@ describe("CRM (Faza 1) — CrmHomePage", () => {
     const importTile = screen.getByRole("listitem", { name: /Accesează Import/i });
     expect(importTile.tagName).toBe("A");
     expect(importTile).toHaveAttribute("href", "#/business/crm/import");
+
+    // Documentele folosesc motorul de acte al FinFlow (Faza 5) — tile activ.
+    const documente = screen.getByRole("listitem", { name: /Accesează Documente/i });
+    expect(documente.tagName).toBe("A");
+    expect(documente).toHaveAttribute("href", "#/business/crm/documente");
   });
 
   it("submodulele neterminate apar ca „În curând” și NU sunt linkuri", () => {
@@ -253,14 +258,14 @@ describe("CRM (Faza 1) — CrmHomePage", () => {
     expect(comunicare.tagName).toBe("DIV");
 
     expect(screen.getByLabelText(/Automatizări — în curând/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Documente — în curând/i)).toBeInTheDocument();
     // Ce a fost livrat între timp NU mai are voie să apară ca „în curând" —
     // un tile blocat peste o pagină care merge e o funcție ascunsă degeaba.
     expect(screen.queryByLabelText(/Rapoarte — în curând/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Astăzi — în curând/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Clienți.*— în curând/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Import — în curând/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("În curând").length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByLabelText(/Documente — în curând/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("În curând").length).toBeGreaterThanOrEqual(2);
   });
 });
 
