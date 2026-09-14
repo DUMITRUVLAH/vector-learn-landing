@@ -18,7 +18,7 @@
  * `drop` citește o valoare învechită (stale closure).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, GitBranch } from "lucide-react";
+import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, GitBranch, KanbanSquare, LayoutList } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
@@ -39,8 +39,13 @@ import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
 import { LeadDetailSheet } from "@/components/crm/LeadDetailSheet";
 import { StageEditorDialog } from "@/components/crm/StageEditorDialog";
 import { PipelineManagerDialog } from "@/components/crm/PipelineManagerDialog";
+import { LeadListView } from "@/components/crm/LeadListView";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
+
+/** Cheia preferinței de vizualizare — aceeași denumire ca în CRM-ul de referință. */
+const VIEW_MODE_KEY = "crm_leads_view";
 
 // ─── Pagina principală ─────────────────────────────────────────────────────────
 
@@ -68,6 +73,19 @@ export function CrmPipelinePage() {
   const [showAddLead, setShowAddLead] = useState(false);
   const [showStageEditor, setShowStageEditor] = useState(false);
   const [showPipelineManager, setShowPipelineManager] = useState(false);
+
+  /** Kanban sau listă. Alegerea se ține în `localStorage`: e o preferință de lucru a omului, nu
+   *  o stare a datelor — cine lucrează pe 3.000 de leaduri nu vrea să comute la fiecare intrare. */
+  const [viewMode, setViewMode] = useState<"kanban" | "list">(() => {
+    try {
+      return localStorage.getItem(VIEW_MODE_KEY) === "list" ? "list" : "kanban";
+    } catch {
+      // Mod privat / stocare blocată: kanbanul rămâne implicit, ecranul funcționează la fel.
+      return "kanban";
+    }
+  });
+  /** Crește la fiecare schimbare de date venită din afara listei (fișă închisă, mutare). */
+  const [listRefreshToken, setListRefreshToken] = useState(0);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; toStage: string } | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
@@ -86,6 +104,9 @@ export function CrmPipelinePage() {
       // n-a apucat să se propage prin render (stale closure) — exact capcana de la drag & drop.
       const requested = opts && "pipelineId" in opts ? opts.pipelineId : activePipelineRef.current;
       const res = await getCrmPipeline(requested);
+      // Lista își cere singură datele de la server; semnalul ăsta o face să se resincronizeze
+      // după orice schimbare venită din altă parte (fișa leadului, mutare, lead nou).
+      setListRefreshToken((t) => t + 1);
       setGrouped(res.grouped ?? {});
       setCounts(res.counts ?? {});
       setValueSums(res.valueSums ?? {});
@@ -108,6 +129,20 @@ export function CrmPipelinePage() {
   useEffect(() => {
     void loadPipeline();
   }, [loadPipeline]);
+
+  const { members: teamMembers } = useTeamMembers();
+  const memberNames = Object.fromEntries(teamMembers.map((m) => [m.id, m.fullName]));
+
+  /** Comutarea vederii, cu preferința salvată. Stocarea poate arunca (mod privat) — vederea se
+   *  schimbă oricum, doar că nu se ține minte. */
+  function switchView(next: "kanban" | "list") {
+    setViewMode(next);
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, next);
+    } catch {
+      /* preferința nu se salvează; ecranul funcționează la fel */
+    }
+  }
 
   /** Comutarea pâlniei: ref-ul întâi (îl citește `loadPipeline`), apoi cererea explicită. */
   function switchPipeline(id: string) {
@@ -262,6 +297,32 @@ export function CrmPipelinePage() {
               </Select>
             </>
           )}
+          <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="Mod de vizualizare">
+            <button
+              type="button"
+              onClick={() => switchView("kanban")}
+              aria-pressed={viewMode === "kanban"}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                viewMode === "kanban" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
+              )}
+            >
+              <KanbanSquare className="h-4 w-4" aria-hidden="true" />
+              Kanban
+            </button>
+            <button
+              type="button"
+              onClick={() => switchView("list")}
+              aria-pressed={viewMode === "list"}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                viewMode === "list" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
+              )}
+            >
+              <LayoutList className="h-4 w-4" aria-hidden="true" />
+              Listă
+            </button>
+          </div>
           <Button variant="outline" onClick={() => setShowPipelineManager(true)}>
             <GitBranch className="h-4 w-4" aria-hidden="true" />
             Pâlnii
@@ -290,7 +351,7 @@ export function CrmPipelinePage() {
             </Button>
           </div>
         </Alert>
-      ) : totalLeads === 0 ? (
+      ) : totalLeads === 0 && !hasActiveFilters && viewMode === "kanban" ? (
         <EmptyState
           icon={<Users className="h-6 w-6" />}
           title="Niciun lead încă"
@@ -339,6 +400,19 @@ export function CrmPipelinePage() {
             )}
           </div>
 
+          {viewMode === "list" ? (
+            <LeadListView
+              pipelineId={activePipelineId}
+              stages={stages}
+              search={search}
+              source={sourceFilter}
+              assignedTo={onlyMine ? currentUserId : null}
+              memberNames={memberNames}
+              onOpenLead={setSelectedLeadId}
+              refreshToken={listRefreshToken}
+            />
+          ) : (
+           <>
           {/* Desktop ≥lg: grilă de N coloane cu drag & drop */}
           <div
             className="hidden gap-4 lg:grid"
@@ -434,6 +508,8 @@ export function CrmPipelinePage() {
               );
             })}
           </div>
+           </>
+          )}
         </>
       )}
 

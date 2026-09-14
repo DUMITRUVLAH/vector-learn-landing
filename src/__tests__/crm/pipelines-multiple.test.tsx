@@ -33,7 +33,11 @@ vi.mock("@/hooks/useBusinessSession", () => ({
 }));
 
 vi.mock("@/hooks/useTeamMembers", () => ({
-  useTeamMembers: () => ({ members: [], loading: false, error: null }),
+  useTeamMembers: () => ({
+    members: [{ id: "user-1", fullName: "Test Admin", email: "admin@test.local", role: "owner" }],
+    loading: false,
+    error: null,
+  }),
 }));
 
 vi.mock("@/router/HashRouter", () => ({
@@ -52,6 +56,7 @@ const createCrmPipeline = vi.fn();
 const renameCrmPipeline = vi.fn();
 const deleteCrmPipeline = vi.fn();
 const listCrmLostReasons = vi.fn().mockResolvedValue({ items: [] });
+const listCrmLeads = vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 });
 
 vi.mock("@/lib/api/crm", () => ({
   getCrmPipeline: (...args: unknown[]) => getCrmPipeline(...args),
@@ -61,6 +66,7 @@ vi.mock("@/lib/api/crm", () => ({
   renameCrmPipeline: (...args: unknown[]) => renameCrmPipeline(...args),
   deleteCrmPipeline: (...args: unknown[]) => deleteCrmPipeline(...args),
   listCrmLostReasons: (...args: unknown[]) => listCrmLostReasons(...args),
+  listCrmLeads: (...args: unknown[]) => listCrmLeads(...args),
   // Fișa leadului nu se deschide în testele de mai jos; export-urile ei rămân inerte.
   getCrmLeadDetail: vi.fn(),
   updateCrmLead: vi.fn(),
@@ -225,5 +231,55 @@ describe("Leadul nou aparține pâlniei afișate", () => {
     await waitFor(() =>
       expect(createCrmLead).toHaveBeenCalledWith(expect.objectContaining({ fullName: "Client nou", pipelineId: B2B.id }))
     );
+  });
+});
+
+describe("Comutarea kanban ↔ listă", () => {
+  it("[blocant] „Listă” cere serverului leadurile PÂLNIEI afișate, paginat", async () => {
+    getCrmPipeline.mockResolvedValue(makeResponse([VANZARI, B2B], B2B.id, [makeLead({})]));
+    listCrmLeads.mockResolvedValue({
+      items: [makeLead({ id: "lead-list", fullName: "Din listă" })],
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      totalPages: 1,
+    });
+
+    render(<CrmPipelinePage />);
+    await findLeadCards("Maria Popescu");
+
+    fireEvent.click(screen.getByRole("button", { name: "Listă" }));
+
+    await screen.findByText("Din listă");
+    expect(listCrmLeads).toHaveBeenCalledWith(expect.objectContaining({ pipelineId: B2B.id, page: 1 }));
+    // Tabla dispare: cele două vederi nu se suprapun.
+    expect(screen.queryByLabelText("Coloana Lead nou")).not.toBeInTheDocument();
+  });
+
+  it("[normal] preferința de vizualizare se ține minte între intrări", async () => {
+    // Mediul de test n-are `localStorage` (Node fără `--localstorage-file`), iar componenta
+    // tratează asta ca pe un mod privat: funcționează, doar că nu ține minte. Aici verificăm
+    // exact partea care ține minte, deci îi dăm o stocare.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: () => null,
+      length: 0,
+    });
+    getCrmPipeline.mockResolvedValue(makeResponse([VANZARI], VANZARI.id, [makeLead({})]));
+
+    const first = render(<CrmPipelinePage />);
+    await findLeadCards("Maria Popescu");
+    fireEvent.click(screen.getByRole("button", { name: "Listă" }));
+    await waitFor(() => expect(localStorage.getItem("crm_leads_view")).toBe("list"));
+    first.unmount();
+
+    render(<CrmPipelinePage />);
+    // La reintrare pornește direct în listă — butonul „Listă” e cel apăsat.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Listă" })).toHaveAttribute("aria-pressed", "true"));
+    vi.unstubAllGlobals();
   });
 });
