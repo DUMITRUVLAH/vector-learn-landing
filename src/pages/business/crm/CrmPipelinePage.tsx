@@ -32,6 +32,7 @@ import {
   type CrmLeadSource,
   type CrmStage,
   type CrmPipeline,
+  type CrmSavedViewFilters,
 } from "@/lib/api/crm";
 import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, crmSourceLabel, stageColorClasses } from "@/components/crm/constants";
 import { formatCents, leadValueToCents, leadTitle } from "@/components/crm/format";
@@ -40,6 +41,7 @@ import { LeadDetailSheet } from "@/components/crm/LeadDetailSheet";
 import { StageEditorDialog } from "@/components/crm/StageEditorDialog";
 import { PipelineManagerDialog } from "@/components/crm/PipelineManagerDialog";
 import { LeadListView } from "@/components/crm/LeadListView";
+import { SavedViewsMenu } from "@/components/crm/SavedViewsMenu";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
@@ -142,6 +144,25 @@ export function CrmPipelinePage() {
     } catch {
       /* preferința nu se salvează; ecranul funcționează la fel */
     }
+  }
+
+  /** Filtrele afișate acum, în forma în care se salvează într-o vizualizare. */
+  const currentFilters: CrmSavedViewFilters = {
+    search: search.trim() || undefined,
+    source: sourceFilter !== "all" ? sourceFilter : undefined,
+    onlyMine: onlyMine || undefined,
+    pipelineId: activePipelineId,
+    view: viewMode,
+  };
+
+  /** Aplicarea unei vizualizări salvate: filtrele, vederea ȘI pâlnia — altfel „B2B restante"
+   *  ar aplica filtrele peste tabla greșită. */
+  function applySavedView(filters: CrmSavedViewFilters) {
+    setSearch(filters.search ?? "");
+    setSourceFilter(filters.source ?? "all");
+    setOnlyMine(filters.onlyMine ?? false);
+    if (filters.view) switchView(filters.view);
+    if (filters.pipelineId && filters.pipelineId !== activePipelineId) switchPipeline(filters.pipelineId);
   }
 
   /** Comutarea pâlniei: ref-ul întâi (îl citește `loadPipeline`), apoi cererea explicită. */
@@ -398,6 +419,9 @@ export function CrmPipelinePage() {
                 Doar ale mele
               </label>
             )}
+            <div className="sm:ml-auto">
+              <SavedViewsMenu currentFilters={currentFilters} onApply={applySavedView} onToast={setToast} />
+            </div>
           </div>
 
           {viewMode === "list" ? (

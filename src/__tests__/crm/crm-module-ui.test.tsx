@@ -132,6 +132,10 @@ vi.mock("@/lib/api/crm", () => ({
   renameCrmPipeline: vi.fn(),
   deleteCrmPipeline: vi.fn(),
   moveCrmLeadPipeline: vi.fn(),
+  listCrmSavedViews: vi.fn().mockResolvedValue({ items: [] }),
+  createCrmSavedView: vi.fn(),
+  deleteCrmSavedView: vi.fn(),
+  listCrmLeads: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
 }));
 
 const { CrmHomePage } = await import("@/pages/business/crm/CrmHomePage");

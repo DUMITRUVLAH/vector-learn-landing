@@ -26,4 +26,18 @@ export const CRM_PARITY_ENSURE_STATEMENTS: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "crm_stages_tenant_pipeline_key_uniq" ON "crm_pipeline_stages" ("tenant_id","pipeline_id","key")`,
   `CREATE INDEX IF NOT EXISTS "crm_stages_pipeline_idx" ON "crm_pipeline_stages" ("pipeline_id","order_index")`,
   `CREATE INDEX IF NOT EXISTS "leads_pipeline_idx" ON "leads" ("tenant_id","pipeline_id")`,
+
+  // ── Vizualizări salvate (migrarea 0167) ────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS "crm_saved_views" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+    "name" varchar(200) NOT NULL,
+    "filters" jsonb NOT NULL,
+    "created_by_user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+    "is_shared" boolean DEFAULT false NOT NULL,
+    "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS "crm_saved_views_tenant_idx" ON "crm_saved_views" ("tenant_id")`,
+  `CREATE INDEX IF NOT EXISTS "crm_saved_views_owner_idx" ON "crm_saved_views" ("tenant_id","created_by_user_id")`,
 ];

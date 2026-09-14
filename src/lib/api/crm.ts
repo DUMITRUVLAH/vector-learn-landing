@@ -570,3 +570,61 @@ export function addCrmLeadTag(leadId: string, tag: string): Promise<CrmLeadTag> 
 export function removeCrmLeadTag(id: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/api/crm/tags/${id}`, { method: "DELETE" });
 }
+
+// ─── Vizualizări salvate (filtre cu nume) ──────────────────────────────────────
+
+/** Filtrele salvate — aceleași chei ca bara de filtre din pipeline. */
+export interface CrmSavedViewFilters {
+  search?: string;
+  source?: string;
+  stage?: string;
+  assignedTo?: string | null;
+  onlyMine?: boolean;
+  pipelineId?: string | null;
+  view?: "kanban" | "list";
+  sort?: string;
+  dir?: "asc" | "desc";
+}
+
+export interface CrmSavedView {
+  id: string;
+  name: string;
+  filters: CrmSavedViewFilters;
+  createdByUserId: string | null;
+  /** `false` = doar autorul o vede; `true` = toată echipa workspace-ului. */
+  isShared: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListCrmSavedViewsResponse {
+  items: CrmSavedView[];
+  schemaLag?: boolean;
+}
+
+/** Ale mele + cele partajate de echipă. */
+export function listCrmSavedViews(): Promise<ListCrmSavedViewsResponse> {
+  return api<ListCrmSavedViewsResponse>("/api/crm/saved-views");
+}
+
+export interface CreateCrmSavedViewBody {
+  name: string;
+  filters: CrmSavedViewFilters;
+  /** Implicit `false`: vizualizarea e personală până când autorul o partajează explicit. */
+  isShared?: boolean;
+}
+
+export function createCrmSavedView(body: CreateCrmSavedViewBody): Promise<CrmSavedView> {
+  return api<CrmSavedView>("/api/crm/saved-views", { method: "POST", body: JSON.stringify(body) });
+}
+
+export type UpdateCrmSavedViewBody = Partial<CreateCrmSavedViewBody>;
+
+/** 403 `forbidden` dacă nu ești autorul (și nici admin de workspace). */
+export function updateCrmSavedView(id: string, body: UpdateCrmSavedViewBody): Promise<CrmSavedView> {
+  return api<CrmSavedView>(`/api/crm/saved-views/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function deleteCrmSavedView(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/saved-views/${id}`, { method: "DELETE" });
+}
