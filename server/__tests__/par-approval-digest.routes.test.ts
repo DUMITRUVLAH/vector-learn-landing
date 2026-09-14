@@ -37,6 +37,7 @@ let tenantId: string;
 let anaId: string;
 let irinaId: string;
 let iulianId: string;
+let veraId: string;
 const L = (lei: number) => lei * 100;
 
 async function applyMigrations(pg: PGlite) {
@@ -55,7 +56,7 @@ async function applyMigrations(pg: PGlite) {
 /** Emailurile de digest scrise în jurnalul de mesaje, pentru un destinatar. */
 async function digestsFor(email: string) {
   const rows = await testDb.select().from(messages).where(eq(messages.toAddress, email));
-  return rows.filter((r) => (r.subject ?? "").includes("așteaptă aprobarea ta"));
+  return rows.filter((r) => (r.subject ?? "").startsWith("[PAR] Digest"));
 }
 
 beforeAll(async () => {
@@ -98,6 +99,18 @@ beforeAll(async () => {
   await mkPar("PAR-2026-0402", L(3000), anaId);
   await mkPar("PAR-2026-0403", L(8000), irinaId);
   await mkPar("PAR-2026-0404", L(500), anaId, anaId);
+
+  // VM5-13: finanțele intră în ACELAȘI digest. Vera n-are niciun pas de aprobat — dacă primește
+  // email, e strict pentru coada de plată.
+  veraId = await mkUser("vera@atic.md", "Vera Cebotari");
+  await testDb.insert(parMembers).values({ tenantId, userId: veraId, role: "finance" });
+  await testDb.insert(parRequests).values({
+    tenantId, payerId: payer.id, requestNo: "PAR-2026-0410", requestedByUserId: iulianId,
+    status: "in_finance", currency: "MDL", totalEstimatedCents: L(7400), totalMdlCents: L(7400),
+    payeeName: "ACME SRL",
+    submittedAt: new Date(Date.now() - 5 * 86_400_000),
+    approvedAt: new Date(Date.now() - 2 * 86_400_000),
+  });
 });
 
 beforeEach(async () => {
@@ -109,7 +122,8 @@ describe("digestul de aprobări", () => {
     const { runApprovalDigestForTenant } = await import("../services/par/digestRunner");
     const summary = await runApprovalDigestForTenant(tenantId, { force: true });
 
-    expect(summary.emails).toBe(2); // Ana și Irina, câte unul fiecare
+    // Ana și Irina (de aprobat) + Vera (de plătit) — câte UNUL de fiecare om, indiferent de rol.
+    expect(summary.emails).toBe(3);
 
     const aleAnei = await digestsFor("ana@atic.md");
     expect(aleAnei).toHaveLength(1);
@@ -122,7 +136,7 @@ describe("digestul de aprobări", () => {
     expect(aleAnei[0].body).not.toContain("PAR-2026-0404");
 
     const aleIrinei = await digestsFor("irina@atic.md");
-    expect(aleIrinei[0].subject).toContain("O cerere");
+    expect(aleIrinei[0].subject).toContain("o cerere așteaptă aprobarea ta");
   });
 
   it("solicitantul fără rol de aprobare nu primește digest", async () => {
@@ -163,5 +177,37 @@ describe("fereastra de trimitere", () => {
     expect(inDigestWindow(new Date("2026-09-12T08:00:00Z"))).toBe(false);
     // Miezul nopții local — nimeni nu citește digestul la 3 dimineața.
     expect(inDigestWindow(new Date("2026-09-12T00:00:00Z"))).toBe(false);
+  });
+});
+
+// ─── VM5-13: finanțele în același digest, nu într-un al doilea email ──────────
+
+describe("coada de plăți intră în digest (VM5-13)", () => {
+  it("omul de finanțe primește dimineața cererile aprobate, de plătit", async () => {
+    const { runApprovalDigestForTenant } = await import("../services/par/digestRunner");
+    await runApprovalDigestForTenant(tenantId, { force: true });
+
+    const aleVerei = await digestsFor("vera@atic.md");
+    expect(aleVerei).toHaveLength(1);
+    expect(aleVerei[0].subject).toContain("o cerere de plătit");
+    expect(aleVerei[0].body).toContain("PAR-2026-0410 — 7.400,00 MDL");
+    expect(aleVerei[0].body).toContain("către ACME SRL");
+    expect(aleVerei[0].body).toContain("aprobată de 2 zile");
+  });
+
+  it("nu are pași de aprobat → digestul lui nu inventează o secțiune de aprobare", async () => {
+    const { runApprovalDigestForTenant } = await import("../services/par/digestRunner");
+    await runApprovalDigestForTenant(tenantId, { force: true });
+
+    const [email] = await digestsFor("vera@atic.md");
+    expect(email.body).not.toContain("așteaptă aprobarea ta");
+  });
+
+  it("aprobatorii NU văd coada de plăți — nu e treaba lor", async () => {
+    const { runApprovalDigestForTenant } = await import("../services/par/digestRunner");
+    await runApprovalDigestForTenant(tenantId, { force: true });
+
+    const aleAnei = await digestsFor("ana@atic.md");
+    expect(aleAnei[0].body).not.toContain("PAR-2026-0410");
   });
 });

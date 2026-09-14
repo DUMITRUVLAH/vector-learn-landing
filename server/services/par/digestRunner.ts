@@ -19,14 +19,18 @@ import { parMembers, parRequests, parProjects, parAttachments } from "../../db/s
 import { getProjectApproverMap } from "../../lib/par/projectApprovers";
 import { loadOpenApprovalSteps, filterStepsForUser } from "../../lib/par/pendingForUser";
 import { countMismatchesByPar } from "../../lib/par/documentWarnings";
+import { inAppNotifications } from "../../db/schema/inAppNotifications";
 import {
   buildDigestBody,
   daysWaiting,
   digestSubject,
   type DigestItem,
+  type FinanceItem,
+  type UpdateItem,
 } from "../../lib/par/approvalDigest";
 import { appUrl } from "../../lib/par/invites";
 import { MessagingService } from "../messaging/index";
+import { stripInAppLink } from "./notify";
 
 const messagingService = new MessagingService(db);
 
@@ -38,6 +42,10 @@ const WINDOW_MINUTES = 59;
 const MIN_GAP_HOURS = 6;
 const TZ = "Europe/Chisinau";
 const SUBJECT_PREFIX = "[PAR]";
+/** `kind`-ul notificărilor in-app scrise de `notifyPriorApprovers`. */
+const PAR_UPDATE_KIND = "par_update";
+/** Un digest nu e un jurnal: peste atâtea update-uri, omul deschide aplicația. */
+const MAX_UPDATES = 15;
 
 /** Ora locală (0–23) a organizației. */
 export function localHour(now: Date, timeZone = TZ): number {
@@ -68,23 +76,54 @@ export interface DigestSummary {
   skipped: number;
 }
 
-/** A primit omul ăsta un digest de curând? */
-async function sentRecently(tenantId: string, toAddress: string, now: Date): Promise<boolean> {
-  const since = new Date(now.getTime() - MIN_GAP_HOURS * 3600_000);
+/**
+ * Ultimul digest trimis omului ăstuia, oricât de vechi. Dublează drept ceas pentru secțiunea de
+ * update-uri: ce s-a întâmplat DUPĂ el e ce n-a văzut încă pe email.
+ */
+async function lastDigestAt(tenantId: string, toAddress: string): Promise<Date | null> {
   const [row] = await db
-    .select({ id: messages.id })
+    .select({ createdAt: messages.createdAt })
     .from(messages)
     .where(
       and(
         eq(messages.tenantId, tenantId),
         eq(messages.toAddress, toAddress),
-        gte(messages.createdAt, since),
-        like(messages.subject, `${SUBJECT_PREFIX}%așteaptă aprobarea ta%`)
+        like(messages.subject, `${SUBJECT_PREFIX} Digest%`)
       )
     )
     .orderBy(desc(messages.createdAt))
     .limit(1);
-  return !!row;
+  return row?.createdAt ? new Date(row.createdAt) : null;
+}
+
+/** A primit omul ăsta un digest de curând? */
+function sentRecently(last: Date | null, now: Date): boolean {
+  if (!last) return false;
+  return now.getTime() - last.getTime() < MIN_GAP_HOURS * 3600_000;
+}
+
+/**
+ * VM5-13: update-urile scrise pentru omul ăsta de la un moment încoace („cererea pe care ai
+ * aprobat-o a fost achitată"). `notifyPriorApprovers` le scrie ca notificări in-app cu
+ * `kind = "par_update"`; digestul doar le adună — nicio coadă nouă de emailuri.
+ */
+async function loadUpdatesFor(tenantId: string, userId: string, since: Date): Promise<UpdateItem[]> {
+  const rows = await db
+    .select({ payload: inAppNotifications.payload, createdAt: inAppNotifications.createdAt })
+    .from(inAppNotifications)
+    .where(
+      and(
+        eq(inAppNotifications.tenantId, tenantId),
+        eq(inAppNotifications.recipientUserId, userId),
+        eq(inAppNotifications.kind, PAR_UPDATE_KIND),
+        gte(inAppNotifications.createdAt, since)
+      )
+    )
+    .orderBy(desc(inAppNotifications.createdAt))
+    .limit(MAX_UPDATES);
+  return rows
+    .map((r) => ({ parId: r.payload?.par_id ?? "", text: stripInAppLink(r.payload?.body ?? "") }))
+    .filter((u) => !!u.parId && !!u.text);
 }
 
 /**
@@ -102,37 +141,72 @@ export async function runApprovalDigestForTenant(
     loadOpenApprovalSteps(tenantId),
     getProjectApproverMap(tenantId),
   ]);
-  if (!steps.length) return summary;
 
-  // Candidații: oricine are rol de aprobare în organizație. Cine nu are niciun pas al lui pică la
-  // filtrul următor, care e aceeași regulă ca inboxul.
+  // VM5-13: coada finanțelor — cereri aprobate complet, care așteaptă execuția plății. Nu mai
+  // pleacă un email per cerere la aprobare; ajung aici, în același digest de 09:00 / 16:00.
+  const financeRows = await db
+    .select({
+      id: parRequests.id,
+      requestNo: parRequests.requestNo,
+      totalEstimatedCents: parRequests.totalEstimatedCents,
+      currency: parRequests.currency,
+      payeeName: parRequests.payeeName,
+      approvedAt: parRequests.approvedAt,
+      isUrgent: parRequests.isUrgent,
+    })
+    .from(parRequests)
+    .where(and(eq(parRequests.tenantId, tenantId), eq(parRequests.status, "in_finance")));
+  const financeItems: FinanceItem[] = financeRows.map((p) => ({
+    requestNo: p.requestNo,
+    parId: p.id,
+    amountLabel: money(p.totalEstimatedCents, p.currency),
+    payeeName: p.payeeName?.trim() || null,
+    waitingDays: daysWaiting(p.approvedAt, now),
+    urgent: !!p.isUrgent,
+  }));
+
+  // Candidații: oricine are un rol PAR care poate primi ceva în digest — aprobatorii (cereri de
+  // semnat) și finanțele (cereri de plătit). Cine n-are nimic al lui pică la filtrele de mai jos.
   const memberRows = await db
-    .select({ userId: parMembers.userId })
+    .select({ userId: parMembers.userId, role: parMembers.role })
     .from(parMembers)
-    .where(and(eq(parMembers.tenantId, tenantId), inArray(parMembers.role, ["approver", "par_admin"])));
+    .where(
+      and(
+        eq(parMembers.tenantId, tenantId),
+        inArray(parMembers.role, ["approver", "par_admin", "finance"])
+      )
+    );
   const candidateIds = [...new Set(memberRows.map((m) => m.userId))];
   if (!candidateIds.length) return summary;
+  /** Cine vede secțiunea „de plătit". `par_admin` o vede ca și finanțele — la fel ca în aplicație. */
+  const financeUserIds = new Set(
+    memberRows.filter((m) => m.role === "finance" || m.role === "par_admin").map((m) => m.userId)
+  );
 
   const userRows = await db
     .select({ id: users.id, name: users.name, email: users.email, role: users.role })
     .from(users)
     .where(and(eq(users.tenantId, tenantId), inArray(users.id, candidateIds)));
 
+  // `inArray(x, [])` nu e SQL valid — iar de când digestul acoperă și finanțele, o organizație
+  // poate ajunge aici FĂRĂ niciun pas de aprobare deschis și tot să aibă ce trimite.
   const parIds = [...new Set(steps.map((s) => s.parId))];
-  const parRows = await db
-    .select({
-      id: parRequests.id,
-      requestNo: parRequests.requestNo,
-      totalEstimatedCents: parRequests.totalEstimatedCents,
-      currency: parRequests.currency,
-      submittedAt: parRequests.submittedAt,
-      isUrgent: parRequests.isUrgent,
-      requestedByUserId: parRequests.requestedByUserId,
-      projectName: parProjects.name,
-    })
-    .from(parRequests)
-    .leftJoin(parProjects, eq(parProjects.id, parRequests.projectId))
-    .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, parIds)));
+  const parRows = parIds.length
+    ? await db
+        .select({
+          id: parRequests.id,
+          requestNo: parRequests.requestNo,
+          totalEstimatedCents: parRequests.totalEstimatedCents,
+          currency: parRequests.currency,
+          submittedAt: parRequests.submittedAt,
+          isUrgent: parRequests.isUrgent,
+          requestedByUserId: parRequests.requestedByUserId,
+          projectName: parProjects.name,
+        })
+        .from(parRequests)
+        .leftJoin(parProjects, eq(parProjects.id, parRequests.projectId))
+        .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, parIds)))
+    : [];
   const parById = new Map(parRows.map((p) => [p.id, p]));
 
   const requestorIds = [...new Set(parRows.map((p) => p.requestedByUserId).filter((v): v is string => !!v))];
@@ -144,28 +218,41 @@ export async function runApprovalDigestForTenant(
     : [];
   const requestorName = new Map(requestorRows.map((u) => [u.id, u.name]));
 
-  const attachmentRows = await db
-    .select({ parId: parAttachments.parId, analysis: parAttachments.analysis })
-    .from(parAttachments)
-    .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, parIds)));
+  const attachmentRows = parIds.length
+    ? await db
+        .select({ parId: parAttachments.parId, analysis: parAttachments.analysis })
+        .from(parAttachments)
+        .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, parIds)))
+    : [];
   const warningsByPar = countMismatchesByPar(attachmentRows);
 
   const [tenantRow] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
 
   for (const user of userRows) {
     if (!user.email) continue;
-    const mine = await filterStepsForUser({
-      userId: user.id,
-      tenantId,
-      tenantRole: user.role ?? "",
-      steps,
-      scopeByPar,
-      projectApproverMap,
-    });
-    if (!mine.length) continue;
+    const mine = steps.length
+      ? await filterStepsForUser({
+          userId: user.id,
+          tenantId,
+          tenantRole: user.role ?? "",
+          steps,
+          scopeByPar,
+          projectApproverMap,
+        })
+      : [];
+    const mineFinance = financeUserIds.has(user.id) ? financeItems : [];
+
+    const last = await lastDigestAt(tenantId, user.email);
+    // VM5-13: update-urile scrise de la ultimul digest încoace. Fără un ceas, aceleași update-uri
+    // s-ar repeta în fiecare email; cu el, fiecare apare exact o dată. La primul digest al omului
+    // ne uităm în urmă o zi, ca să nu-i turnăm în față tot istoricul organizației.
+    const updatesSince = last ?? new Date(now.getTime() - 24 * 3600_000);
+    const updates = await loadUpdatesFor(tenantId, user.id, updatesSince);
+
+    if (!mine.length && !mineFinance.length && !updates.length) continue;
 
     summary.recipients++;
-    if (await sentRecently(tenantId, user.email, now)) {
+    if (sentRecently(last, now)) {
       summary.skipped++;
       continue;
     }
@@ -188,11 +275,14 @@ export async function runApprovalDigestForTenant(
         documentWarnings: warningsByPar.get(par.id) ?? 0,
       });
     }
-    if (!items.length) continue;
+    if (!items.length && !mineFinance.length && !updates.length) continue;
 
     const body = buildDigestBody({
       items,
+      financeItems: mineFinance,
+      updates,
       inboxUrl: `${appUrl()}/#/business/par/inbox`,
+      financeUrl: `${appUrl()}/#/business/par/finante`,
       parUrl: (parId) => `${appUrl()}/#/business/par/${parId}`,
       workspace: tenantRow?.name ?? null,
       toAddress: user.email,
@@ -202,7 +292,11 @@ export async function runApprovalDigestForTenant(
       await messagingService.sendMessage(tenantId, {
         channel: "email",
         toAddress: user.email,
-        subject: digestSubject(items.length),
+        subject: digestSubject({
+          approvals: items.length,
+          finance: mineFinance.length,
+          updates: updates.length,
+        }),
         body,
       });
       summary.emails++;

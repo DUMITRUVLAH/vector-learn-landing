@@ -34,7 +34,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
-import { notifyPaid, notifyPaymentReverted, notifyFinanceReturned, notifyReapprovalRequired } from "../services/par/notify";
+import { notifyPaid, notifyPaymentReverted, notifyFinanceReturned, notifyReapprovalRequired, notifyPriorApprovers } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
@@ -668,6 +668,23 @@ parPaymentsRoutes.post(
         { tenantId, parId, requestNo: par.requestNo },
         par.requestedByUserId,
         { actualAmountCents: body.actual_amount_cents }
+      );
+
+      // VM5-13: aprobatorii care au semnat află că plata chiar s-a executat — până acum lanțul se
+      // termina pentru ei la propria semnătură. In-app pe loc, pe email prin digest.
+      const semnatari = await db
+        .select({ approverUserId: parApprovals.approverUserId })
+        .from(parApprovals)
+        .where(and(
+          eq(parApprovals.parId, parId),
+          eq(parApprovals.tenantId, tenantId),
+          eq(parApprovals.decision, "approved")
+        ));
+      await notifyPriorApprovers(
+        { tenantId, parId, requestNo: par.requestNo },
+        semnatari.map((s) => s.approverUserId).filter((id): id is string => !!id),
+        "a fost achitată",
+        { amountLabel: undefined }
       );
 
       // VM1-05: remember this payee (IBAN etc.) in the vendor registry for reuse.

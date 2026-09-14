@@ -12,6 +12,7 @@ import {
   sortDigestItems,
   waitingLabel,
   type DigestItem,
+  type FinanceItem,
 } from "../approvalDigest";
 
 const item = (o: Partial<DigestItem> & { requestNo: string }): DigestItem => ({
@@ -33,9 +34,32 @@ const body = (items: DigestItem[]) =>
   });
 
 describe("digestSubject()", () => {
-  it("numără cererile în subiect, la singular și plural", () => {
-    expect(digestSubject(1)).toContain("O cerere");
-    expect(digestSubject(7)).toContain("7 cereri");
+  const counts = (approvals = 0, finance = 0, updates = 0) => ({ approvals, finance, updates });
+
+  it("numără cererile de aprobat în subiect, la singular și plural", () => {
+    expect(digestSubject(counts(1))).toContain("o cerere așteaptă aprobarea ta");
+    expect(digestSubject(counts(7))).toContain("7 cereri așteaptă aprobarea ta");
+  });
+
+  it("VM5-13: coada de plată a finanțelor apare separat de cea de aprobat", () => {
+    expect(digestSubject(counts(0, 1))).toContain("o cerere de plătit");
+    expect(digestSubject(counts(0, 4))).toContain("4 cereri de plătit");
+  });
+
+  it("VM5-13: cine e și aprobator și finanțe primește UN subiect cu ambele", () => {
+    const s = digestSubject(counts(2, 3));
+    expect(s).toContain("2 cereri așteaptă aprobarea ta");
+    expect(s).toContain("3 cereri de plătit");
+  });
+
+  it("VM5-13: doar update-uri → subiectul spune asta, nu un „0 cereri” gol", () => {
+    expect(digestSubject(counts(0, 0, 2))).toContain("ce s-a întâmplat");
+  });
+
+  it("toate variantele încep cu prefixul pe care anti-dublura îl caută", () => {
+    for (const c of [counts(1), counts(0, 1), counts(0, 0, 1), counts(1, 1, 1)]) {
+      expect(digestSubject(c).startsWith("[PAR] Digest")).toBe(true);
+    }
   });
 });
 
@@ -102,6 +126,82 @@ describe("buildDigestBody()", () => {
 
   it("la o singură cerere vorbește la singular", () => {
     expect(body([item({ requestNo: "PAR-1" })])).toContain("O cerere așteaptă aprobarea ta");
+  });
+
+  it("numește orele, ca omul să știe când e următorul email", () => {
+    expect(body([item({ requestNo: "PAR-1" })])).toContain("09:00 și la 16:00");
+  });
+
+  it("promite instant DOAR ce chiar pleacă instant — urgentele incluse", () => {
+    // Emailul per-cerere s-a oprit (VM5-13); singurele care mai sparg digestul sunt urgențele,
+    // respingerile și cererile de modificare. Dacă textul promite altceva, omul așteaptă degeaba.
+    expect(body([item({ requestNo: "PAR-1" })])).toContain("URGENT");
+  });
+});
+
+describe("buildDigestBody() — secțiunea de finanțe (VM5-13)", () => {
+  const financeBody = (financeItems: FinanceItem[], items: DigestItem[] = []) =>
+    buildDigestBody({
+      items,
+      financeItems,
+      inboxUrl: "https://finflow.best/#/business/par/inbox",
+      financeUrl: "https://finflow.best/#/business/par/finante",
+      parUrl: (id) => `https://finflow.best/#/business/par/${id}`,
+    });
+
+  const fin = (o: Partial<FinanceItem> & { requestNo: string }): FinanceItem => ({
+    parId: `id-${o.requestNo}`,
+    amountLabel: "7.400,00 MDL",
+    payeeName: "ACME SRL",
+    waitingDays: 0,
+    ...o,
+  });
+
+  it("listează cererile de plătit cu sumă, beneficiar și de când așteaptă", () => {
+    const text = financeBody([fin({ requestNo: "PAR-2026-0040", waitingDays: 2 })]);
+    expect(text).toContain("PAR-2026-0040 — 7.400,00 MDL");
+    expect(text).toContain("către ACME SRL");
+    expect(text).toContain("aprobată de 2 zile");
+    expect(text).toContain("Deschide coada de plăți");
+  });
+
+  it("urgentele stau primele și în coada de plăți", () => {
+    const text = financeBody([
+      fin({ requestNo: "PAR-NORMAL", waitingDays: 9 }),
+      fin({ requestNo: "PAR-URGENT", urgent: true, waitingDays: 0 }),
+    ]);
+    expect(text.indexOf("PAR-URGENT")).toBeLessThan(text.indexOf("PAR-NORMAL"));
+  });
+
+  it("cine e și aprobator și finanțe primește UN email cu ambele secțiuni", () => {
+    // Asta e toată miza: două roluri nu înseamnă două emailuri.
+    const text = financeBody([fin({ requestNo: "DE-PLATIT" })], [item({ requestNo: "DE-APROBAT" })]);
+    expect(text).toContain("DE-APROBAT");
+    expect(text).toContain("DE-PLATIT");
+    expect(text).toContain("așteaptă aprobarea ta");
+    expect(text).toContain("așteaptă plata");
+  });
+
+  it("fără rol de finanțe, secțiunea lipsește cu totul", () => {
+    expect(body([item({ requestNo: "PAR-1" })])).not.toContain("așteaptă plata");
+  });
+});
+
+describe("buildDigestBody() — ce s-a întâmplat cu cererile aprobate (VM5-13)", () => {
+  it("spune aprobatorului ce s-a ales de cererea pe care a semnat-o", () => {
+    const text = buildDigestBody({
+      items: [],
+      updates: [{ parId: "id-9", text: "Plata către ACME SRL a fost achitată (cererea PAR-9)." }],
+      inboxUrl: "https://finflow.best/#/business/par/inbox",
+      parUrl: (id) => `https://finflow.best/#/business/par/${id}`,
+    });
+    expect(text).toContain("Ce s-a întâmplat cu cererile pe care le-ai aprobat");
+    expect(text).toContain("a fost achitată");
+    expect(text).toContain("https://finflow.best/#/business/par/id-9");
+  });
+
+  it("fără update-uri, secțiunea nu apare goală", () => {
+    expect(body([item({ requestNo: "PAR-1" })])).not.toContain("Ce s-a întâmplat");
   });
 });
 

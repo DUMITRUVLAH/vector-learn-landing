@@ -449,3 +449,135 @@ describe("notifyReapprovalRequired — ambele sume, în email, nu doar in-app", 
     expect(email.body).toContain("Deschide cererea: ");
   });
 });
+
+// ─── VM5-13: digestul ÎNLOCUIEȘTE emailurile per-cerere ───────────────────────
+//
+// Owner-ul, 14.09.2026: „digestul înlocuiește cele instantanee; doar cele urgente trec și se scrie
+// că-i urgent". Până acum mergeau amândouă — emailul per cerere ȘI digestul de 09:00/16:00 — iar
+// subsolul digestului promitea deja „un singur email cu toate cererile, de două ori pe zi".
+
+describe("VM5-13 emailul de aprobare pleacă doar pentru urgențe", () => {
+  const parRow = (o: Partial<Record<string, unknown>> = {}) => ({
+    totalEstimatedCents: 1250000,
+    currency: "MDL",
+    endUse: "chirie birou august",
+    purpose: "execute_payment",
+    payeeName: "ACME SRL",
+    vendorId: null,
+    projectId: null,
+    eventId: null,
+    budgetCodeId: null,
+    isUrgent: false,
+    requestedByUserId: "user-solicitant",
+    ...o,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockValues.mockResolvedValue(undefined);
+    mockInsertFn.mockReturnValue({ values: mockValues });
+    mockSelectChain.from.mockReturnThis();
+    mockSelectFn.mockReturnValue(mockSelectChain);
+    mockSendMessage.mockResolvedValue({ status: "sent" });
+  });
+
+  it("cerere normală → notificare in-app, ZERO email (o preia digestul)", async () => {
+    mockSelectChainWhere
+      .mockResolvedValueOnce([parRow()])
+      .mockResolvedValueOnce([]) // delegări
+      .mockResolvedValue([{ id: "user-approver-1", name: "Ana", email: "ana@example.md" }]);
+
+    await notifySubmitted(ctx, "user-approver-1");
+
+    expect(mockInsertFn).toHaveBeenCalled(); // in-app rămâne instant
+    expect(mockSendMessage).not.toHaveBeenCalled(); // emailul NU mai pleacă acum
+  });
+
+  it("cerere urgentă → emailul pleacă acum, cu URGENT în subiect", async () => {
+    mockSelectChainWhere
+      .mockResolvedValueOnce([parRow({ isUrgent: true })])
+      .mockResolvedValueOnce([]) // delegări
+      .mockResolvedValue([{ id: "user-approver-1", name: "Ana", email: "ana@example.md" }]);
+
+    await notifySubmitted(ctx, "user-approver-1");
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    const email = mockSendMessage.mock.calls[0][1] as { subject: string; body: string };
+    expect(email.subject).toContain("URGENT");
+    // Corpul spune DE CE a venit în afara digestului — altfel omul crede că regula s-a stricat.
+    expect(email.body).toContain("09:00");
+  });
+
+  it("finanțele primesc tot digest, nu un email per cerere aprobată", async () => {
+    mockSelectChainWhere
+      .mockResolvedValueOnce([{ userId: "user-finance-1" }]) // getFinanceUsers
+      .mockResolvedValueOnce([parRow()]) // loadParFacts
+      .mockResolvedValue([{ name: "Ion", email: "ion@example.md" }]);
+
+    await notifyFullyApprovedToFinance(ctx);
+
+    expect(mockInsertFn).toHaveBeenCalled();
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("dar o cerere URGENTĂ aprobată ajunge la finanțe pe loc", async () => {
+    mockSelectChainWhere
+      .mockResolvedValueOnce([{ userId: "user-finance-1" }])
+      .mockResolvedValueOnce([parRow({ isUrgent: true })])
+      .mockResolvedValue([{ name: "Ion", email: "ion@example.md" }]);
+
+    await notifyFullyApprovedToFinance(ctx);
+
+    const email = mockSendMessage.mock.calls[0][1] as { subject: string };
+    expect(email.subject).toContain("URGENT");
+  });
+
+  it("respingerea rămâne instantanee — nu e o sarcină care poate aștepta 8 ore", async () => {
+    mockSelectChainWhere
+      .mockResolvedValueOnce([parRow()])
+      .mockResolvedValue([{ name: "Ana", email: "ana@example.md" }]);
+
+    await notifyRejected(ctx, "user-solicitant", "lipsesc devizele");
+
+    expect(mockSendMessage).toHaveBeenCalled();
+  });
+});
+
+// ─── VM5-13: solicitantul nu se notifică pe sine ─────────────────────────────
+
+describe("VM5-13 solicitantul nu primește „aprobă-ți propria cerere”", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockValues.mockResolvedValue(undefined);
+    mockInsertFn.mockReturnValue({ values: mockValues });
+    mockSelectChain.from.mockReturnThis();
+    mockSelectFn.mockReturnValue(mockSelectChain);
+    mockSendMessage.mockResolvedValue({ status: "sent" });
+  });
+
+  it("rutarea pe rol îl sare pe cel care a depus cererea", async () => {
+    // Cazul real: un aprobator depune o cerere. La trimitere, pasul lui se deblochează de pe nume
+    // (sanitizarea anti-auto-aprobare din submit.ts), cade pe rutare pe rol, iar rutarea pe rol îl
+    // includea înapoi — primea „așteaptă aprobarea ta" pe o cerere pe care segregarea sarcinilor
+    // îl împiedică oricum s-o aprobe.
+    mockSelectChainWhere
+      .mockResolvedValueOnce([
+        {
+          totalEstimatedCents: 500000, currency: "MDL", endUse: "laptopuri",
+          purpose: "execute_payment", payeeName: "ACME", vendorId: null, projectId: null,
+          eventId: null, budgetCodeId: null, isUrgent: false,
+          requestedByUserId: "user-solicitant",
+        },
+      ])
+      .mockResolvedValueOnce([{ userId: "user-solicitant" }, { userId: "user-altcineva" }])
+      .mockResolvedValue([{ id: "user-altcineva", name: "Ana", email: "ana@example.md" }]);
+
+    await notifySubmitted(ctx, null);
+
+    const recipients = mockValues.mock.calls.map(
+      (c) => (c[0] as { recipientUserId: string }).recipientUserId
+    );
+    expect(recipients).not.toContain("user-solicitant");
+    expect(recipients).toContain("user-altcineva");
+  });
+});

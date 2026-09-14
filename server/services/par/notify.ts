@@ -80,6 +80,10 @@ interface ParFacts {
   projectName: string;
   eventName: string;
   budgetLabel: string;
+  /** VM5-13: doar cererile urgente mai sparg digestul și pleacă pe email în clipa depunerii. */
+  isUrgent: boolean;
+  /** Cine a depus cererea — ca să nu-i trimitem LUI „așteaptă aprobarea ta" pe propria cerere. */
+  requestedByUserId: string | null;
 }
 
 /** Taie un text lung ca să încapă în prima propoziție a emailului sau în subiect. */
@@ -106,6 +110,8 @@ async function loadParFacts(tenantId: string, parId: string): Promise<ParFacts |
         projectId: parRequests.projectId,
         eventId: parRequests.eventId,
         budgetCodeId: parRequests.budgetCodeId,
+        isUrgent: parRequests.isUrgent,
+        requestedByUserId: parRequests.requestedByUserId,
       })
       .from(parRequests)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
@@ -156,6 +162,8 @@ async function loadParFacts(tenantId: string, parId: string): Promise<ParFacts |
       projectName,
       eventName,
       budgetLabel,
+      isUrgent: p.isUrgent ?? false,
+      requestedByUserId: p.requestedByUserId ?? null,
     };
   } catch {
     return null;
@@ -220,14 +228,27 @@ function subjectFor(facts: ParFacts | null, requestNo: string, label: string, am
 function buildApproverEmailBody(facts: ParFacts | null, ctx: ParNotifyContext, stepLabel?: string): string {
   const intro = outcomeLine(facts, ctx.requestNo, "așteaptă aprobarea ta", { stepLabel });
   const link = `Deschide cererea: ${parDeepLink(ctx.parId)}`;
-  return [intro, "", facts ? summaryBlock(facts) : null, facts ? "" : null, link]
+  // VM5-13: emailul ăsta pleacă doar pentru cereri urgente, deci trebuie să spună de ce a ajuns
+  // în inbox în afara digestului — altfel omul care a cerut „două emailuri pe zi" crede că regula
+  // s-a stricat.
+  const urgentNote = facts?.isUrgent
+    ? "Cererea e marcată URGENT, de aceea îți vine acum și nu în digestul de la 09:00 / 16:00."
+    : null;
+  return [intro, "", urgentNote, urgentNote ? "" : null, facts ? summaryBlock(facts) : null, facts ? "" : null, link]
     .filter((l) => l !== null)
     .join("\n");
 }
 
 /**
- * VM1-08 — notify every approver of a step (in-app always; email with full payment
- * details). Works for a specific assignee or role-based routing (all approvers/par_admin).
+ * VM1-08 — notify every approver of a step. VM5-13 a schimbat CÂND pleacă emailul:
+ *
+ *   - in-app: mereu, în clipa evenimentului (e gratis și e chiar locul unde omul lucrează);
+ *   - email: NUMAI dacă cererea e marcată urgentă. Restul se adună în digestul de 09:00 / 16:00
+ *     (`services/par/digestRunner.ts`), care citește starea reală a inboxului, nu o coadă.
+ *
+ * De ce așa: owner-ul a cerut explicit ca digestul să ÎNLOCUIASCĂ emailurile per-cerere, nu să se
+ * adauge peste ele. Până acum mergeau amândouă, iar subsolul digestului promitea deja „un singur
+ * email cu toate cererile, de două ori pe zi" — o promisiune pe care codul o încălca.
  */
 async function notifyApprovers(params: {
   ctx: ParNotifyContext;
@@ -238,7 +259,14 @@ async function notifyApprovers(params: {
   const facts = await loadParFacts(ctx.tenantId, ctx.parId);
   const emailBody = buildApproverEmailBody(facts, ctx, stepLabel);
   const inAppBody = `${outcomeLine(facts, ctx.requestNo, "așteaptă aprobarea ta", { stepLabel })} Link: /business/par/${ctx.parId}`;
-  const subject = subjectFor(facts, ctx.requestNo, stepLabel ? `aprobare necesară (${stepLabel})` : "aprobare necesară");
+  const baseLabel = stepLabel ? `aprobare necesară (${stepLabel})` : "aprobare necesară";
+  const subject = subjectFor(
+    facts,
+    ctx.requestNo,
+    facts?.isUrgent ? `URGENT — ${baseLabel}` : baseLabel
+  );
+  // Fără urgență nu pleacă niciun email de „aprobare necesară": cererea apare în digest.
+  const emailNow = facts?.isUrgent === true;
 
   let recipients: string[];
   if (specificUserId) {
@@ -260,6 +288,16 @@ async function notifyApprovers(params: {
       );
     recipients = [...new Set(rows.map((r) => r.userId))];
   }
+
+  // VM5-13: solicitantul nu primește NICIODATĂ „așteaptă aprobarea ta" pe propria cerere.
+  // Cazul real: cine depune o cerere și are și rol de aprobator își vede pasul deblocat de pe nume
+  // la depunere (`lib/par/submit.ts`, sanitizarea anti-auto-aprobare), pasul cade pe rutare pe rol,
+  // iar rutarea pe rol îl includea înapoi pe el — primea un email că trebuie să aprobe o cerere pe
+  // care regula de segregare a sarcinilor îl împiedică oricum s-o aprobe (403 la `parApprovals.ts`).
+  if (facts?.requestedByUserId) {
+    recipients = recipients.filter((id) => id !== facts.requestedByUserId);
+  }
+  if (!recipients.length) return;
 
   // PERF (audit 2026-08-29): bucla era complet secvențială — per destinatar un INSERT, un SELECT
   // și un apel HTTP către Resend, toate `await`-uite pe calea cererii. Cu cinci aprobatori,
@@ -283,7 +321,7 @@ async function notifyApprovers(params: {
         sendInApp({ tenantId: ctx.tenantId, recipientUserId: userId, body: inAppBody, parId: ctx.parId }),
       ];
       const email = emailById.get(userId);
-      if (email) {
+      if (email && emailNow) {
         tasks.push(sendEmail({ tenantId: ctx.tenantId, toAddress: email, subject, body: emailBody }));
       }
       return tasks;
@@ -374,6 +412,12 @@ async function notifyUser(params: {
    * fiindcă nu are aplicația în față.
    */
   detailsBlock?: string | null;
+  /**
+   * VM5-13: `false` ține notificarea doar în aplicație, iar emailul îl face digestul de 09:00 /
+   * 16:00. Implicit `true` — respingerea, „modificări cerute", plata și anularea plății rămân
+   * instantanee: alea cer o reacție acum, nu peste opt ore.
+   */
+  emailNow?: boolean;
 }): Promise<void> {
   await sendInApp({
     tenantId: params.tenantId,
@@ -381,6 +425,8 @@ async function notifyUser(params: {
     body: params.body,
     parId: params.parId,
   });
+
+  if (params.emailNow === false) return;
 
   // Optional email — best-effort only. Căutarea destinatarului e și ea best-effort: notificarea
   // pleacă după ce acțiunea (plata, respingerea) s-a scris deja în DB, așa că o eroare aici nu
@@ -475,6 +521,9 @@ export async function notifyStepAdvanced(
 
 /**
  * On final approval with purpose=execute_payment → notify all finance users.
+ *
+ * VM5-13: ca și la aprobatori, emailul per-cerere s-a oprit. Finanțele primesc in-app pe loc, iar
+ * pe email secțiunea „de executat" din digestul de 09:00 / 16:00. Excepția rămâne cererea urgentă.
  */
 export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promise<void> {
   const financeUsers = await getFinanceUsers(ctx.tenantId);
@@ -482,8 +531,13 @@ export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promi
 
   const facts = await loadParFacts(ctx.tenantId, ctx.parId);
   const body = `${outcomeLine(facts, ctx.requestNo, "e aprobată complet și așteaptă execuția plății")} Link: /business/par/${ctx.parId}`;
-  const subject = subjectFor(facts, ctx.requestNo, "gata de plată");
+  const subject = subjectFor(
+    facts,
+    ctx.requestNo,
+    facts?.isUrgent ? "URGENT — gata de plată" : "gata de plată"
+  );
   const detailsBlock = facts ? summaryBlock(facts) : null;
+  const emailNow = facts?.isUrgent === true;
 
   for (const userId of financeUsers) {
     await notifyUser({
@@ -493,8 +547,38 @@ export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promi
       body,
       subject,
       detailsBlock,
+      emailNow,
     });
   }
+}
+
+/**
+ * VM5-13: aprobatorii care au semnat deja află ce s-a ales de cererea lor.
+ *
+ * Owner-ul: „cel care a acceptat să primească updates". Până acum, cine aproba la pasul 1 nu mai
+ * afla nimic — nici că cererea a trecut de toate pasurile, nici că s-a plătit. Singurul update
+ * existent era respingerea de către altcineva (VM5-12, `notifyOthersRequestStopped`).
+ *
+ * Doar in-app: un update nu e o sarcină, deci nu merită să spargă regula celor două emailuri pe zi.
+ * Ajunge pe email prin secțiunea „Ce s-a întâmplat cu cererile pe care le-ai aprobat" din digest.
+ */
+export async function notifyPriorApprovers(
+  ctx: ParNotifyContext,
+  approverUserIds: readonly string[],
+  verbPhrase: string,
+  opts?: { amountLabel?: string }
+): Promise<void> {
+  const recipients = [...new Set(approverUserIds)].filter(Boolean);
+  if (!recipients.length) return;
+
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const body = `${outcomeLine(facts, ctx.requestNo, verbPhrase, { amountLabel: opts?.amountLabel })} Ai aprobat-o tu. Link: /business/par/${ctx.parId}`;
+
+  await Promise.allSettled(
+    recipients.map((userId) =>
+      sendInApp({ tenantId: ctx.tenantId, recipientUserId: userId, body, parId: ctx.parId, kind: "par_update" })
+    )
+  );
 }
 
 /**

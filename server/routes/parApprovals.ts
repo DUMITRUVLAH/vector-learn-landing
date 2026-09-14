@@ -56,6 +56,7 @@ import {
   notifyRejected,
   notifyChangesRequested,
   notifyOthersRequestStopped,
+  notifyPriorApprovers,
 } from "../services/par/notify";
 import { parPayments } from "../db/schema/par";
 
@@ -383,6 +384,20 @@ async function approveParStep(
     await notifyFullyApprovedToFinance({ tenantId, parId, requestNo: par.requestNo });
   }
   await notifyApprovedToRequestor({ tenantId, parId, requestNo: par.requestNo }, par.requestedByUserId);
+
+  // VM5-13: cine a semnat pe lanț află că cererea a trecut de tot. Îl includem și pe cel care
+  // tocmai a decis — pentru el ăsta e răspunsul la „și mai departe ce s-a întâmplat?"; ultimul
+  // aprobator nu știe altfel dacă după el mai urma cineva.
+  await notifyPriorApprovers(
+    { tenantId, parId, requestNo: par.requestNo },
+    approvalSteps
+      .filter((s) => s.decision === "approved" && s.approverUserId)
+      .map((s) => s.approverUserId!)
+      .concat(userId),
+    newStatus === "in_finance"
+      ? "a trecut de toate aprobările și a intrat la finanțe pentru plată"
+      : "a trecut de toate aprobările"
+  );
 
   return { ok: true, status: newStatus, body: { ...finalPar, chain_status: "complete" } };
 }
