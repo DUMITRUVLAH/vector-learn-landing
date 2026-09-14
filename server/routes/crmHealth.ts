@@ -115,6 +115,10 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
   { name: "crm_cadence_enrollments", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, cadence_id, status, current_step, next_fire_at FROM crm_cadence_enrollments LIMIT 0`) },
   { name: "crm_reengagement_rules", run: () => db.execute(sql`SELECT id, tenant_id, name, after_months, action, cadence_id FROM crm_reengagement_rules LIMIT 0`) },
   { name: "crm_reengagement_runs", run: () => db.execute(sql`SELECT id, tenant_id, rule_id, lead_id, result FROM crm_reengagement_runs LIMIT 0`) },
+  // Captarea de pe site e chemată de vizitatorii site-ului CLIENTULUI: dacă migrarea n-a ajuns,
+  // formularul lor dă 500, iar noi aflăm de la ei. Proba asta e singura care ne-o spune înainte.
+  { name: "crm_capture_sources", run: () => db.execute(sql`SELECT id, tenant_id, name, token, default_source, active FROM crm_capture_sources LIMIT 0`) },
+  { name: "leads_au_product_id", run: () => db.execute(sql`SELECT id, product_id, probability_pct FROM leads LIMIT 0`) },
 ];
 
 /**
