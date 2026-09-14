@@ -87,6 +87,7 @@ vi.mock("@/lib/api/crm", () => ({
   listCrmTagSuggestions: vi.fn().mockResolvedValue({ items: [] }),
   moveCrmLeadPipeline: vi.fn(),
   listCrmSavedViews: vi.fn().mockResolvedValue({ items: [] }),
+  listCrmUpcomingTasks: vi.fn().mockResolvedValue({ items: [] }),
   createCrmSavedView: vi.fn(),
   deleteCrmSavedView: vi.fn(),
 }));

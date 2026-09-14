@@ -426,8 +426,11 @@ export interface ListCrmUpcomingTasksResponse {
   items: CrmUpcomingTask[];
 }
 
-export function listCrmUpcomingTasks(): Promise<ListCrmUpcomingTasksResponse> {
-  return api<ListCrmUpcomingTasksResponse>("/api/crm/tasks?scope=upcoming");
+/** `ownerId` = doar taskurile acelui om plus cele nealocate; absent = ale întregii echipe. */
+export function listCrmUpcomingTasks(ownerId?: string | null): Promise<ListCrmUpcomingTasksResponse> {
+  return api<ListCrmUpcomingTasksResponse>(
+    `/api/crm/tasks?scope=upcoming${ownerId ? `&owner=${encodeURIComponent(ownerId)}` : ""}`
+  );
 }
 
 export interface CreateCrmLeadTaskBody {

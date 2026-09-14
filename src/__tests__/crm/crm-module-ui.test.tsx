@@ -133,6 +133,7 @@ vi.mock("@/lib/api/crm", () => ({
   deleteCrmPipeline: vi.fn(),
   moveCrmLeadPipeline: vi.fn(),
   listCrmSavedViews: vi.fn().mockResolvedValue({ items: [] }),
+  listCrmUpcomingTasks: vi.fn().mockResolvedValue({ items: [] }),
   createCrmSavedView: vi.fn(),
   deleteCrmSavedView: vi.fn(),
   listCrmLeads: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),

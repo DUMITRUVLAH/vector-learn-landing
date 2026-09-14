@@ -42,6 +42,7 @@ import { StageEditorDialog } from "@/components/crm/StageEditorDialog";
 import { PipelineManagerDialog } from "@/components/crm/PipelineManagerDialog";
 import { LeadListView } from "@/components/crm/LeadListView";
 import { SavedViewsMenu } from "@/components/crm/SavedViewsMenu";
+import { RemindersBell } from "@/components/crm/RemindersBell";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
@@ -344,6 +345,14 @@ export function CrmPipelinePage() {
               Listă
             </button>
           </div>
+          {/* Clopoțelul stă lângă acțiunile tablei, nu în shell: e despre taskurile CRM, nu
+              despre notificările platformei (acelea au clopoțelul lor în bara de sus). */}
+          <RemindersBell
+            ownerId={currentUserId}
+            onOpenLead={setSelectedLeadId}
+            onToast={setToast}
+            refreshToken={listRefreshToken}
+          />
           <Button variant="outline" onClick={() => setShowPipelineManager(true)}>
             <GitBranch className="h-4 w-4" aria-hidden="true" />
             Pâlnii

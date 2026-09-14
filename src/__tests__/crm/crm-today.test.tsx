@@ -86,6 +86,7 @@ vi.mock("@/lib/api/crm", () => ({
   removeCrmLeadTag: (...args: unknown[]) => removeCrmLeadTag(...args),
   listCrmTagSuggestions: (...args: unknown[]) => listCrmTagSuggestions(...args),
   listCrmLostReasons: (...args: unknown[]) => listCrmLostReasons(...args),
+  listCrmUpcomingTasks: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
 const { CrmTodayPage } = await import("@/pages/business/crm/CrmTodayPage");

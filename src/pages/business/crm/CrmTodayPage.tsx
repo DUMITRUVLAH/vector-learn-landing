@@ -25,6 +25,7 @@ import { getCrmStages, getCrmToday, type CrmStage, type CrmTodayLead, type CrmTo
 import { CRM_DEFAULT_STAGES, stageColorClasses } from "@/components/crm/constants";
 import { leadTitle } from "@/components/crm/format";
 import { LeadDetailSheet, type LeadDetailSheetToast } from "@/components/crm/LeadDetailSheet";
+import { RemindersBell } from "@/components/crm/RemindersBell";
 
 type ToastState = LeadDetailSheetToast | null;
 
@@ -60,6 +61,10 @@ export function CrmTodayPage() {
     if (teamMembers.some((m) => m.id === currentUserId)) setOwner(currentUserId);
   }, [currentUserId, teamMembers]);
 
+  /** Crește la fiecare reîncărcare a listei „Azi" — clopoțelul se resincronizează odată cu ea
+   *  (un task bifat în fișă trebuie să dispară din amândouă, nu doar din una). */
+  const [bellRefreshToken, setBellRefreshToken] = useState(0);
+
   const loadToday = useCallback(
     async (opts?: { silent?: boolean }) => {
       const silent = opts?.silent ?? false;
@@ -68,6 +73,7 @@ export function CrmTodayPage() {
       try {
         const res = await getCrmToday(owner || undefined);
         setBuckets(res);
+        setBellRefreshToken((t) => t + 1);
       } catch (err) {
         // La reîncărcare silențioasă (după închiderea fișei leadului), nu stricăm ecranul cu o
         // eroare — datele locale rămân cele bune, afișate deja.
@@ -119,6 +125,14 @@ export function CrmTodayPage() {
               </option>
             ))}
           </Select>
+          {/* Clopoțelul urmărește agentul ales: „Azi" filtrat pe un om, cu reminderele altuia,
+              ar fi două răspunsuri diferite la aceeași întrebare pe același ecran. */}
+          <RemindersBell
+            ownerId={owner || currentUserId}
+            onOpenLead={setSelectedLeadId}
+            onToast={setToast}
+            refreshToken={bellRefreshToken}
+          />
         </div>
       }
     >

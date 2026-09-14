@@ -4,7 +4,9 @@
  * Mounted at /api/crm/tasks (rămâne de conectat: app.ts: app.route("/api/crm/tasks", crmTasksRoutes))
  *
  * GET    /api/crm/tasks?leadId=            — taskurile unui lead (necesită `leadId` DIN tenant)
- * GET    /api/crm/tasks?scope=upcoming     — taskuri deschise, cu scadență, pe tot tenantul (clopoțel remindere)
+ * GET    /api/crm/tasks?scope=upcoming     — taskuri deschise, cu scadență (clopoțel remindere).
+ *                                            Cu `&owner=<userId>`: doar ale acelui om plus cele
+ *                                            nealocate. Fără: ale întregii echipe.
  * POST   /api/crm/tasks                    — creare, pe un lead existent al tenantului
  * PATCH  /api/crm/tasks/:id                — editare titlu/scadență/responsabil
  * POST   /api/crm/tasks/:id/complete       — marchează încheiat (status "done" + completedAt)
@@ -21,7 +23,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmLeadTasks, type NewCrmLeadTask } from "../db/schema/crmTasks";
 import { leads } from "../db/schema/leads";
@@ -55,7 +57,7 @@ const snoozeTaskSchema = z.object({
 crmTasksRoutes.get("/", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
-  const { leadId, scope } = c.req.query();
+  const { leadId, scope, owner } = c.req.query();
 
   if (leadId) {
     // Lead-ul trebuie să existe ÎN tenantul curent — altfel un `leadId` ghicit din alt workspace
@@ -97,7 +99,14 @@ crmTasksRoutes.get("/", async (c) => {
       .from(crmLeadTasks)
       .innerJoin(leads, and(eq(leads.id, crmLeadTasks.leadId), eq(leads.tenantId, tenantId)))
       .where(
-        and(eq(crmLeadTasks.tenantId, tenantId), eq(crmLeadTasks.status, "open"), isNotNull(crmLeadTasks.dueAt))
+        and(
+          eq(crmLeadTasks.tenantId, tenantId),
+          eq(crmLeadTasks.status, "open"),
+          isNotNull(crmLeadTasks.dueAt),
+          // Clopoțelul unui agent arată munca LUI. Taskurile nealocate intră și ele: nimeni nu le
+          // are, deci trebuie să le vadă cineva — altfel rămân restante fără să știe nimeni.
+          owner ? or(eq(crmLeadTasks.assignedTo, owner), isNull(crmLeadTasks.assignedTo)) : undefined
+        )
       )
       .orderBy(asc(crmLeadTasks.dueAt))
       .limit(200);
