@@ -231,7 +231,7 @@ export function CrmImportPage() {
                 onChange={(e) => void onPickFile(e.target.files?.[0])}
               />
               <p className="text-xs text-muted-foreground">
-                Din Excel: „Salvează ca" → CSV. Merg și fișierele cu punct-și-virgulă, cum le dă Excel-ul în română.
+                Din Excel: „Salvează ca” → CSV. Merg și fișierele cu punct-și-virgulă, cum le dă Excel-ul în română.
               </p>
             </div>
 

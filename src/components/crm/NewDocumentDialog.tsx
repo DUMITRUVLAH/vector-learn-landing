@@ -34,7 +34,7 @@ function money(cents: number): string {
   return new Intl.NumberFormat("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
 }
 
-/** „1 250,50" sau „1250.50" → cenți. Gol → null, ca să cadă pe prețul din catalog. */
+/** „1 250,50” sau „1250.50” → cenți. Gol → null, ca să cadă pe prețul din catalog. */
 function parsePrice(raw: string): number | null {
   const cleaned = raw.replace(/\s/g, "").replace(",", ".");
   if (!cleaned) return null;

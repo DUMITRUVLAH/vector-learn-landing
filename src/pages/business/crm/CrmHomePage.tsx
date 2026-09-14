@@ -82,10 +82,10 @@ const CRM_MODULES: CrmModuleTile[] = [
   {
     id: "automatizari",
     label: "Automatizări",
-    description: "Reguli care mișcă singure leadurile și trimit remindere.",
+    description: "Reguli care mișcă singure leadurile, creează taskuri și le împart pe agenți.",
     href: "/business/crm/automatizari",
     icon: Zap,
-    available: false,
+    available: true,
   },
   {
     id: "rapoarte",

@@ -473,7 +473,7 @@ function MergeDialog({
                   {changed.map((f) => (
                     <li key={f.field} className="text-muted-foreground">
                       <span className="text-foreground">{MERGE_FIELD_LABELS[f.field] ?? f.field}</span> se completează cu
-                      „{String(f.value ?? "")}" — era gol pe fișa păstrată.
+                      „{String(f.value ?? "")}” — era gol pe fișa păstrată.
                     </li>
                   ))}
                 </ul>

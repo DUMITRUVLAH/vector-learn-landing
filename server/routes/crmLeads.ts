@@ -32,6 +32,8 @@ import { db } from "../db/client";
 import { leads, leadInteractions, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
 import { crmPipelineStages, type CrmPipelineStage } from "../db/schema/crmPipelineStages";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { runAutomations } from "./crmAutomations";
+import { assignLeadAutomatically } from "./crmAssignment";
 import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
 import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
 
@@ -407,7 +409,40 @@ crmLeadsRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   if (body.notes !== undefined) values.notes = body.notes;
 
   const [row] = await db.insert(leads).values(values).returning();
-  return c.json(row, 201);
+
+  // Întâi distribuirea, apoi automatizările: o regulă de automatizare poate
+  // depinde de cine e responsabilul (de pildă „creează un task pentru el"), deci
+  // lead-ul trebuie să aibă deja un stăpân când ajunge la ele.
+  //
+  // Ambele rulează DUPĂ ce lead-ul e salvat și niciuna nu poate strica salvarea:
+  // nici `assignLeadAutomatically`, nici `runAutomations` nu aruncă. Dacă o
+  // regulă e greșită, omul are lead-ul în bază și problema în jurnal — nu un
+  // formular pierdut și o eroare fără legătură cu ce tocmai a făcut.
+  await assignLeadAutomatically(user.tenantId, row);
+
+  const [afterAssign] = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, row.id), eq(leads.tenantId, user.tenantId)));
+
+  await runAutomations({
+    tenantId: user.tenantId,
+    userId: user.id,
+    lead: afterAssign ?? row,
+    kind: "lead.created",
+    assignFn: async (lead) => {
+      const decision = await assignLeadAutomatically(user.tenantId, lead);
+      return decision?.userId ?? null;
+    },
+  });
+
+  // Recitim: o regulă poate să-l fi mutat de etapă sau să-l fi atribuit, iar
+  // interfața trebuie să primească starea de după, nu cea de dinainte.
+  const [fresh] = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, row.id), eq(leads.tenantId, user.tenantId)));
+  return c.json(fresh ?? row, 201);
 });
 
 // ─── PATCH /:id ───────────────────────────────────────────────────────────────
@@ -505,7 +540,19 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
   };
   await db.insert(leadInteractions).values(interaction);
 
-  return c.json(row);
+  await runAutomations({
+    tenantId: user.tenantId,
+    userId: user.id,
+    lead: row,
+    kind: "lead.stage_changed",
+    toStage: stage,
+  });
+
+  const [fresh] = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
+  return c.json(fresh ?? row);
 });
 
 // ─── GET /:id/interactions ────────────────────────────────────────────────────

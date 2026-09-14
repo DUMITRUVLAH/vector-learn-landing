@@ -479,7 +479,7 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
   }
 
   async function deleteTaskRow(task: CrmLeadTask) {
-    if (!confirm(`Ștergi taskul „${task.title}"?`)) return;
+    if (!confirm(`Ștergi taskul „${task.title}”?`)) return;
     setTaskActionId(task.id);
     try {
       await deleteCrmLeadTask(task.id);
@@ -795,7 +795,7 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
               </div>
               {documents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Niciun act încă. „Act nou" pornește o ofertă cu datele acestui lead.
+                  Niciun act încă. „Act nou” pornește o ofertă cu datele acestui lead.
                 </p>
               ) : (
                 <ul className="flex flex-col gap-2">

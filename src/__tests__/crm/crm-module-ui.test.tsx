@@ -257,7 +257,6 @@ describe("CRM (Faza 1) — CrmHomePage", () => {
     const comunicare = screen.getByLabelText(/Comunicare — în curând/i);
     expect(comunicare.tagName).toBe("DIV");
 
-    expect(screen.getByLabelText(/Automatizări — în curând/i)).toBeInTheDocument();
     // Ce a fost livrat între timp NU mai are voie să apară ca „în curând" —
     // un tile blocat peste o pagină care merge e o funcție ascunsă degeaba.
     expect(screen.queryByLabelText(/Rapoarte — în curând/i)).not.toBeInTheDocument();
@@ -265,7 +264,9 @@ describe("CRM (Faza 1) — CrmHomePage", () => {
     expect(screen.queryByLabelText(/Clienți.*— în curând/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Import — în curând/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Documente — în curând/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("În curând").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByLabelText(/Automatizări — în curând/i)).not.toBeInTheDocument();
+    // A rămas un singur modul neînceput: Comunicarea (telefonie, email, WhatsApp).
+    expect(screen.getAllByText("În curând")).toHaveLength(1);
   });
 });
 

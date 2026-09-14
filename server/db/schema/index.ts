@@ -79,3 +79,4 @@ export * from "./telemetry";
 export * from "./bnmRates";
 // Registrul de acte — generare documente → PDF → PAR (DOCGEN-101)
 export * from "./docs";
+export * from "./crmAutomations";
