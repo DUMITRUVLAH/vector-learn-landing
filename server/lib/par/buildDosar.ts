@@ -26,6 +26,7 @@ import { users } from "../../db/schema/users";
 import type { ApprovalSheetData } from "./approvalSheet";
 import { buildDosarPagesDefinition, renderDosarPagesPdf, type DosarSeparator } from "./dosarPdf";
 import { buildParFormDefinition } from "./parFormPdf";
+import { ensureVerifyToken } from "./verifyToken";
 import { loadParFormData } from "./parFormData";
 
 // Owner (10.09.2026): „PAR-ul să fie undeva la final, în formatul PDF pe care îl avem."
@@ -328,7 +329,12 @@ export async function buildDosar(parId: string, tenantId: string): Promise<Built
     try {
       const formData = await loadParFormData(parId, tenantId);
       if (formData) {
-        const formBytes = await renderDosarPagesPdf(buildParFormDefinition(formData));
+        // Același QR ca pe formularul descărcat separat — dosarul de audit e locul unde contează
+        // cel mai mult ca hârtia să poată fi verificată ani mai târziu.
+        const token = await ensureVerifyToken(parId, tenantId);
+        const formBytes = await renderDosarPagesPdf(
+          buildParFormDefinition(formData, token ? { token } : null)
+        );
         plan.push({
           separator: { title: "Formularul PAR" },
           piece: { type: "pdf", pages: await PDFDocument.load(formBytes) },

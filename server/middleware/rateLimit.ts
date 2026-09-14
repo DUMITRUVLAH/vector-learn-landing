@@ -79,3 +79,23 @@ export const expensiveRateLimit = rateLimiter({
   skip: skipLocalDev,
   message: { error: "rate_limit_exceeded" },
 });
+
+/**
+ * Verificarea publică a unui formular PAR (`/api/public/par/verify/:token`): 60 / 15 minute / IP.
+ *
+ * Aici limita nu apără o parolă, ci baza de date. Ruta e singura din PAR deschisă fără sesiune,
+ * iar pe Vercel fiecare instanță ține O SINGURĂ conexiune la pooler-ul Supabase (vezi
+ * `server/db/client.ts`): un robot care scanează internetul e mai periculos pentru disponibilitate
+ * decât pentru confidențialitate — tokenul de 80 de biți nu se ghicește oricum.
+ *
+ * 60 e generos pentru un om (un birou întreg în spatele aceluiași NAT verifică zeci de hârtii
+ * într-o dimineață) și strâmt pentru un crawler.
+ */
+export const publicVerifyRateLimit = rateLimiter({
+  windowMs: 15 * 60_000,
+  limit: 60,
+  standardHeaders: "draft-6",
+  keyGenerator: keyFor,
+  skip: skipLocalDev,
+  message: { error: "rate_limit_exceeded" },
+});

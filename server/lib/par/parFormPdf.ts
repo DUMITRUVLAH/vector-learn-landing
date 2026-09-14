@@ -17,6 +17,7 @@
 import type { ParFormData, ParFormSignature } from "./parFormData";
 import { DOC_FONT_FAMILY } from "../docs/pdfFonts";
 import { orderSignatureSlots } from "../../../src/lib/par/signatureSlots";
+import { signatureCode, stateFingerprint, verifyUrl, formatToken } from "./verifyCodes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PdfNode = Record<string, any>;
@@ -138,9 +139,29 @@ const FRAME = {
   paddingRight: () => 6,
 };
 
-/** O caseta de semnătură (secțiunile 14–15). */
-function signatureCell(title: PdfNode[], sig: ParFormSignature | null, showStamp = false): PdfNode {
+/**
+ * O casetă de semnătură (secțiunile 14–15).
+ *
+ * PARVERIFY-001 — rubrica `Signature` scria dintotdeauna șirul gol. Ana Chirița (ATIC, 14.09.2026),
+ * cu formularul tipărit în mână: „nu se văd aprobările pe el — la signature trebuie să fie cod
+ * ceva". Avea dreptate: numele și data se puteau tasta oriunde, deci hârtia nu dovedea că
+ * aprobarea există în platformă. Acum acolo intră codul derivat din aprobarea însăși
+ * (`lib/par/verifyCodes.ts`), pe care serverul îl recalculează la scanare.
+ *
+ * Caseta unui rând NEDECIS rămâne goală, ca până acum: un cod tipărit pe o semnătură care încă
+ * n-a fost dată s-ar citi ca o aprobare.
+ */
+function signatureCell(title: PdfNode[], sig: ParFormSignature | null, parId: string, showStamp = false): PdfNode {
   const approved = sig?.decision === "approved";
+  const code = sig
+    ? signatureCode({
+        parId,
+        approvalId: sig.id,
+        step: sig.step,
+        decision: sig.decision,
+        decidedAt: sig.decidedAt,
+      })
+    : null;
   return {
     stack: [
       { text: title, margin: [0, 0, 0, 6] },
@@ -150,14 +171,70 @@ function signatureCell(title: PdfNode[], sig: ParFormSignature | null, showStamp
       field(null, "Name", sig?.name ?? ""),
       field(null, "Title", sig?.title ?? ""),
       field(null, "Date", approved ? formDateTime(sig?.decidedAt) : ""),
-      field(null, "Signature", ""),
+      field(null, "Signature", code ?? ""),
     ],
   };
 }
 
+/**
+ * PARVERIFY-001 — blocul de verificare, așezat în golul de sub semnătura solicitantului.
+ *
+ * De ce ACOLO și nu în subsol, unde i-ar fi locul: formularul umple foaia până la ultimul rând, iar
+ * o bandă în plus la sfârșit împingea documentul pe a DOUA pagină — măsurat, nu presupus. Caseta 14
+ * are însă un gol permanent sub rubrica `Signature`, fiindcă înălțimea rândului o dă coloana din
+ * dreapta, cu lanțul de aprobatori. Codul intră în spațiul acela și foaia rămâne una singură.
+ *
+ * QR-ul e desenat de encoderul propriu al lui pdfmake (`src/qrEnc.js`): rămâne vectorial, deci se
+ * citește și dintr-o fotocopie, iar funcția asta rămâne sincronă. Varianta cu `qrcode` ar fi produs
+ * un PNG — un raster într-un document altfel numai text — și ar fi făcut asincron tot lanțul de
+ * generare, până în ruta care scrie dosarul.
+ *
+ * Tokenul se tipărește ȘI cu litere: fotocopiatoarele mănâncă coduri QR, iar alfabetul lui e ales
+ * ca să poată fi tastat de mână (fără I, L, O, U — literele confundate cu 1, 0 și V).
+ */
+function verifyBlock(token: string, fingerprint: string): PdfNode {
+  return {
+    columns: [
+      { width: "auto", qr: verifyUrl(token, fingerprint), fit: 54, margin: [0, 0, 6, 0] },
+      {
+        width: "*",
+        stack: [
+          { text: "Verify this document", bold: true, fontSize: 7.5 },
+          {
+            text: "Scan, or open finflow.best/verify and enter:",
+            fontSize: 6.5,
+            color: FAINT,
+            margin: [0, 1, 0, 2],
+          },
+          { text: formatToken(token), fontSize: 8, characterSpacing: 0.3 },
+          {
+            text: "Each Signature code above is derived from that approval and is checked there.",
+            fontSize: 6,
+            color: FAINT,
+            margin: [0, 2, 0, 0],
+          },
+        ],
+      },
+    ],
+    margin: [0, 10, 0, 0],
+  };
+}
+
+/**
+ * Ce se tipărește ca dovadă verificabilă. `token` lipsă (ori nescris din cauza unei erori de bază
+ * de date) înseamnă doar formular fără QR — niciodată un buton de descărcare care eșuează.
+ */
+export interface ParFormVerifyOptions {
+  token: string;
+}
+
 /** Documentul pdfmake al formularului. */
-export function buildParFormDefinition(d: ParFormData): PdfNode {
+export function buildParFormDefinition(d: ParFormData, verify?: ParFormVerifyOptions | null): PdfNode {
   const cur = d.currency || "MDL";
+  // Amprenta a ceea ce iese acum pe hârtie, pusă în URL-ul din QR. Fiecare exemplar tipărit își
+  // poartă astfel propria versiune, deci pagina publică poate spune „hârtia din mâna ta
+  // corespunde" sau „între timp a mai semnat cineva" — fără istoric de tipăriri în bază.
+  const fingerprint = stateFingerprint(d);
   const requestorIdentity =
     d.requestorCode && d.requestorTitle?.includes(d.requestorCode)
       ? d.requestorTitle
@@ -361,7 +438,12 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
       table: {
         widths: ["50%", "50%"],
         body: [[
-          signatureCell([num(14), { text: " Requestor Signature:", bold: true, fontSize: 8.5 }], sig14),
+          {
+            stack: [
+              signatureCell([num(14), { text: " Requestor Signature:", bold: true, fontSize: 8.5 }], sig14, d.parId),
+              ...(verify ? [verifyBlock(verify.token, fingerprint)] : []),
+            ],
+          },
           {
             // Câte o casetă pentru FIECARE aprobator din lanț. Formularul avea două locuri fixe: un
             // lanț cu trei semnături o pierdea pe a treia de pe hârtie, deși omul semnase.
@@ -369,10 +451,11 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
               signatureCell(
                 [num(15), { text: " Approver Signature (DOA Holder, Supervisor, or Tech Lead):", bold: true, fontSize: 8.5 }],
                 approvers[0] ?? null,
+                d.parId,
               ),
               ...approvers.slice(1).flatMap((sig) => [
                 { canvas: [{ type: "line", x1: 0, y1: 4, x2: 240, y2: 4, lineWidth: 0.6, lineColor: BORDER }], margin: [0, 4, 0, 6] },
-                signatureCell([{ text: " ", fontSize: 8.5 }], sig, true),
+                signatureCell([{ text: " ", fontSize: 8.5 }], sig, d.parId, true),
               ]),
             ],
           },
@@ -446,6 +529,7 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
       ],
       margin: [0, 4, 0, 0],
     },
+
   ];
 
   return {

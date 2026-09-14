@@ -56,6 +56,9 @@ import { verifyParBodyHash } from "../lib/par/integrity";
 import { renderDosarPagesPdf } from "../lib/par/dosarPdf";
 import { buildDosar } from "../lib/par/buildDosar";
 import { buildParFormDefinition, parFormFileName } from "../lib/par/parFormPdf";
+import { ensureVerifyToken } from "../lib/par/verifyToken";
+import { formatToken, newVerifyToken, stateFingerprint, verifyUrl } from "../lib/par/verifyCodes";
+import { parVerifyTokens } from "../db/schema/parVerifyTokens";
 import { loadParFormData } from "../lib/par/parFormData";
 import { contentDisposition } from "../lib/http/contentDisposition";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
@@ -2019,10 +2022,92 @@ parRoutes.get("/:id/form.pdf", async (c) => {
   const data = await loadParFormData(parId, tenantId);
   if (!data) return c.json({ error: "not_found" }, 404);
 
-  const bytes = await renderDosarPagesPdf(buildParFormDefinition(data));
+  const token = await ensureVerifyToken(parId, tenantId);
+  const bytes = await renderDosarPagesPdf(buildParFormDefinition(data, token ? { token } : null));
   c.header("Content-Type", "application/pdf");
   c.header("Content-Disposition", contentDisposition("attachment", parFormFileName(par.requestNo, parId)));
   return c.body(bytes);
+});
+
+// ─── Codul de verificare tipărit pe formular (PARVERIFY-001) ────────────────
+// Tokenul e singura parte STOCATĂ a dovezii de pe hârtie (codurile de semnătură se derivă), și e
+// stocat tocmai ca să poată fi RETRAS: o hârtie pierdută înseamnă un link public care circulă.
+
+/** GET /api/par/:id/verify-code — codul curent și linkul lui. Aceleași drepturi ca formularul. */
+parRoutes.get("/:id/verify-code", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await canViewPar(user, tenantId, par))) return c.json({ error: "forbidden" }, 403);
+
+  const rows = await db
+    .select({
+      token: parVerifyTokens.token,
+      revokedAt: parVerifyTokens.revokedAt,
+      scanCount: parVerifyTokens.scanCount,
+      lastUsedAt: parVerifyTokens.lastUsedAt,
+    })
+    .from(parVerifyTokens)
+    .where(and(eq(parVerifyTokens.parId, parId), eq(parVerifyTokens.tenantId, tenantId)));
+  const row = rows[0];
+  // Fără token înseamnă doar că formularul n-a fost tipărit încă — nu o eroare.
+  if (!row) return c.json({ issued: false });
+
+  const data = await loadParFormData(parId, tenantId);
+  return c.json({
+    issued: true,
+    code: formatToken(row.token),
+    url: data ? verifyUrl(row.token, stateFingerprint(data)) : null,
+    revokedAt: row.revokedAt,
+    scanCount: row.scanCount,
+    lastUsedAt: row.lastUsedAt,
+  });
+});
+
+/**
+ * POST /api/par/:id/verify-code — `revoke` închide linkul, `reissue` emite altul.
+ *
+ * Doar par_admin: retragerea invalidează toate hârtiile tipărite până acum, inclusiv cele dintr-un
+ * dosar de audit deja predat. `reissue` e pentru cazul opus — codul a circulat unde nu trebuia, dar
+ * documentul rămâne valabil: se tipărește din nou, cu alt cod, iar hârtiile vechi nu mai deschid
+ * nimic.
+ */
+parRoutes.post("/:id/verify-code", zValidator("json", z.object({ action: z.enum(["revoke", "reissue"]) })), async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+  const { action } = c.req.valid("json");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  const roles = await getUserPARRoles(user.id, tenantId);
+  if (!roles.includes("par_admin")) {
+    return c.json({ error: "forbidden: only par_admin can manage the verification code" }, 403);
+  }
+
+  if (action === "revoke") {
+    await db
+      .update(parVerifyTokens)
+      .set({ revokedAt: new Date(), revokedBy: user.id })
+      .where(and(eq(parVerifyTokens.parId, parId), eq(parVerifyTokens.tenantId, tenantId)));
+    return c.json({ revoked: true });
+  }
+
+  // `reissue` scrie peste rândul existent (indexul pe par_id e unic), deci vechiul token dispare
+  // din bază — nu rămâne un al doilea link valid în urmă.
+  const token = newVerifyToken();
+  const updated = await db
+    .update(parVerifyTokens)
+    .set({ token, revokedAt: null, revokedBy: null, scanCount: 0, lastUsedAt: null })
+    .where(and(eq(parVerifyTokens.parId, parId), eq(parVerifyTokens.tenantId, tenantId)))
+    .returning({ token: parVerifyTokens.token });
+  if (!updated[0]) {
+    await db.insert(parVerifyTokens).values({ tenantId, parId, token }).onConflictDoNothing();
+  }
+  return c.json({ issued: true, code: formatToken(token) });
 });
 
 // ─── GET /api/par/:id/dosar ─────────────────────────────────────────────────

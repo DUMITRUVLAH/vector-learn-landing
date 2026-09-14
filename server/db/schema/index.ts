@@ -47,6 +47,8 @@ export * from "./paymentAccountItems";
 export * from "./par";
 export * from "./parEinvoices";
 export * from "./parVendorProfile";
+// PARVERIFY-001 — tokenul din QR-ul tipărit pe formularul PAR
+export * from "./parVerifyTokens";
 // FinVat
 export * from "./finVatImports";
 // CRM schema kept for FinDesk cross-references (finLedger, finBankLink, finGdpr etc.)

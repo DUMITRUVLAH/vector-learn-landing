@@ -22,6 +22,17 @@ if ("serviceWorker" in navigator) {
   }
 }
 
+// PARVERIFY-001: `finflow.best/verify` tastat de mână ajunge la pagina de verificare.
+//
+// Adresa asta e TIPĂRITĂ pe formularul PAR, pentru cel care nu poate scana codul QR (fotocopie
+// ștearsă, telefon fără cameră). Aplicația rutează însă pe hash, deci o cale fără `#` ar cădea în
+// fallback-ul SPA și ar redirecționa spre `/business` — adică fix omul care n-a putut scana ar
+// ajunge la un ecran de login. Traducerea se face aici, înainte de primul render, ca ecranul
+// greșit să nu apuce să clipească.
+if (/^\/verify\/?$/.test(window.location.pathname) && !window.location.hash) {
+  window.location.replace("/#/verificare");
+}
+
 // PLATFORM-002: excepțiile globale și promisiunile respinse ajung în Consola Platformă.
 // Instalat înainte de randare, ca să prindă și ce crapă la primul render.
 installGlobalErrorReporting();

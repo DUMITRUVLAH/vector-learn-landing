@@ -87,6 +87,7 @@ const PlatformConsolePage = lazyWithTimeout(() => import("./pages/business/platf
 // SHELL-503: PAR invite acceptance (public — no auth guard)
 const InvitePage = lazyWithTimeout(() => import("./pages/business/InvitePage").then((m) => ({ default: m.InvitePage })));
 const WelcomePage = lazyWithTimeout(() => import("./pages/business/WelcomePage").then((m) => ({ default: m.WelcomePage })));
+const ParVerifyPage = lazyWithTimeout(() => import("./pages/par/ParVerifyPage").then((m) => ({ default: m.ParVerifyPage })));
 // Pagini publice de feature — /business/features/<slug>. Un singur chunk pentru toate
 // (shell + conținut), încărcat doar când cineva chiar deschide o astfel de pagină.
 const FeatureRoute = lazyWithTimeout(() => import("./pages/business/features/FeatureRoute").then((m) => ({ default: m.FeatureRoute })));
@@ -192,6 +193,11 @@ function Routes() {
     const qs = qIdx !== -1 ? window.location.hash.slice(qIdx) : "";
     return <RedirectHash to={`/business/invite${qs}`} />;
   }
+
+  // PARVERIFY-001: verificarea unui formular PAR tipărit, deschisă prin codul QR de pe hârtie.
+  // PUBLICĂ și ÎNAINTEA oricărei gărzi: cel care scanează e adesea un contabil sau un auditor fără
+  // cont în platformă, iar un ecran de login aici ar face codul inutil exact pentru el.
+  if (path.startsWith("/verificare")) return <ParVerifyPage />;
 
   // SHELL-503: PAR invite acceptance page — PUBLIC (no BusinessGuard).
   // Must be before BusinessGuard so unauthenticated invitees can land here.

@@ -79,6 +79,7 @@ import { parVendorsRoutes } from "./routes/parVendors";
 import { parVendorProfileRoutes } from "./routes/parVendorProfile";
 import { parSettingsRoutes } from "./routes/parSettings";
 import { parDriveRoutes, parDriveCronRoutes } from "./routes/parDrive";
+import { parPublicVerifyRoutes } from "./routes/parPublicVerify";
 import { parRoutes } from "./routes/par";
 import { parFxRoutes } from "./routes/parFx";
 import { parAttachmentsRoutes } from "./routes/parAttachments";
@@ -282,6 +283,12 @@ app.route("/api/fin/cron", finCronRoutes);
 // PAR-DRIVE: ÎN AFARA lui /api/par — acolo `app.use("/api/par/*", requireAuth)` ar da 401 unui
 // cron care nu are (și nu poate avea) sesiune de browser. Apărarea lui e CRON_SECRET.
 app.route("/api/cron/par-drive", parDriveCronRoutes);
+
+// PARVERIFY-001: verificarea unui formular PAR tipărit, prin codul QR de pe hârtie. Ca și cronul
+// de mai sus, stă ÎN AFARA lui /api/par — acolo `app.use("/api/par/*", requireAuth)` i-ar da 401
+// fix omului pentru care e făcută: contabilul sau auditorul care n-are cont în platformă.
+// Apărarea ei e tokenul de 80 de biți + limitarea de rată + un răspuns fără date de plată.
+app.route("/api/public/par", parPublicVerifyRoutes);
 
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);

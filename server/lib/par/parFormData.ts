@@ -50,7 +50,13 @@ export interface ParFormSignature {
 }
 
 export interface ParFormData {
+  /** Id-ul cererii — intră în codurile de semnătură (`lib/par/verifyCodes.ts`), ca același rând
+   *  de aprobare pe două cereri diferite să nu dea același cod tipărit. */
+  parId: string;
   requestNo: string | null;
+  /** Starea cererii, parte din amprenta tipărită: o hârtie „approved" a unei cereri respinse
+   *  ulterior trebuie să iasă ca nepotrivită la scanare. */
+  status: string;
   /** VM5-17: momentul depunerii și al aprobării, ca formularul tipărit să poarte ștampilă de timp. */
   submittedAt: Date | string | null;
   approvedAt: Date | string | null;
@@ -158,7 +164,9 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
     (id && profileRows.find((p) => p.userId === id)?.jobTitle) || null;
 
   return {
+    parId: par.id,
     requestNo: par.requestNo,
+    status: par.status,
     submittedAt: par.submittedAt,
     approvedAt: par.approvedAt,
     dateOfRequest: par.dateOfRequest,
