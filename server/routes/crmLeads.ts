@@ -71,6 +71,11 @@ const LEAD_COLS = {
   valueCents: leads.valueCents,
   assignedTo: leads.assignedTo,
   lostReason: leads.lostReason,
+  // Consimțământul: fișa trebuie să poată spune „nu mai suna omul ăsta" (cerința 63). Coloanele
+  // există din migrarea inițială, deci nu lărgesc suprafața de rupere despre care e comentariul
+  // de mai sus.
+  consentAt: leads.consentAt,
+  consentRevokedAt: leads.consentRevokedAt,
   createdAt: leads.createdAt,
   updatedAt: leads.updatedAt,
 } as const;

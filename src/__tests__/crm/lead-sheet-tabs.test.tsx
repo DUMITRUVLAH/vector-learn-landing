@@ -52,10 +52,14 @@ const enrollCrmLeadInCadence = vi.fn();
 const listCrmAudit = vi.fn().mockResolvedValue({ items: [] });
 
 vi.mock("@/lib/api/crm", () => ({
+  // Panoul GDPR din fila „Detalii".
+  crmGdprExportUrl: (id: string) => `/api/crm/gdpr/export/${id}`,
+  anonymizeCrmLead: vi.fn(),
+  revokeCrmLeadConsent: vi.fn().mockResolvedValue({ ok: true, consentRevokedAt: "2026-09-14T10:00:00.000Z" }),
   // Catalogul de produse: fișa îl cere pentru select-ul „Produs".
   listCrmProducts: vi.fn().mockResolvedValue({ items: [] }),
   // Drepturile utilizatorului: ecranele CRM le cer ca să știe ce butoane să arate.
-  getCrmPermissions: vi.fn().mockResolvedValue({ role: "admin", permissions: ["leads.view_all", "leads.edit", "pipelines.manage", "products.manage", "cadences.manage", "automations.manage", "assignment.manage", "audit.view"] }),
+  getCrmPermissions: vi.fn().mockResolvedValue({ role: "admin", permissions: ["leads.view_all", "leads.edit", "leads.delete", "pipelines.manage", "products.manage", "cadences.manage", "automations.manage", "assignment.manage", "audit.view"] }),
   getCrmLeadDetail: (...a: unknown[]) => getCrmLeadDetail(...a),
   listCrmLeadContacts: (...a: unknown[]) => listCrmLeadContacts(...a),
   createCrmLeadContact: (...a: unknown[]) => createCrmLeadContact(...a),
@@ -316,5 +320,37 @@ describe("Modificările din fișă", () => {
 
     await screen.findByText(/Nicio altă cerere/);
     expect(screen.queryByText("Modificări în fișă")).not.toBeInTheDocument();
+  });
+});
+
+describe("Drepturile persoanei (GDPR) pe fișă", () => {
+  it("[blocant] cele trei drepturi sunt în „Detalii”, unde se uită omul când primește cererea", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    listCrmCustomFields.mockResolvedValue({ items: [] });
+    listCrmLeadFieldValues.mockResolvedValue({ items: [] });
+
+    renderSheet();
+    fireEvent.click(await screen.findByRole("tab", { name: "Detalii" }));
+
+    // Exportul e un link, nu un buton: serverul trimite un fișier.
+    const exportLink = await screen.findByRole("link", { name: /Exportă datele/i });
+    expect(exportLink).toHaveAttribute("href", "/api/crm/gdpr/export/lead-1");
+    expect(screen.getByRole("button", { name: /Retrage consimțământul/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Șterge datele personale/i })).toBeInTheDocument();
+  });
+
+  it("[blocant] un lead cu consimțământ retras o SPUNE, ca să nu-l mai sune nimeni", async () => {
+    const detail = makeDetail();
+    detail.lead = { ...detail.lead, consentRevokedAt: "2026-09-10T10:00:00.000Z" };
+    getCrmLeadDetail.mockResolvedValue(detail);
+    listCrmCustomFields.mockResolvedValue({ items: [] });
+    listCrmLeadFieldValues.mockResolvedValue({ items: [] });
+
+    renderSheet();
+    fireEvent.click(await screen.findByRole("tab", { name: "Detalii" }));
+
+    expect(await screen.findByText(/Consimțământ retras/)).toBeInTheDocument();
+    // Butonul de retragere dispare: nu se retrage de două ori.
+    expect(screen.queryByRole("button", { name: /Retrage consimțământul/i })).not.toBeInTheDocument();
   });
 });

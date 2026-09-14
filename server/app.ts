@@ -140,6 +140,7 @@ import { crmAuditRoutes } from "./routes/crmAudit";
 import { crmPermissionsRoutes } from "./routes/crmPermissions";
 import { crmIntakeRoutes } from "./routes/crmIntake";
 import { crmCaptureSourcesRoutes } from "./routes/crmCaptureSources";
+import { crmGdprRoutes } from "./routes/crmGdpr";
 import { crmReportsRoutes } from "./routes/crmReports";
 import { crmCompaniesRoutes } from "./routes/crmCompanies";
 import { crmTagsRoutes } from "./routes/crmTags";
@@ -429,6 +430,7 @@ app.route("/api/crm/cadences", crmCadencesRoutes);
 app.route("/api/crm/audit", crmAuditRoutes);
 app.route("/api/crm/permissions", crmPermissionsRoutes);
 app.route("/api/crm/capture-sources", crmCaptureSourcesRoutes);
+app.route("/api/crm/gdpr", crmGdprRoutes);
 // PUBLIC (cerința 68): formularele de pe site-ul clientului creează leaduri fără sesiune.
 // Apărarea: tokenul formularului, lista de origini permise și limitarea pe IP de mai jos.
 app.use("/api/crm/intake/*", expensiveRateLimit);

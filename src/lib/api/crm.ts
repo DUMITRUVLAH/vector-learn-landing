@@ -57,6 +57,10 @@ export interface CrmLead {
   assignedTo: string | null;
   /** Obligatoriu doar când `stage === "lost"` — serverul respinge altfel (400 `lost_reason_required`). */
   lostReason: string | null;
+  /** Când și-a dat consimțământul (formular web). */
+  consentAt?: string | null;
+  /** Când l-a retras. Nenul = leadul NU mai poate fi contactat comercial. */
+  consentRevokedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1071,4 +1075,21 @@ export function updateCrmCaptureSource(
 
 export function deleteCrmCaptureSource(id: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/api/crm/capture-sources/${id}`, { method: "DELETE" });
+}
+
+// ─── Drepturile persoanei (GDPR) pe fișa leadului ──────────────────────────────
+
+/** Deschide exportul JSON într-o filă nouă — serverul îl trimite ca fișier. */
+export function crmGdprExportUrl(leadId: string): string {
+  return `/api/crm/gdpr/export/${leadId}`;
+}
+
+/** Șterge datele personale, păstrând faptele comerciale. Ireversibil. Cere `leads.delete`. */
+export function anonymizeCrmLead(leadId: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/gdpr/anonymize/${leadId}`, { method: "POST" });
+}
+
+/** „Nu mă mai contactați" — nu șterge nimic, doar marchează. */
+export function revokeCrmLeadConsent(leadId: string): Promise<{ ok: true; consentRevokedAt: string }> {
+  return api<{ ok: true; consentRevokedAt: string }>(`/api/crm/gdpr/revoke/${leadId}`, { method: "POST" });
 }

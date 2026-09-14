@@ -21,7 +21,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 
 | Nr. | Cerință | Conform | Observații |
 |---|---|---|---|
-| 1 | Import masiv Excel/CSV, mapare configurabilă | **Parțial** | CSV complet, cu previzualizare înainte de scriere și mapări salvate per workspace (`crm_import_mappings`). `.xlsx` nu se citește direct — din Excel: „Salvează ca" → CSV. Fișierele cu punct-și-virgulă (formatul Excel în română) sunt recunoscute. Adăugarea `.xlsx` = o dependință (SheetJS) + ~1 zi. |
+| 1 | Import masiv Excel/CSV, mapare configurabilă | **Da** | CSV, TSV, text lipit ȘI `.xlsx`/`.xls`, cu previzualizare înainte de scriere și mapări salvate per workspace. Registrul se citește pe server (`exceljs`, dependință deja existentă — nu SheetJS, care are istoric de CVE-uri); browserul nu parsează Excel, ca să nu plătească toată lumea 800 KB de bibliotecă pentru o funcție lunară. |
 | 2 | Introducere manuală cu validare | **Da** | Numele minim 2 caractere, emailul validat, restul opțional — un formular care cere zece câmpuri la primul contact nu se completează. |
 | 3 | Identificarea și eliminarea duplicatelor | **Da** | Scor pe telefon/email/nume normalizate, cu motivele potrivirii afișate; unificare fără pierdere de istoric. |
 | 4 | Segmentare (industrie, regiune, mărime, consum, produs, sursă) | **Parțial** | Firmele au industrie, regiune, mărime și consum anual (kWh); leadurile au sursă și, de la 0170, produs din catalog. Filtrarea pe consum/mărime direct din tabla de leaduri nu există încă — se face din modulul Clienți. |
@@ -48,7 +48,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | 15 | Planificare din fișa clientului | **Da** | |
 | 16 | Înregistrarea rezultatului apelului | **Da** | Rezultat + durată, în cronologie. |
 | 17 | „Next Action" obligatoriu la finalizarea activității | **Parțial** | După un apel notat, fișa semnalează pe loc dacă leadul rămâne fără pas următor. Nu blochează — apelul s-a întâmplat deja; blocarea mută problema în „nu mai notez apelurile". |
-| 18 | Notificări automate pentru task-uri restante (in-app, e-mail) | **Parțial** | In-app: da (clopoțel cu insignă). Pe e-mail: nu încă — infrastructura de trimitere există (se folosește la oferte și la digestul PAR), lipsește doar cronul de digest pentru CRM. |
+| 18 | Notificări automate pentru task-uri restante (in-app, e-mail) | **Da** | In-app: clopoțel cu insignă. Pe e-mail: digest zilnic la 08:00 local, cu taskurile restante ale fiecărui agent. Fereastra orară se decide în cod (cronul lovește în UTC), iar un digest deja trimis îl oprește pe al doilea — oricâte ori ar rula. |
 | 19 | Manager vede activitatea echipei în timp real | **Da** | Fluxul de comunicare al echipei + „Azi" filtrat pe agent. |
 
 ## 4.4 Telefonie și înregistrarea apelurilor
@@ -133,7 +133,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | 60 | Drepturi diferențiate, configurabile per rol/utilizator | **Parțial** | Diferențiate per rol, da (14 drepturi, verificate pe server). Configurabile per UTILIZATOR din interfață: nu — matricea e cod, nu date. |
 | 61 | Jurnalizare (audit log) | **Da** | Leaduri, pâlnii, etape, cadențe, reguli, câmpuri — cu cine, când și ce s-a schimbat. |
 | 62 | Backup periodic, cu restaurare | **Parțial** | Asigurat de furnizorul de bază de date (backup zilnic, restaurare punctuală). Nu e o funcție a aplicației; se documentează în oferta tehnică. |
-| 63 | Conformitate GDPR / legislația RM | **Parțial** | Consimțământ cu dată, IP și text, revocabil; ștergere/export la cerere există în modulul GDPR al produsului, dar nu e expus pe fișa leadului din CRM. |
+| 63 | Conformitate GDPR / legislația RM | **Da** | Pe fișa leadului: export JSON al tuturor datelor (acces + portabilitate), retragerea consimțământului (nu șterge nimic — e alt drept) și ștergerea datelor personale prin anonimizare. Anonimizarea scoate numele, telefonul, emailul, notele și contactele, dar păstrează valoarea, etapa și motivul pierderii: sunt fapte ale firmei, nu date ale persoanei — altfel rapoartele de anul trecut s-ar schimba retroactiv. |
 
 ## 4.12 Integrări și API
 
@@ -166,8 +166,8 @@ Toate cele 76 de cerințe din Anexa B sunt acoperite mai sus, în ordinea din ca
 
 | Conform | Număr | Procent |
 |---|---|---|
-| Da | 48 | 63% |
-| Parțial | 21 | 28% |
+| Da | 51 | 67% |
+| Parțial | 18 | 24% |
 | Nu | 7 | 9% |
 
 Cele șapte „Nu" rămase sunt, toate, același lucru: **telefonia (20, 22, 23, 25, 65) și mesageria

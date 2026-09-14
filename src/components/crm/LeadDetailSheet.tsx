@@ -80,6 +80,7 @@ import { LeadPersonHistoryTab } from "@/components/crm/LeadPersonHistoryTab";
 import { LeadCustomFields } from "@/components/crm/LeadCustomFields";
 import { LeadCadencePanel } from "@/components/crm/LeadCadencePanel";
 import { LeadAuditTrail } from "@/components/crm/LeadAuditTrail";
+import { LeadGdprPanel } from "@/components/crm/LeadGdprPanel";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 export interface LeadDetailSheetToast {
@@ -1071,6 +1072,19 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
                 <Separator />
 
                 <LeadCustomFields leadId={lead.id} onToast={onToast} />
+
+                <Separator />
+
+                {/* Drepturile persoanei stau AICI, sub datele ei — nu într-un ecran de setări pe
+                    care nimeni nu-l deschide în timpul unei conversații cu clientul. */}
+                <LeadGdprPanel
+                  lead={lead}
+                  onToast={onToast}
+                  onChanged={() => {
+                    void refetchDetail();
+                    onChanged();
+                  }}
+                />
               </div>
             )}
 
