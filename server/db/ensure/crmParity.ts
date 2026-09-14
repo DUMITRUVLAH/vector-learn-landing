@@ -151,12 +151,12 @@ export const CRM_PARITY_ENSURE_STATEMENTS: string[] = [
     CONSTRAINT "crm_reeng_runs_rule_lead_uniq" UNIQUE("rule_id","lead_id")
   )`,
 
-  // ── Produsul și probabilitatea pe oportunitate (migrarea 0170) ─────────────
+  // ── Produsul și probabilitatea pe oportunitate (migrarea 0171) ─────────────
   `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "product_id" uuid`,
   `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "probability_pct" integer`,
   `CREATE INDEX IF NOT EXISTS "leads_product_idx" ON "leads" ("tenant_id","product_id")`,
 
-  // ── Captarea lead-urilor de pe site (migrarea 0171) ─────────────────────────
+  // ── Captarea lead-urilor de pe site (migrarea 0172) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS "crm_capture_sources" (
     "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
     "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,

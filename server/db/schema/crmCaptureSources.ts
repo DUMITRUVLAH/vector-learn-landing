@@ -13,7 +13,7 @@
  * `allowed_origins` limitează de pe ce domenii se acceptă cererea. Gol = orice origine — cazul
  * unui formular server-side, unde nu există `Origin`.
  *
- * Migrare: drizzle/0171_crm_capture_sources.sql
+ * Migrare: drizzle/0172_crm_capture_sources.sql
  */
 import { pgTable, uuid, varchar, boolean, timestamp, integer, jsonb, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";

@@ -38,7 +38,7 @@ export const leads = pgTable(
     email: varchar("email", { length: 255 }),
     emailNormalized: varchar("email_normalized", { length: 255 }),
     interestCourse: varchar("interest_course", { length: 200 }),
-    /** Produsul/serviciul vândut, din catalogul `crm_products` (migrarea 0170).
+    /** Produsul/serviciul vândut, din catalogul `crm_products` (migrarea 0171).
      *  Până acum „produsul" unui lead era textul liber din `interest_course`, iar raportul „pe
      *  produs" grupa după ce a tastat fiecare — „Panouri 10kW", „panouri 10 kw" și „PV 10" erau
      *  trei produse diferite. `interest_course` rămâne, ca notă a ce a cerut clientul; deciziile

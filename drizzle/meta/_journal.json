@@ -1205,13 +1205,6 @@
       "when": 1787000203026,
       "tag": "0172_crm_capture_sources",
       "breakpoints": true
-    },
-    {
-      "idx": 171,
-      "version": "7",
-      "when": 1787000203025,
-      "tag": "0171_crm_capture_sources",
-      "breakpoints": true
     }
   ]
 }
