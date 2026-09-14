@@ -320,3 +320,185 @@ export function archiveCrmProduct(id: string): Promise<CrmProduct> {
 export function restoreCrmProduct(id: string): Promise<CrmProduct> {
   return api<CrmProduct>(`/api/crm/products/${id}/restore`, { method: "POST" });
 }
+
+// ─── Taskuri pe lead ────────────────────────────────────────────────────────────
+
+/** open = de făcut · done = încheiat (are `completedAt`) · snoozed = amânat (scadență împinsă). */
+export type CrmTaskStatus = "open" | "done" | "snoozed";
+
+export interface CrmLeadTask {
+  id: string;
+  tenantId: string;
+  leadId: string;
+  title: string;
+  dueAt: string | null;
+  status: CrmTaskStatus;
+  assignedTo: string | null;
+  createdBy: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Task „upcoming" (clopoțel remindere) — cu numele lead-ului alăturat de server. */
+export interface CrmUpcomingTask extends CrmLeadTask {
+  leadFullName: string;
+  leadDealName: string | null;
+}
+
+export interface ListCrmLeadTasksResponse {
+  items: CrmLeadTask[];
+}
+
+export function listCrmLeadTasks(leadId: string): Promise<ListCrmLeadTasksResponse> {
+  return api<ListCrmLeadTasksResponse>(`/api/crm/tasks?leadId=${leadId}`);
+}
+
+export interface ListCrmUpcomingTasksResponse {
+  items: CrmUpcomingTask[];
+}
+
+export function listCrmUpcomingTasks(): Promise<ListCrmUpcomingTasksResponse> {
+  return api<ListCrmUpcomingTasksResponse>("/api/crm/tasks?scope=upcoming");
+}
+
+export interface CreateCrmLeadTaskBody {
+  leadId: string;
+  title: string;
+  dueAt?: string | null;
+  assignedTo?: string | null;
+}
+
+export function createCrmLeadTask(body: CreateCrmLeadTaskBody): Promise<CrmLeadTask> {
+  return api<CrmLeadTask>("/api/crm/tasks", { method: "POST", body: JSON.stringify(body) });
+}
+
+export type UpdateCrmLeadTaskBody = Partial<Pick<CreateCrmLeadTaskBody, "title" | "dueAt" | "assignedTo">>;
+
+export function updateCrmLeadTask(id: string, body: UpdateCrmLeadTaskBody): Promise<CrmLeadTask> {
+  return api<CrmLeadTask>(`/api/crm/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function completeCrmLeadTask(id: string): Promise<CrmLeadTask> {
+  return api<CrmLeadTask>(`/api/crm/tasks/${id}/complete`, { method: "POST" });
+}
+
+export function reopenCrmLeadTask(id: string): Promise<CrmLeadTask> {
+  return api<CrmLeadTask>(`/api/crm/tasks/${id}/reopen`, { method: "POST" });
+}
+
+/** Împinge scadența înainte cu `days` zile — NU o șterge (vezi server/routes/crmTasks.ts). */
+export function snoozeCrmLeadTask(id: string, days: number): Promise<CrmLeadTask> {
+  return api<CrmLeadTask>(`/api/crm/tasks/${id}/snooze`, { method: "POST", body: JSON.stringify({ days }) });
+}
+
+export function deleteCrmLeadTask(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/tasks/${id}`, { method: "DELETE" });
+}
+
+// ─── „Azi" — cele 4 gălețile de lucru ale zilei ────────────────────────────────
+
+/** Coloanele de lead necesare pentru un rând din „Azi" — nu fișa completă. */
+export interface CrmTodayLead {
+  id: string;
+  fullName: string;
+  dealName: string | null;
+  phone: string | null;
+  company: string | null;
+  stage: string;
+  assignedTo: string | null;
+  valueCents: number;
+  createdAt: string;
+}
+
+export interface CrmTodayResponse {
+  /** Taskuri deschise, restante — cele mai restante primele. */
+  overdueTasks: Array<{ lead: CrmTodayLead; task: CrmLeadTask }>;
+  /** Lead-uri noi, fără nicio interacțiune. */
+  uncontacted: CrmTodayLead[];
+  /** Lead-uri active, fără niciun task deschis. */
+  noNextStep: CrmTodayLead[];
+  /** Lead-uri active, neatinse de peste 3 zile. */
+  neglected: CrmTodayLead[];
+}
+
+/** `ownerId` = un singur agent (fiecare vede DOAR lead-urile lui); absent = toată echipa. */
+export function getCrmToday(ownerId?: string): Promise<CrmTodayResponse> {
+  return api<CrmTodayResponse>(`/api/crm/tasks/today${ownerId ? `?owner=${ownerId}` : ""}`);
+}
+
+// ─── Motive de pierdere (configurabile per tenant) ─────────────────────────────
+
+export interface CrmLostReason {
+  id: string;
+  tenantId: string;
+  label: string;
+  orderIndex: number;
+  createdAt: string;
+}
+
+export interface ListCrmLostReasonsResponse {
+  items: CrmLostReason[];
+}
+
+/** Prima citire seamănă automat 6 motive implicite în română, dacă tenantul n-are încă niciunul. */
+export function listCrmLostReasons(): Promise<ListCrmLostReasonsResponse> {
+  return api<ListCrmLostReasonsResponse>("/api/crm/lost-reasons");
+}
+
+export function createCrmLostReason(label: string): Promise<CrmLostReason> {
+  return api<CrmLostReason>("/api/crm/lost-reasons", { method: "POST", body: JSON.stringify({ label }) });
+}
+
+export function updateCrmLostReason(id: string, label: string): Promise<CrmLostReason> {
+  return api<CrmLostReason>(`/api/crm/lost-reasons/${id}`, { method: "PATCH", body: JSON.stringify({ label }) });
+}
+
+export function deleteCrmLostReason(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/lost-reasons/${id}`, { method: "DELETE" });
+}
+
+/** `ids` = ordinea completă, nouă. Întoarce lista rescrisă, ca UI-ul optimist să se realinieze. */
+export function reorderCrmLostReasons(ids: string[]): Promise<ListCrmLostReasonsResponse> {
+  return api<ListCrmLostReasonsResponse>("/api/crm/lost-reasons/reorder", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+// ─── Etichete pe lead (tags) ────────────────────────────────────────────────────
+
+export interface CrmLeadTag {
+  id: string;
+  tenantId: string;
+  leadId: string;
+  tag: string;
+  createdAt: string;
+}
+
+export interface ListCrmLeadTagsResponse {
+  items: CrmLeadTag[];
+}
+
+export function listCrmLeadTags(leadId: string): Promise<ListCrmLeadTagsResponse> {
+  return api<ListCrmLeadTagsResponse>(`/api/crm/tags?leadId=${leadId}`);
+}
+
+export interface ListCrmTagSuggestionsResponse {
+  items: string[];
+}
+
+/** Etichetele distincte ale tenantului (tot ce s-a folosit deja pe orice lead) — pentru autocomplete. */
+export function listCrmTagSuggestions(): Promise<ListCrmTagSuggestionsResponse> {
+  return api<ListCrmTagSuggestionsResponse>("/api/crm/tags/suggestions");
+}
+
+/** Idempotent: dacă eticheta există deja pe lead, serverul întoarce rândul existent (200) — nu-l
+ *  dublează. */
+export function addCrmLeadTag(leadId: string, tag: string): Promise<CrmLeadTag> {
+  return api<CrmLeadTag>("/api/crm/tags", { method: "POST", body: JSON.stringify({ leadId, tag }) });
+}
+
+export function removeCrmLeadTag(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/tags/${id}`, { method: "DELETE" });
+}

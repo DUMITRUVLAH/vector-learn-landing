@@ -52,7 +52,7 @@ const CRM_MODULES: CrmModuleTile[] = [
     description: "Ce ai de sunat, scris sau urmărit azi — dintr-o singură privire.",
     href: "/business/crm/astazi",
     icon: CalendarClock,
-    available: false,
+    available: true,
   },
   {
     id: "clienti",

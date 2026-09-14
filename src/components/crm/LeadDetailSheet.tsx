@@ -3,12 +3,13 @@
  * Anatomie & click-map de referință: `backlog/crm/CRM-CORE.md` §6 (acolo e pagina completă
  * `/app/leads/:id`; aici e varianta „quick-view" din board, cerută pentru Faza 1).
  *
- * Secțiuni, de sus în jos: Antet (nume/companie/etapă/valoare) → Acțiuni rapide (tel/mailto +
- * mutare etapă) → Detalii (formular editabil, salvare optimistă) → Activitate (timeline +
- * notă nouă + acțiunea rapidă „Am sunat").
+ * Secțiuni, de sus în jos: Antet (nume/companie/etapă/valoare/etichete) → Acțiuni rapide
+ * (tel/mailto + mutare etapă) → Taskuri (de făcut pe lead, cu scadență) → Detalii (formular
+ * editabil, salvare optimistă) → Activitate (timeline + notă nouă + acțiunea rapidă „Am sunat").
  *
- * Fișa își încarcă singură datele (`GET /api/crm/leads/:id/detail`) la fiecare deschidere —
- * nu depinde de cardul din board, ca să poată fi refolosită și dintr-o listă/căutare viitoare.
+ * Fișa își încarcă singură datele (`GET /api/crm/leads/:id/detail` + taskuri + etichete) la
+ * fiecare deschidere — nu depinde de cardul din board, ca să poată fi refolosită și dintr-o
+ * listă/căutare viitoare.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -22,6 +23,12 @@ import {
   Calendar,
   ArrowRightLeft,
   Info,
+  Plus,
+  Trash2,
+  Clock,
+  Check,
+  Undo2,
+  X,
 } from "lucide-react";
 import { Sheet, Button, Input, Label, Select, Textarea, Badge, Alert, Skeleton, Separator } from "@/components/ds";
 import { cn } from "@/lib/utils";
@@ -30,6 +37,16 @@ import {
   updateCrmLead,
   moveCrmLeadStage,
   createCrmLeadInteraction,
+  listCrmLeadTasks,
+  createCrmLeadTask,
+  completeCrmLeadTask,
+  reopenCrmLeadTask,
+  snoozeCrmLeadTask,
+  deleteCrmLeadTask,
+  listCrmLeadTags,
+  addCrmLeadTag,
+  removeCrmLeadTag,
+  listCrmTagSuggestions,
   type CrmLead,
   type CrmLeadDetailResponse,
   type CrmLeadInteraction,
@@ -37,6 +54,8 @@ import {
   type CrmLeadSource,
   type CrmStage,
   type UpdateCrmLeadBody,
+  type CrmLeadTask,
+  type CrmLeadTag,
 } from "@/lib/api/crm";
 import { CRM_SOURCE_LABEL, crmStageLabel, stageColorClasses } from "@/components/crm/constants";
 import { formatCents, leadValueToCents, leadTitle, emptyToNull } from "@/components/crm/format";
@@ -54,7 +73,9 @@ export interface LeadDetailSheetProps {
   /** Etapele curente ale pipeline-ului (aceleași cu cele din board) — populează select-ul de mutare. */
   stages: readonly CrmStage[];
   onClose: () => void;
-  /** Apelat după orice mutație persistată cu succes (etapă sau detalii) — board-ul se reîncarcă silențios. */
+  /** Apelat după orice mutație persistată cu succes (etapă, detalii sau taskuri) — ecranul
+   *  apelant se reîncarcă silențios. Etichetele NU declanșează `onChanged` — nu afectează nicio
+   *  gălețică/coloană din ecranele care folosesc fișa (board, „Azi"). */
   onChanged: () => void;
   onToast: (toast: LeadDetailSheetToast) => void;
 }
@@ -89,6 +110,30 @@ function formatInteractionDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatTaskDue(iso: string): string {
+  return new Date(iso).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function isTaskOverdue(task: CrmLeadTask): boolean {
+  return task.status === "open" && !!task.dueAt && new Date(task.dueAt) < new Date();
+}
+
+/** Taskurile deschise/amânate primele (după scadență, fără scadență la urmă), cele încheiate
+ *  ultimele — ca lista să nu se umple de rânduri bifate în timp ce cauți ce mai ai de făcut. */
+function sortTasksForDisplay(tasks: CrmLeadTask[]): CrmLeadTask[] {
+  const pending = tasks
+    .filter((t) => t.status !== "done")
+    .sort((a, b) => {
+      if (!a.dueAt) return 1;
+      if (!b.dueAt) return -1;
+      return a.dueAt < b.dueAt ? -1 : 1;
+    });
+  const done = tasks
+    .filter((t) => t.status === "done")
+    .sort((a, b) => ((a.completedAt ?? "") < (b.completedAt ?? "") ? 1 : -1));
+  return [...pending, ...done];
 }
 
 interface DetailFormState {
@@ -136,6 +181,21 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
   const [addingNote, setAddingNote] = useState(false);
   const [loggingCall, setLoggingCall] = useState(false);
 
+  // Taskuri
+  const [tasks, setTasks] = useState<CrmLeadTask[]>([]);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [addingTask, setAddingTask] = useState(false);
+  /** id-ul taskului pe care rulează chiar acum o acțiune (bifare/amânare/ștergere) — dezactivează
+   *  DOAR rândul lui, nu toată lista. */
+  const [taskActionId, setTaskActionId] = useState<string | null>(null);
+
+  // Etichete
+  const [tags, setTags] = useState<CrmLeadTag[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [newTagText, setNewTagText] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
+
   const { members: teamMembers } = useTeamMembers();
 
   useEffect(() => {
@@ -148,17 +208,25 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
       setError(null);
       setNoteBody("");
       setPendingLostStage(null);
+      setTasks([]);
+      setNewTaskTitle("");
+      setNewTaskDueDate("");
+      setTags([]);
+      setNewTagText("");
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getCrmLeadDetail(leadId)
-      .then((res) => {
+    Promise.all([getCrmLeadDetail(leadId), listCrmLeadTasks(leadId), listCrmLeadTags(leadId), listCrmTagSuggestions()])
+      .then(([detailRes, tasksRes, tagsRes, suggestionsRes]) => {
         if (cancelled) return;
-        setDetail(res);
-        setInteractions(res.interactions);
-        setForm(toFormState(res.lead));
+        setDetail(detailRes);
+        setInteractions(detailRes.interactions);
+        setForm(toFormState(detailRes.lead));
+        setTasks(tasksRes.items);
+        setTags(tagsRes.items);
+        setTagSuggestions(suggestionsRes.items);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -176,11 +244,14 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
     if (!leadId) return;
     setLoading(true);
     setError(null);
-    getCrmLeadDetail(leadId)
-      .then((res) => {
-        setDetail(res);
-        setInteractions(res.interactions);
-        setForm(toFormState(res.lead));
+    Promise.all([getCrmLeadDetail(leadId), listCrmLeadTasks(leadId), listCrmLeadTags(leadId), listCrmTagSuggestions()])
+      .then(([detailRes, tasksRes, tagsRes, suggestionsRes]) => {
+        setDetail(detailRes);
+        setInteractions(detailRes.interactions);
+        setForm(toFormState(detailRes.lead));
+        setTasks(tasksRes.items);
+        setTags(tagsRes.items);
+        setTagSuggestions(suggestionsRes.items);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Nu am putut încărca leadul."))
       .finally(() => setLoading(false));
@@ -315,6 +386,107 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
     }
   }
 
+  // ─── Taskuri ─────────────────────────────────────────────────────────────
+
+  async function addTask() {
+    if (!leadId || !newTaskTitle.trim()) return;
+    setAddingTask(true);
+    try {
+      const created = await createCrmLeadTask({
+        leadId,
+        title: newTaskTitle.trim(),
+        // Ora fixă (prânz) evită ca o dată aleasă să „alunece" cu o zi din cauza fusului orar la
+        // conversia în UTC — un task „scadent azi" nu trebuie să pară scadent ieri sau mâine.
+        dueAt: newTaskDueDate ? new Date(`${newTaskDueDate}T12:00:00`).toISOString() : null,
+      });
+      setTasks((prev) => sortTasksForDisplay([...prev, created]));
+      setNewTaskTitle("");
+      setNewTaskDueDate("");
+      // Un task nou poate scoate lead-ul din „fără pas următor" pe orice ecran care arată „Azi".
+      onChanged();
+    } catch (err) {
+      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut adăuga taskul." });
+    } finally {
+      setAddingTask(false);
+    }
+  }
+
+  function replaceTask(updated: CrmLeadTask) {
+    setTasks((prev) => sortTasksForDisplay(prev.map((t) => (t.id === updated.id ? updated : t))));
+  }
+
+  async function toggleTaskDone(task: CrmLeadTask) {
+    setTaskActionId(task.id);
+    try {
+      const updated = task.status === "done" ? await reopenCrmLeadTask(task.id) : await completeCrmLeadTask(task.id);
+      replaceTask(updated);
+      // Un task încheiat iese din restanțe — ecranele care arată „Azi" trebuie să se resincronizeze.
+      onChanged();
+    } catch (err) {
+      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut actualiza taskul." });
+    } finally {
+      setTaskActionId(null);
+    }
+  }
+
+  async function snoozeTaskOneDay(task: CrmLeadTask) {
+    setTaskActionId(task.id);
+    try {
+      const updated = await snoozeCrmLeadTask(task.id, 1);
+      replaceTask(updated);
+      onToast({ kind: "success", message: "Task amânat cu o zi." });
+      onChanged();
+    } catch (err) {
+      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut amâna taskul." });
+    } finally {
+      setTaskActionId(null);
+    }
+  }
+
+  async function deleteTaskRow(task: CrmLeadTask) {
+    if (!confirm(`Ștergi taskul „${task.title}"?`)) return;
+    setTaskActionId(task.id);
+    try {
+      await deleteCrmLeadTask(task.id);
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      onChanged();
+    } catch (err) {
+      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut șterge taskul." });
+    } finally {
+      setTaskActionId(null);
+    }
+  }
+
+  // ─── Etichete ────────────────────────────────────────────────────────────
+
+  async function addTag() {
+    if (!leadId || !newTagText.trim()) return;
+    setAddingTag(true);
+    try {
+      const created = await addCrmLeadTag(leadId, newTagText.trim());
+      // Idempotent și pe server (nu dublează), dar verificăm și local — a doua adăugare a
+      // aceleiași etichete întoarce exact același `id`, nu trebuie să apară de două ori în listă.
+      setTags((prev) => (prev.some((t) => t.id === created.id) ? prev : [...prev, created]));
+      setTagSuggestions((prev) => (prev.includes(created.tag) ? prev : [...prev, created.tag].sort()));
+      setNewTagText("");
+    } catch (err) {
+      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut adăuga eticheta." });
+    } finally {
+      setAddingTag(false);
+    }
+  }
+
+  async function removeTagRow(tag: CrmLeadTag) {
+    const prev = tags;
+    setTags((cur) => cur.filter((t) => t.id !== tag.id));
+    try {
+      await removeCrmLeadTag(tag.id);
+    } catch (err) {
+      setTags(prev);
+      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut șterge eticheta." });
+    }
+  }
+
   const title = lead ? leadTitle(lead) : "Se încarcă...";
   const dirty = form && lead ? isFormDirty(form, lead) : false;
 
@@ -360,6 +532,63 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
               )}
             </div>
 
+            {/* Etichete */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-1.5" aria-label="Etichete">
+                {tags.map((t) => (
+                  <Badge key={t.id} variant="secondary" className="gap-1 pr-1">
+                    {t.tag}
+                    <button
+                      type="button"
+                      onClick={() => void removeTagRow(t)}
+                      aria-label={`Șterge eticheta ${t.tag}`}
+                      className="rounded-full p-0.5 hover:bg-foreground/10"
+                    >
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="lead-sheet-new-tag" className="sr-only">
+                  Etichetă nouă
+                </Label>
+                <Input
+                  id="lead-sheet-new-tag"
+                  value={newTagText}
+                  onChange={(e) => setNewTagText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addTag();
+                    }
+                  }}
+                  placeholder="Etichetă nouă..."
+                  list="lead-sheet-tag-suggestions"
+                  className="h-8 max-w-[200px]"
+                />
+                <datalist id="lead-sheet-tag-suggestions">
+                  {tagSuggestions.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="Adaugă eticheta"
+                  onClick={() => void addTag()}
+                  disabled={!newTagText.trim() || addingTag}
+                >
+                  {addingTag ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
             {/* Acțiuni rapide */}
             <section className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold text-foreground">Acțiuni rapide</h3>
@@ -398,6 +627,123 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
                   ))}
                 </Select>
               </div>
+            </section>
+
+            <Separator />
+
+            {/* Taskuri */}
+            <section className="flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-foreground">Taskuri</h3>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label htmlFor="lead-sheet-new-task" className="sr-only">
+                    Task nou
+                  </Label>
+                  <Input
+                    id="lead-sheet-new-task"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    placeholder="Task nou (ex: Revino cu oferta)..."
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="lead-sheet-new-task-due" className="sr-only">
+                      Scadență
+                    </Label>
+                    <Input
+                      id="lead-sheet-new-task-due"
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                      className="w-[150px]"
+                    />
+                  </div>
+                  <Button onClick={() => void addTask()} disabled={!newTaskTitle.trim() || addingTask}>
+                    {addingTask ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    Adaugă
+                  </Button>
+                </div>
+              </div>
+
+              {tasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Niciun task pe acest lead încă.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {tasks.map((task) => {
+                    const overdue = isTaskOverdue(task);
+                    const busy = taskActionId === task.id;
+                    return (
+                      <li
+                        key={task.id}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg border p-2.5",
+                          overdue ? "border-destructive/40 bg-destructive/5" : "border-border"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => void toggleTaskDone(task)}
+                          disabled={busy}
+                          aria-label={task.status === "done" ? `Redeschide taskul ${task.title}` : `Încheie taskul ${task.title}`}
+                          className={cn(
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors",
+                            task.status === "done"
+                              ? "border-success bg-success/10 text-success"
+                              : "border-border text-muted-foreground hover:bg-muted/60"
+                          )}
+                        >
+                          {task.status === "done" ? (
+                            <Undo2 className="h-4 w-4" aria-hidden="true" />
+                          ) : (
+                            <Check className="h-4 w-4" aria-hidden="true" />
+                          )}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cn(
+                              "text-sm text-foreground",
+                              task.status === "done" && "text-muted-foreground line-through"
+                            )}
+                          >
+                            {task.title}
+                          </p>
+                          {task.dueAt && (
+                            <p className={cn("text-xs", overdue ? "font-semibold text-destructive" : "text-muted-foreground")}>
+                              Scadent {formatTaskDue(task.dueAt)}
+                              {task.status === "snoozed" && " · amânat"}
+                            </p>
+                          )}
+                        </div>
+                        {task.status !== "done" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Amână taskul ${task.title} cu o zi`}
+                            onClick={() => void snoozeTaskOneDay(task)}
+                            disabled={busy}
+                          >
+                            <Clock className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Șterge taskul ${task.title}`}
+                          onClick={() => void deleteTaskRow(task)}
+                          disabled={busy}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </section>
 
             <Separator />

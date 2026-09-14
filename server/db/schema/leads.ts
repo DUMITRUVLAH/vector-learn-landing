@@ -78,6 +78,11 @@ export const leads = pgTable(
     preferredTimeEnd: time("preferred_time_end"),
     /** CRM-114: Company name for B2B leads */
     company: varchar("company", { length: 300 }),
+    /** Legătura către baza unică de firme (`crm_companies`, migrarea 0164).
+     *  `company` (textul) rămâne afișarea de rezervă pentru lead-urile vechi —
+     *  nu-l rescriem, doar adăugăm legătura. FK-ul e declarat în migrare, nu
+     *  aici, ca schema să nu depindă de ordinea importurilor între fișiere. */
+    companyId: uuid("company_id"),
     /** CRM-114: Optional deal name — if set, used as title instead of full_name */
     dealName: varchar("deal_name", { length: 300 }),
     /** INTEG-101: FK to courses — curs de interes structural (selectat din lista de cursuri reale) */

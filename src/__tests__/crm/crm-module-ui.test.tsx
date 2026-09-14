@@ -65,6 +65,38 @@ const createCrmProduct = vi.fn();
 const updateCrmProduct = vi.fn();
 const archiveCrmProduct = vi.fn();
 const restoreCrmProduct = vi.fn();
+const listCrmLostReasons = vi.fn();
+const listCrmLeadTasks = vi.fn();
+const createCrmLeadTask = vi.fn();
+const updateCrmLeadTask = vi.fn();
+const completeCrmLeadTask = vi.fn();
+const reopenCrmLeadTask = vi.fn();
+const snoozeCrmLeadTask = vi.fn();
+const deleteCrmLeadTask = vi.fn();
+const listCrmLeadTags = vi.fn();
+const addCrmLeadTag = vi.fn();
+const removeCrmLeadTag = vi.fn();
+const listCrmTagSuggestions = vi.fn();
+
+// Motivele configurate ale tenantului — folosite de `LostReasonDialog`, care nu mai citește un
+// `const` fix din front-end (vezi componenta). Valoare implicită la nivel de modul: persistă între
+// teste (`vi.clearAllMocks()` NU șterge implementarea `mockResolvedValue`), ca testele care nu
+// verifică explicit lista de motive să nu se rupă doar fiindcă n-o mochează ele înșiși.
+listCrmLostReasons.mockResolvedValue({
+  items: [
+    { id: "lr-1", tenantId: "t1", label: "Preț prea mare", orderIndex: 0, createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "lr-2", tenantId: "t1", label: "A ales alt furnizor", orderIndex: 1, createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "lr-3", tenantId: "t1", label: "Nu mai are nevoie", orderIndex: 2, createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "lr-4", tenantId: "t1", label: "Nu răspunde", orderIndex: 3, createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "lr-5", tenantId: "t1", label: "Buget amânat", orderIndex: 4, createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "lr-6", tenantId: "t1", label: "Altul", orderIndex: 5, createdAt: "2026-01-01T00:00:00.000Z" },
+  ],
+});
+// Idem: liste goale implicite pentru taskuri/etichete, ca fișa leadului să nu crape în testele
+// care nu au nimic de-a face cu ele.
+listCrmLeadTasks.mockResolvedValue({ items: [] });
+listCrmLeadTags.mockResolvedValue({ items: [] });
+listCrmTagSuggestions.mockResolvedValue({ items: [] });
 
 vi.mock("@/lib/api/crm", () => ({
   getCrmPipeline: (...args: unknown[]) => getCrmPipeline(...args),
@@ -82,6 +114,18 @@ vi.mock("@/lib/api/crm", () => ({
   updateCrmProduct: (...args: unknown[]) => updateCrmProduct(...args),
   archiveCrmProduct: (...args: unknown[]) => archiveCrmProduct(...args),
   restoreCrmProduct: (...args: unknown[]) => restoreCrmProduct(...args),
+  listCrmLostReasons: (...args: unknown[]) => listCrmLostReasons(...args),
+  listCrmLeadTasks: (...args: unknown[]) => listCrmLeadTasks(...args),
+  createCrmLeadTask: (...args: unknown[]) => createCrmLeadTask(...args),
+  updateCrmLeadTask: (...args: unknown[]) => updateCrmLeadTask(...args),
+  completeCrmLeadTask: (...args: unknown[]) => completeCrmLeadTask(...args),
+  reopenCrmLeadTask: (...args: unknown[]) => reopenCrmLeadTask(...args),
+  snoozeCrmLeadTask: (...args: unknown[]) => snoozeCrmLeadTask(...args),
+  deleteCrmLeadTask: (...args: unknown[]) => deleteCrmLeadTask(...args),
+  listCrmLeadTags: (...args: unknown[]) => listCrmLeadTags(...args),
+  addCrmLeadTag: (...args: unknown[]) => addCrmLeadTag(...args),
+  removeCrmLeadTag: (...args: unknown[]) => removeCrmLeadTag(...args),
+  listCrmTagSuggestions: (...args: unknown[]) => listCrmTagSuggestions(...args),
 }));
 
 const { CrmHomePage } = await import("@/pages/business/crm/CrmHomePage");
@@ -168,7 +212,7 @@ function makeProduct(overrides: Partial<CrmProduct>): CrmProduct {
 // ─── Teste ────────────────────────────────────────────────────────────────────
 
 describe("CRM (Faza 1) — CrmHomePage", () => {
-  it("pagina CRM arată Pipeline și Produse ca active", () => {
+  it("pagina CRM arată Pipeline, Produse, Rapoarte și Astăzi ca active", () => {
     render(<CrmHomePage />);
 
     // Tile-urile active sunt randate ca `<Link>` (tag `<a>`), cu `role="listitem"` pentru grila
@@ -180,25 +224,33 @@ describe("CRM (Faza 1) — CrmHomePage", () => {
     const produse = screen.getByRole("listitem", { name: /Accesează Produse/i });
     expect(produse.tagName).toBe("A");
     expect(produse).toHaveAttribute("href", "#/business/crm/produse");
+
+    // Rapoartele au fost livrate (port paralel, vezi CrmReportsPage) — tile-ul nu mai e blocat.
+    const rapoarte = screen.getByRole("listitem", { name: /Accesează Rapoarte/i });
+    expect(rapoarte.tagName).toBe("A");
+    expect(rapoarte).toHaveAttribute("href", "#/business/crm/rapoarte");
+
+    // „Astăzi" a fost conectat (rută + nav) odată cu modulul de taskuri.
+    const astazi = screen.getByRole("listitem", { name: /Accesează Astăzi/i });
+    expect(astazi.tagName).toBe("A");
+    expect(astazi).toHaveAttribute("href", "#/business/crm/astazi");
   });
 
   it("submodulele neterminate apar ca „În curând” și NU sunt linkuri", () => {
     render(<CrmHomePage />);
 
     // Tile-urile blocate sunt `<div>`-uri mute, fără tag `<a>`.
-    const astazi = screen.getByLabelText(/Astăzi — în curând/i);
-    expect(astazi.tagName).toBe("DIV");
-    const rapoarte = screen.getByLabelText(/Rapoarte — în curând/i);
-    expect(rapoarte.tagName).toBe("DIV");
+    const clienti = screen.getByLabelText(/Clienți & companii — în curând/i);
+    expect(clienti.tagName).toBe("DIV");
 
-    // Dar tile-ul e vizibil, marcat explicit „în curând”.
-    expect(screen.getByLabelText(/Astăzi — în curând/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Clienți & companii — în curând/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Comunicare — în curând/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Automatizări — în curând/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Rapoarte — în curând/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Documente — în curând/i)).toBeInTheDocument();
-    expect(screen.getAllByText("În curând").length).toBeGreaterThanOrEqual(6);
+    // Rapoarte și Astăzi NU mai sunt în acest set — au devenit active.
+    expect(screen.queryByLabelText(/Rapoarte — în curând/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Astăzi — în curând/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("În curând").length).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -238,7 +290,8 @@ describe("CRM (Faza 1) — CrmPipelinePage", () => {
     expect(await screen.findByText("Motiv pierdere")).toBeInTheDocument();
     expect(moveCrmLeadStage).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText("Nu răspunde"));
+    // Motivele se încarcă async (GET /api/crm/lost-reasons) — findByText așteaptă fetch-ul.
+    fireEvent.click(await screen.findByText("Nu răspunde"));
     fireEvent.click(screen.getByRole("button", { name: /Marchează pierdut/i }));
 
     await waitFor(() => {
@@ -288,7 +341,8 @@ describe("CRM (Faza 1) — CrmPipelinePage", () => {
     expect(await screen.findByText("Motiv pierdere")).toBeInTheDocument();
     expect(moveCrmLeadStage).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText("Nu răspunde"));
+    // Motivele se încarcă async (GET /api/crm/lost-reasons) — findByText așteaptă fetch-ul.
+    fireEvent.click(await screen.findByText("Nu răspunde"));
     fireEvent.click(screen.getByRole("button", { name: /Marchează pierdut/i }));
 
     await waitFor(() => {
