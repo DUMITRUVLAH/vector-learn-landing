@@ -206,6 +206,7 @@ export function CrmTodayPage() {
         }}
         onChanged={() => void loadToday({ silent: true })}
         onToast={setToast}
+        onOpenLead={setSelectedLeadId}
       />
 
       {toast && (

@@ -32,7 +32,7 @@ import {
   FileText,
   ExternalLink,
 } from "lucide-react";
-import { Sheet, Button, Input, Label, Select, Textarea, Badge, Alert, Skeleton, Separator } from "@/components/ds";
+import { Sheet, Button, Input, Label, Select, Textarea, Badge, Alert, Skeleton, Separator, Tabs, type TabItem } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { Link } from "@/router/HashRouter";
 import { docPath } from "@/lib/docs/paths";
@@ -73,6 +73,10 @@ import {
 import { CRM_SOURCE_LABEL, crmStageLabel, stageColorClasses } from "@/components/crm/constants";
 import { formatCents, leadValueToCents, leadTitle, emptyToNull } from "@/components/crm/format";
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
+import { LeadContactsTab } from "@/components/crm/LeadContactsTab";
+import { LeadFilesTab } from "@/components/crm/LeadFilesTab";
+import { LeadPersonHistoryTab } from "@/components/crm/LeadPersonHistoryTab";
+import { LeadCustomFields } from "@/components/crm/LeadCustomFields";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 export interface LeadDetailSheetToast {
@@ -91,7 +95,24 @@ export interface LeadDetailSheetProps {
    *  gălețică/coloană din ecranele care folosesc fișa (board, „Azi"). */
   onChanged: () => void;
   onToast: (toast: LeadDetailSheetToast) => void;
+  /** Deschide alt lead (din fila „Istoric"). Fișa e controlată de părinte prin `leadId`, deci
+   *  navigarea între leaduri înrudite trebuie să treacă pe acolo. */
+  onOpenLead?: (leadId: string) => void;
 }
+
+/** Filele fișei. „Comunicare" lipsește înadins: mesajele trimise apar deja în „Activitate", iar
+ *  o filă separată ar fi o A DOUA cronologie a aceluiași lead — exact ce s-a evitat când
+ *  `lead_interactions` a fost refolosită în loc de un jurnal nou (PORT-DIN-CRM-VECTOR.md §3). */
+type LeadTab = "activitate" | "detalii" | "fisiere" | "contacte" | "acte" | "istoric";
+
+const LEAD_TABS: readonly TabItem<LeadTab>[] = [
+  { value: "activitate", label: "Activitate" },
+  { value: "detalii", label: "Detalii" },
+  { value: "fisiere", label: "Fișiere" },
+  { value: "contacte", label: "Contacte" },
+  { value: "acte", label: "Acte" },
+  { value: "istoric", label: "Istoric" },
+];
 
 const INTERACTION_LABEL: Record<CrmInteractionType, string> = {
   note: "Notă",
@@ -181,7 +202,8 @@ function isFormDirty(form: DetailFormState, lead: CrmLead): boolean {
   return (Object.keys(base) as (keyof DetailFormState)[]).some((key) => form[key] !== base[key]);
 }
 
-export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }: LeadDetailSheetProps) {
+export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, onOpenLead }: LeadDetailSheetProps) {
+  const [tab, setTab] = useState<LeadTab>("activitate");
   const [detail, setDetail] = useState<CrmLeadDetailResponse | null>(null);
   const [interactions, setInteractions] = useState<CrmLeadInteraction[]>([]);
   const [form, setForm] = useState<DetailFormState | null>(null);
@@ -217,6 +239,9 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
   const { members: teamMembers } = useTeamMembers();
 
   useEffect(() => {
+    // Fila se resetează la fiecare lead: deschizi altul și te aștepți să vezi ce are de făcut,
+    // nu fila „Acte" rămasă de la precedentul.
+    setTab("activitate");
     if (!leadId) {
       // Reset la închidere — ca redeschiderea altui lead să nu arate, pentru o clipă, datele
       // celui anterior (Sheet-ul rămâne montat între deschideri, nu se reinițializează singur).
@@ -689,8 +714,20 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
               </div>
             </section>
 
-            <Separator />
 
+            {/* Filele fișei. Până acum totul era un singur scroll de ~1000 de linii: taskurile
+                stăteau peste acte, actele peste formular, iar ca să ajungi la istoric derulai
+                pe lângă tot. Antetul (etapă, valoare, etichete, acțiuni rapide) rămâne mereu
+                deasupra — el e contextul, nu conținutul. */}
+            <Tabs
+              tabs={LEAD_TABS}
+              value={tab}
+              onChange={setTab}
+              aria-label="Secțiunile fișei leadului"
+            />
+
+            {tab === "activitate" && (
+              <div className="flex flex-col gap-6">
             {/* Taskuri */}
             <section className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold text-foreground">Taskuri</h3>
@@ -806,41 +843,55 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
               )}
             </section>
 
-            <Separator />
+                <Separator />
 
-            {/* Acte: oferte și contracte pornite din acest lead. Se deschid în
-                editorul de acte al FinFlow — acolo se finalizează și se trimit. */}
+            {/* Activitate */}
             <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Oferte și contracte</h3>
-                <Button size="sm" variant="outline" onClick={() => setNewDocOpen(true)}>
-                  <FileText className="h-4 w-4" aria-hidden="true" />
-                  Act nou
+              <h3 className="text-sm font-semibold text-foreground">Activitate</h3>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="lead-sheet-note" className="sr-only">
+                  Notă nouă
+                </Label>
+                <Textarea
+                  id="lead-sheet-note"
+                  value={noteBody}
+                  onChange={(e) => setNoteBody(e.target.value)}
+                  placeholder="Adaugă o notă..."
+                  rows={2}
+                />
+                <Button size="sm" className="w-fit" onClick={() => void addNote()} disabled={!noteBody.trim() || addingNote}>
+                  {addingNote && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  Adaugă notă
                 </Button>
               </div>
-              {documents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Niciun act încă. „Act nou” pornește o ofertă cu datele acestui lead.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {documents.map((d) => (
-                    <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
-                      <Link to={docPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
-                        {d.docNumber ? `${CRM_DOC_KIND_LABELS[d.kind as keyof typeof CRM_DOC_KIND_LABELS] ?? d.kind} nr. ${d.docNumber}` : d.title}
-                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                      </Link>
-                      <Badge variant={d.status === "draft" ? "secondary" : "default"}>
-                        {CRM_DOC_STATUS_LABELS[d.status] ?? d.status}
-                      </Badge>
+              <ul className="flex flex-col gap-2">
+                {interactions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nicio interacțiune încă.</p>
+                ) : (
+                  interactions.map((item) => (
+                    <li key={item.id} className="flex gap-2">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                        {INTERACTION_ICON[item.type]}
+                      </div>
+                      <div className="flex-1 rounded-lg border border-border bg-card p-2.5">
+                        <div className="mb-0.5 flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-foreground">{INTERACTION_LABEL[item.type]}</span>
+                          <time className="text-[11px] text-muted-foreground" dateTime={item.occurredAt}>
+                            {formatInteractionDate(item.occurredAt)}
+                          </time>
+                        </div>
+                        {item.body && <p className="whitespace-pre-wrap text-sm text-foreground/80">{item.body}</p>}
+                      </div>
                     </li>
-                  ))}
-                </ul>
-              )}
+                  ))
+                )}
+              </ul>
             </section>
+              </div>
+            )}
 
-            <Separator />
-
+            {tab === "detalii" && (
+              <div className="flex flex-col gap-6">
             {/* Detalii */}
             <section className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
@@ -938,50 +989,64 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast }:
               </div>
             </section>
 
-            <Separator />
 
-            {/* Activitate */}
+                <Separator />
+
+                <LeadCustomFields leadId={lead.id} onToast={onToast} />
+              </div>
+            )}
+
+            {tab === "fisiere" && <LeadFilesTab leadId={lead.id} onToast={onToast} />}
+
+            {tab === "contacte" && <LeadContactsTab leadId={lead.id} onToast={onToast} />}
+
+            {tab === "acte" && (
+              <div className="flex flex-col gap-6">
+            {/* Acte: oferte și contracte pornite din acest lead. Se deschid în
+                editorul de acte al FinFlow — acolo se finalizează și se trimit. */}
             <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Activitate</h3>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="lead-sheet-note" className="sr-only">
-                  Notă nouă
-                </Label>
-                <Textarea
-                  id="lead-sheet-note"
-                  value={noteBody}
-                  onChange={(e) => setNoteBody(e.target.value)}
-                  placeholder="Adaugă o notă..."
-                  rows={2}
-                />
-                <Button size="sm" className="w-fit" onClick={() => void addNote()} disabled={!noteBody.trim() || addingNote}>
-                  {addingNote && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                  Adaugă notă
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Oferte și contracte</h3>
+                <Button size="sm" variant="outline" onClick={() => setNewDocOpen(true)}>
+                  <FileText className="h-4 w-4" aria-hidden="true" />
+                  Act nou
                 </Button>
               </div>
-              <ul className="flex flex-col gap-2">
-                {interactions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nicio interacțiune încă.</p>
-                ) : (
-                  interactions.map((item) => (
-                    <li key={item.id} className="flex gap-2">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                        {INTERACTION_ICON[item.type]}
-                      </div>
-                      <div className="flex-1 rounded-lg border border-border bg-card p-2.5">
-                        <div className="mb-0.5 flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-foreground">{INTERACTION_LABEL[item.type]}</span>
-                          <time className="text-[11px] text-muted-foreground" dateTime={item.occurredAt}>
-                            {formatInteractionDate(item.occurredAt)}
-                          </time>
-                        </div>
-                        {item.body && <p className="whitespace-pre-wrap text-sm text-foreground/80">{item.body}</p>}
-                      </div>
+              {documents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Niciun act încă. „Act nou” pornește o ofertă cu datele acestui lead.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {documents.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
+                      <Link to={docPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
+                        {d.docNumber ? `${CRM_DOC_KIND_LABELS[d.kind as keyof typeof CRM_DOC_KIND_LABELS] ?? d.kind} nr. ${d.docNumber}` : d.title}
+                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </Link>
+                      <Badge variant={d.status === "draft" ? "secondary" : "default"}>
+                        {CRM_DOC_STATUS_LABELS[d.status] ?? d.status}
+                      </Badge>
                     </li>
-                  ))
-                )}
-              </ul>
+                  ))}
+                </ul>
+              )}
             </section>
+              </div>
+            )}
+
+            {tab === "istoric" && (
+              <LeadPersonHistoryTab
+                leadId={lead.id}
+                stages={stages}
+                onOpenLead={(id) => {
+                  // Fișa e controlată de părinte (`leadId`): fără el, „Deschide" dintr-un lead
+                  // înrudit n-ar avea unde naviga.
+                  onOpenLead?.(id);
+                }}
+              />
+            )}
+
           </div>
         )}
       </Sheet>

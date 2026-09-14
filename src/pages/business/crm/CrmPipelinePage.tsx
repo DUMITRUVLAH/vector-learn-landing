@@ -569,6 +569,7 @@ export function CrmPipelinePage() {
         }}
         onChanged={() => void loadPipeline({ silent: true })}
         onToast={setToast}
+        onOpenLead={setSelectedLeadId}
       />
 
       <PipelineManagerDialog
