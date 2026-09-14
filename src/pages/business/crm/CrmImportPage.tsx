@@ -15,6 +15,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Loader2, History, Save, Trash2 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { CaptureSourcesPanel } from "@/components/crm/CaptureSourcesPanel";
+import { listCrmPipelines, type CrmPipeline } from "@/lib/api/crm";
 import {
   Alert,
   Badge,
@@ -68,6 +70,13 @@ function errText(err: unknown, fallback: string): string {
 }
 
 export function CrmImportPage() {
+  /** Pâlniile: formularul poate trimite leadurile într-una anume. */
+  const [pipelines, setPipelines] = useState<CrmPipeline[]>([]);
+  useEffect(() => {
+    listCrmPipelines()
+      .then((res) => setPipelines(res.items))
+      .catch(() => setPipelines([]));
+  }, []);
   const [step, setStep] = useState<Step>("sursa");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -543,6 +552,19 @@ export function CrmImportPage() {
               </Table>
             </div>
           )}
+        </section>
+
+        {/* Formularele de pe site stau AICI, nu într-un ecran propriu: cine intră pe „Import" vrea
+            să aducă leaduri în sistem. Fișierul e calea manuală, formularul e cea automată. */}
+        <section className="border-t border-border pt-6">
+          <CaptureSourcesPanel
+            pipelines={pipelines}
+            onToast={(t) => {
+              // Pagina n-are toast propriu; eroarea intră în aceeași bandă ca restul ecranului,
+              // iar succesul se vede oricum în listă (formularul apare cu codul deschis).
+              if (t.kind === "error") setError(t.message);
+            }}
+          />
         </section>
       </div>
     </BusinessShell>

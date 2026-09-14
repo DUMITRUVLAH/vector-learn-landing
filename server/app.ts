@@ -138,6 +138,8 @@ import { crmCadencesRoutes } from "./routes/crmCadences";
 import { crmCronRoutes } from "./routes/crmCron";
 import { crmAuditRoutes } from "./routes/crmAudit";
 import { crmPermissionsRoutes } from "./routes/crmPermissions";
+import { crmIntakeRoutes } from "./routes/crmIntake";
+import { crmCaptureSourcesRoutes } from "./routes/crmCaptureSources";
 import { crmReportsRoutes } from "./routes/crmReports";
 import { crmCompaniesRoutes } from "./routes/crmCompanies";
 import { crmTagsRoutes } from "./routes/crmTags";
@@ -244,6 +246,21 @@ const allowedOrigins = [
   "http://localhost:5173",
   ...(process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
 ];
+
+/**
+ * Captarea de lead-uri e chemată DIN SITE-UL CLIENTULUI (ecosolar.md), nu din aplicația noastră.
+ * Regula CORS generală de mai jos acceptă doar originile noastre, deci ar bloca exact cererea
+ * pentru care ruta există. Se înregistrează ÎNAINTE, fiindcă Hono rulează middleware-urile în
+ * ordinea declarării.
+ *
+ * `credentials` lipsește înadins: cererea nu poartă cookie-uri, iar apărarea nu e CORS — e
+ * tokenul formularului plus lista lui de origini permise, verificate în handler. CORS oprește
+ * doar cititul răspunsului de către un alt site; nu oprește cererea în sine.
+ */
+app.use(
+  "/api/crm/intake/*",
+  cors({ origin: "*", allowMethods: ["POST", "OPTIONS"], allowHeaders: ["content-type"] })
+);
 
 app.use(
   "/api/*",
@@ -411,6 +428,11 @@ app.route("/api/crm/lead-files", crmLeadFilesRoutes);
 app.route("/api/crm/cadences", crmCadencesRoutes);
 app.route("/api/crm/audit", crmAuditRoutes);
 app.route("/api/crm/permissions", crmPermissionsRoutes);
+app.route("/api/crm/capture-sources", crmCaptureSourcesRoutes);
+// PUBLIC (cerința 68): formularele de pe site-ul clientului creează leaduri fără sesiune.
+// Apărarea: tokenul formularului, lista de origini permise și limitarea pe IP de mai jos.
+app.use("/api/crm/intake/*", expensiveRateLimit);
+app.route("/api/crm/intake", crmIntakeRoutes);
 // Cron zilnic: aprinde cadențele scadente + reactivarea. Fără sesiune de browser — apărarea lui
 // e CRON_SECRET (vezi ruta).
 app.route("/api/crm/cron", crmCronRoutes);

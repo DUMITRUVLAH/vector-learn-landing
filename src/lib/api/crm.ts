@@ -1029,3 +1029,46 @@ export function listCrmAudit(params: ListCrmAuditParams = {}): Promise<{ items: 
   const suffix = qs.toString();
   return api<{ items: CrmAuditEntry[] }>(`/api/crm/audit${suffix ? `?${suffix}` : ""}`);
 }
+
+// ─── Formulare de captare (lead-uri de pe site) ────────────────────────────────
+
+export interface CrmCaptureSource {
+  id: string;
+  name: string;
+  /** Tokenul pus în pagina publică. Public prin natura lui — nu citește nimic. */
+  token: string;
+  defaultSource: string;
+  pipelineId: string | null;
+  /** Domeniile de pe care se acceptă cereri; `[]` = fără restricție. */
+  allowedOrigins: string[];
+  active: boolean;
+  leadsCaptured: number;
+  lastCaptureAt: string | null;
+  createdAt: string;
+}
+
+export function listCrmCaptureSources(): Promise<{ items: CrmCaptureSource[] }> {
+  return api<{ items: CrmCaptureSource[] }>("/api/crm/capture-sources");
+}
+
+export interface CreateCrmCaptureSourceBody {
+  name: string;
+  defaultSource?: string;
+  pipelineId?: string | null;
+  allowedOrigins?: string[];
+}
+
+export function createCrmCaptureSource(body: CreateCrmCaptureSourceBody): Promise<CrmCaptureSource> {
+  return api<CrmCaptureSource>("/api/crm/capture-sources", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateCrmCaptureSource(
+  id: string,
+  body: Partial<CreateCrmCaptureSourceBody> & { active?: boolean }
+): Promise<CrmCaptureSource> {
+  return api<CrmCaptureSource>(`/api/crm/capture-sources/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function deleteCrmCaptureSource(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/capture-sources/${id}`, { method: "DELETE" });
+}

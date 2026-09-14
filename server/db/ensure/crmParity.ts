@@ -155,4 +155,25 @@ export const CRM_PARITY_ENSURE_STATEMENTS: string[] = [
   `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "product_id" uuid`,
   `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "probability_pct" integer`,
   `CREATE INDEX IF NOT EXISTS "leads_product_idx" ON "leads" ("tenant_id","product_id")`,
+
+  // ── Captarea lead-urilor de pe site (migrarea 0171) ─────────────────────────
+  `CREATE TABLE IF NOT EXISTS "crm_capture_sources" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+    "name" varchar(200) NOT NULL,
+    "token" varchar(64) NOT NULL,
+    "default_source" varchar(40) DEFAULT 'webform' NOT NULL,
+    "pipeline_id" uuid,
+    "allowed_origins" jsonb DEFAULT '[]'::jsonb NOT NULL,
+    "active" boolean DEFAULT true NOT NULL,
+    "leads_captured" integer DEFAULT 0 NOT NULL,
+    "last_capture_at" timestamp with time zone,
+    "created_by_user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+    "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS "crm_capture_tenant_idx" ON "crm_capture_sources" ("tenant_id")`,
+  // Unic pe tot sistemul: tokenul determină workspace-ul, deci o coliziune ar scrie leadul în
+  // baza altui client.
+  `CREATE UNIQUE INDEX IF NOT EXISTS "crm_capture_token_uniq" ON "crm_capture_sources" ("token")`,
 ];

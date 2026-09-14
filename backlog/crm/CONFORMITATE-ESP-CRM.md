@@ -143,7 +143,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | 65 | Telefonie/Virtual PBX | **Nu** | Vezi 20. |
 | 66 | E-mail | **Parțial** | Vezi 30. |
 | 67 | WhatsApp/Viber | **Parțial** | Vezi 28–29. |
-| 68 | Website și formulare de lead generation | **Nu** | Nu există încă endpoint public de captare. Este cea mai ieftină integrare din listă (~2 zile) și cea cu efectul cel mai direct asupra obiectivului 1 din caiet. |
+| 68 | Website și formulare de lead generation | **Da** | Endpoint public `/api/crm/intake/webform`, cu token per formular (nu per workspace: dacă un site e compromis, se stinge doar formularul lui), listă de domenii permise, limitare pe IP și consimțământ care expiră în 5 minute. Duplicatele adaugă o cerere pe leadul existent, nu un al doilea lead. Interfața dă codul gata de lipit în pagină, cu UTM-urile preluate din URL. |
 | 69 | ERP/facturare | **Parțial** | Produsul are facturare proprie și e-Factura (SFS); integrarea cu un ERP terț necesită API-ul acelui ERP. |
 | 70 | Semnătură electronică | **Parțial** | Integrare MSign existentă pe actele PAR; extinderea la contractele CRM e configurare, nu dezvoltare nouă. |
 | 71 | BI/raportare externă | **Parțial** | Export CSV/PDF azi; conectorul direct (ex. Power BI) cere API-ul de la 64. |
@@ -166,16 +166,15 @@ Toate cele 76 de cerințe din Anexa B sunt acoperite mai sus, în ordinea din ca
 
 | Conform | Număr | Procent |
 |---|---|---|
-| Da | 47 | 62% |
+| Da | 48 | 63% |
 | Parțial | 21 | 28% |
-| Nu | 8 | 11% |
+| Nu | 7 | 9% |
 
-Cele opt „Nu" se împart în două grupe, și diferența dintre ele contează la ofertare:
+Cele șapte „Nu" rămase sunt, toate, același lucru: **telefonia (20, 22, 23, 25, 65) și mesageria
+(29)**. Nu sunt dezvoltare — sunt un CONTRACT cu un furnizor (centrală SIP, Viber Business).
+Odată ales furnizorul, integrarea e muncă previzibilă, iar arhitectura o primește fără
+reconstrucție (cerința 27 e deja „Da").
 
-1. **Telefonie (20, 22, 23, 25) și mesagerie (29)** — nu sunt dezvoltare, sunt un CONTRACT cu un
-   furnizor (centrală SIP, Viber Business). Odată ales furnizorul, integrarea e muncă previzibilă.
-2. **Formularele de pe site (68), telefonia ca integrare (65)** — dezvoltare proprie, mică.
-
-Recomandarea pentru MVP, în ordinea efectului asupra obiectivelor din caiet: (1) captarea
-lead-urilor de pe site, (2) digestul de taskuri restante pe e-mail, (3) telefonia, după alegerea
-centralei.
+Recomandarea pentru MVP, în ordinea efectului asupra obiectivelor din caiet: (1) digestul de
+taskuri restante pe e-mail (cerința 18), (2) telefonia, după alegerea centralei, (3) documentarea
+publică a API-ului (cerința 64), care deblochează și conectorul BI.
