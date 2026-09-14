@@ -234,23 +234,33 @@ describe("CRM (Faza 1) — CrmHomePage", () => {
     const astazi = screen.getByRole("listitem", { name: /Accesează Astăzi/i });
     expect(astazi.tagName).toBe("A");
     expect(astazi).toHaveAttribute("href", "#/business/crm/astazi");
+
+    // Clienți & firme și Importul au venit cu Faza 4.
+    const clienti = screen.getByRole("listitem", { name: /Accesează Clienți/i });
+    expect(clienti.tagName).toBe("A");
+    expect(clienti).toHaveAttribute("href", "#/business/crm/clienti");
+
+    const importTile = screen.getByRole("listitem", { name: /Accesează Import/i });
+    expect(importTile.tagName).toBe("A");
+    expect(importTile).toHaveAttribute("href", "#/business/crm/import");
   });
 
   it("submodulele neterminate apar ca „În curând” și NU sunt linkuri", () => {
     render(<CrmHomePage />);
 
     // Tile-urile blocate sunt `<div>`-uri mute, fără tag `<a>`.
-    const clienti = screen.getByLabelText(/Clienți & companii — în curând/i);
-    expect(clienti.tagName).toBe("DIV");
+    const comunicare = screen.getByLabelText(/Comunicare — în curând/i);
+    expect(comunicare.tagName).toBe("DIV");
 
-    expect(screen.getByLabelText(/Clienți & companii — în curând/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Comunicare — în curând/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Automatizări — în curând/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Documente — în curând/i)).toBeInTheDocument();
-    // Rapoarte și Astăzi NU mai sunt în acest set — au devenit active.
+    // Ce a fost livrat între timp NU mai are voie să apară ca „în curând" —
+    // un tile blocat peste o pagină care merge e o funcție ascunsă degeaba.
     expect(screen.queryByLabelText(/Rapoarte — în curând/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Astăzi — în curând/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("În curând").length).toBeGreaterThanOrEqual(4);
+    expect(screen.queryByLabelText(/Clienți.*— în curând/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Import — în curând/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("În curând").length).toBeGreaterThanOrEqual(3);
   });
 });
 

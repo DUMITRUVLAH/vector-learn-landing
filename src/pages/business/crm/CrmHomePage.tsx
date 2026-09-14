@@ -10,6 +10,7 @@ import {
   Package,
   CalendarClock,
   Building2,
+  Upload,
   MessageCircle,
   Zap,
   BarChart3,
@@ -57,10 +58,18 @@ const CRM_MODULES: CrmModuleTile[] = [
   {
     id: "clienti",
     label: "Clienți & companii",
-    description: "Cartonașe de client, companii și istoricul complet al relației.",
+    description: "Baza de firme, fișele dublate și unificarea lor fără pierdere de istoric.",
     href: "/business/crm/clienti",
     icon: Building2,
-    available: false,
+    available: true,
+  },
+  {
+    id: "import",
+    label: "Import",
+    description: "Adu o listă din Excel sau din alt CRM, cu previzualizare înainte de scriere.",
+    href: "/business/crm/import",
+    icon: Upload,
+    available: true,
   },
   {
     id: "comunicare",
