@@ -39,9 +39,16 @@ primește `tenant_id` și fiecare query filtrul lui — fără asta e scurgere �
 | automations | 230 | 7 | ✅ livrat |
 | assignment | 641 | 7 | ✅ livrat |
 | calls + channels | 413 + 341 | 8 | ✅ livrat ca „Comunicare" |
-| cadences | 305 | 9 | ⏳ are nevoie de un cron zilnic |
-| reengagement | 371 | 9 | ⏳ idem |
-| roles + audit | 158 + 147 | 9 | ⏳ |
+| cadences | 305 | 9 | ✅ livrat — cron zilnic la 07:00 |
+| reengagement | 371 | 9 | ✅ livrat — preview obligatoriu înainte de rulare |
+| roles + audit | 158 + 147 | 9 | ✅ livrat — peste rolurile și jurnalul existente |
+| pipelines (pâlnii multiple) | 134 | 9 | ✅ livrat |
+| savedViews | 28 | 9 | ✅ livrat — personale implicit |
+| files (fișiere pe lead) | 58 | 9 | ✅ livrat — prin Storage, nu base64 |
+| history (istoricul persoanei) | 57 | 9 | ✅ livrat |
+| reminders (clopoțel) | 87 | 9 | ✅ livrat |
+| fișa pe file + contacte + câmpuri | — | 9 | ✅ livrat |
+| vedere listă/tabel | — | 9 | ✅ livrat |
 
 **Nu se portează** (sunt specifice Vector Academy, nu CRM): `taskBoards`, `checklists`,
 `strategy`, `coursesSync`, `importKommo`, `kommoNotes`, `boardTemplates`.
@@ -88,13 +95,48 @@ Fișierele cu punct-și-virgulă (cum le dă Excel-ul în română) sunt recunos
 mărime, consum) nu există pe `leads` în FinFlow. Ajung pe `crm_companies`, unde
 au coloane — nu se pierd, dar nici nu se falsifică pe lead.
 
-## Ce a rămas (Faza 9)
+## Faza 9 — livrată (2026-09-14)
 
-- **Cadențe** (secvențe de urmărire) și **reactivare** (lead-uri pierdute readuse
-  în lucru). Amândouă au nevoie de un cron zilnic. Vercel are deja trei crone
-  configurate în `vercel.json`; se poate adăuga unul la `/api/crm/cron/daily`.
-- **Roluri și audit** pe acțiunile CRM. FinFlow are deja `auditLogger.ts` și roluri
-  pe user — ca la documente, mai degrabă se conectează decât se portează.
+Golul dintre FinFlow și crm-vector s-a închis. Ce s-a adăugat, în ordinea în care
+s-a construit:
+
+1. **Pâlnii multiple** (migrarea 0166). Cheia etapei devine unică pe
+   (tenant, pâlnie, key) — două linii de business au amândouă dreptul la „new".
+   `leads.pipeline_id` NULL se citește ca „pâlnia implicită", deci niciun lead
+   existent nu s-a rescris.
+2. **Vedere listă/tabel** comutabilă, cu sortare și paginare PE SERVER. Kanbanul
+   citește 50 de carduri pe coloană; pe 3.200 de leaduri nu mai e instrument de lucru.
+3. **Vizualizări salvate** — personale implicit, cu bifă „vizibilă echipei".
+4. **Contacte multiple, câmpuri personalizate, fișiere, istoricul persoanei** —
+   tabelele existau din migrarea 0007, dar n-aveau nicio rută.
+5. **Fișa leadului pe șase file**, cu antetul mereu deasupra. Fiecare filă își cere
+   datele ei la deschidere.
+6. **Clopoțel de remindere** — restante/azi/mâine, cu insigna care numără doar urgentele.
+7. **Cadențe + reactivare** (migrarea 0169) și cronul zilnic `/api/crm/cron/daily`.
+8. **Roluri + jurnal CRM** peste cele existente în FinFlow.
+
+### Abateri noi de la „copiază tot" (Faza 9)
+
+**5. Fără al doilea set de roluri.** Referința adăuga `director_comercial`,
+`team_leader`, `sales_manager` în baza de date. Aici rolurile de pe `users.role`
+sunt folosite de tot restul aplicației; matricea de permisiuni se așază peste ele.
+Și: `leads.view_all` rămâne la toate rolurile care intră azi în CRM — o
+restrângere tăcută ar lua vederea de ansamblu unor oameni care se bazează pe ea.
+Diferențierea e pe acțiunile administrative și distructive.
+
+**6. Fără al doilea jurnal.** Intrările CRM merg în `audit_log` (tabela folosită
+de celelalte module), cu prefixul `crm.` — același raționament ca la comunicare.
+
+**7. Fără filă „Comunicare" separată în fișă.** Mesajele apar deja în „Activitate";
+o filă separată ar fi o a doua cronologie a aceluiași lead.
+
+**8. Fișierele nu trec prin browser către Storage.** Referința folosea
+`supabase-js` din browser cu cheia publică. Aici cheia de service nu are ce căuta
+în browser: serverul semnează, browserul urcă binarul direct în bucket, serverul
+verifică octeții REALI înainte să scrie rândul (secvența de la atașamentele PAR).
+
+**9. Vizualizările salvate sunt personale.** În referință erau globale, fiindcă
+baza avea un singur utilizator.
 
 ## De verificat pe producție
 
