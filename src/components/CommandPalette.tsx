@@ -3,7 +3,7 @@
  *
  * Sources (priority order):
  * 1. Students — /api/students?search=<q>&limit=5
- * 2. Leads    — /api/leads?view=list&search=<q>&pageSize=5
+ * 2. Leads    — /api/crm/leads?search=<q>&pageSize=5
  * 3. Pages    — hardcoded nav pages (no API needed)
  *
  * Keyboard: ArrowUp/ArrowDown navigate, Enter selects, Escape closes.
@@ -14,7 +14,7 @@ import { useEffect, useRef, useState, useCallback, useId } from "react";
 import { Search, Users, TrendingUp, LayoutDashboard, Sun, Calendar, CreditCard, FileText, BarChart3, Settings, GraduationCap, X } from "lucide-react";
 import { useRouter } from "@/router/HashRouter";
 import { listStudents, type Student } from "@/lib/api/students";
-import { fetchLeadsList, type Lead } from "@/lib/api/leads";
+import { listCrmLeads, type CrmLead } from "@/lib/api/crm";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -33,16 +33,16 @@ interface SearchResult {
 
 const DEFAULT_PAGES: SearchResult[] = [
   { id: "page-dashboard", kind: "page", label: "Dashboard", sublabel: "/app", href: "/app" },
-  { id: "page-azi",       kind: "page", label: "Azi",       sublabel: "CRM Today", href: "/app/leads/today" },
+  { id: "page-azi",       kind: "page", label: "Azi",       sublabel: "CRM Today", href: "/business/crm/astazi" },
   { id: "page-elevi",     kind: "page", label: "Elevi",     sublabel: "Listă elevi", href: "/app/students" },
-  { id: "page-leads",     kind: "page", label: "Leads",     sublabel: "Pipeline CRM", href: "/app/leads" },
+  { id: "page-leads",     kind: "page", label: "Leads",     sublabel: "Pipeline CRM", href: "/business/crm/pipeline" },
   { id: "page-plati",     kind: "page", label: "Plăți",     sublabel: "Gestiune plăți", href: "/app/payments" },
 ];
 
 const ALL_PAGES: SearchResult[] = [
   { id: "page-dashboard", kind: "page", label: "Dashboard",     sublabel: "/app", href: "/app" },
-  { id: "page-azi",       kind: "page", label: "Azi",           sublabel: "CRM Today", href: "/app/leads/today" },
-  { id: "page-leads",     kind: "page", label: "Leads",         sublabel: "Pipeline CRM", href: "/app/leads" },
+  { id: "page-azi",       kind: "page", label: "Azi",           sublabel: "CRM Today", href: "/business/crm/astazi" },
+  { id: "page-leads",     kind: "page", label: "Leads",         sublabel: "Pipeline CRM", href: "/business/crm/pipeline" },
   { id: "page-elevi",     kind: "page", label: "Elevi",         sublabel: "Listă elevi", href: "/app/students" },
   { id: "page-orar",      kind: "page", label: "Orar",          sublabel: "Program lecții", href: "/app/schedule" },
   { id: "page-plati",     kind: "page", label: "Plăți",         sublabel: "Gestiune plăți", href: "/app/payments" },
@@ -73,6 +73,11 @@ function KindIcon({ kind, href }: { kind: ResultKind; href: string }) {
 
 // ─── Stage label helper ───────────────────────────────────────────────────────
 
+/**
+ * Etichetele celor 5 etape implicite. Etapele sunt configurabile per workspace (migrarea 0162),
+ * dar paleta nu le poate cere pe toate doar ca să scrie un subtitlu — cheia necunoscută se arată
+ * ca atare (`?? l.stage`), ceea ce e onest și suficient pentru o căutare rapidă.
+ */
 const STAGE_LABEL: Record<string, string> = {
   new: "Nou",
   contacted: "Contactat",
@@ -131,7 +136,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       try {
         const [studRes, leadRes] = await Promise.allSettled([
           listStudents({ search: q, limit: 5, status: "active" }),
-          fetchLeadsList({ search: q, pageSize: 5 }),
+          listCrmLeads({ search: q, pageSize: 5 }),
         ]);
 
         const studentResults: SearchResult[] = studRes.status === "fulfilled"
@@ -145,12 +150,14 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           : [];
 
         const leadResults: SearchResult[] = leadRes.status === "fulfilled"
-          ? leadRes.value.items.map((l: Lead) => ({
+          ? leadRes.value.items.map((l: CrmLead) => ({
               id: `lead-${l.id}`,
               kind: "lead" as const,
-              label: l.fullName,
+              label: l.dealName || l.fullName,
               sublabel: STAGE_LABEL[l.stage] ?? l.stage,
-              href: `/app/leads/${l.id}`,
+              // Modulul CRM trăiește sub /business/crm; `/app/leads/:id` a fost scos odată cu
+              // pipeline-ul vechi, deci linkul ducea la o pagină inexistentă.
+              href: "/business/crm/pipeline",
             }))
           : [];
 

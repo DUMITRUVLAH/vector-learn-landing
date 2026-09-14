@@ -135,6 +135,12 @@ o filă separată ar fi o a doua cronologie a aceluiași lead.
 în browser: serverul semnează, browserul urcă binarul direct în bucket, serverul
 verifică octeții REALI înainte să scrie rândul (secvența de la atașamentele PAR).
 
+**10. Cadența se oprește când clientul răspunde** — singurul lucru ADĂUGAT peste
+crm-vector, unde o secvență merge înainte oricum. Vine din specul mai vechi al
+FinFlow (CRM-126) și previne o umilință reală: clientul răspunde luni, iar
+miercuri agentul primește „sună clientul, nu răspunde". Oprirea e vizibilă (notă
+de sistem în cronologie) și reversibilă cu un click din fișă.
+
 **9. Vizualizările salvate sunt personale.** În referință erau globale, fiindcă
 baza avea un singur utilizator.
 

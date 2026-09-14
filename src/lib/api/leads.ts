@@ -1,3 +1,18 @@
+/**
+ * ⚠️ COD MORT — NU CONSTRUI PE EL. Folosește `@/lib/api/crm`.
+ *
+ * Clientul ăsta cheamă `/api/leads/*`, rute care NU EXISTĂ pe server: modulul vechi de CRM
+ * (`/app/leads`) a fost scos în `43859c43`, iar cel de azi trăiește la `/api/crm/*`. Fiecare
+ * funcție de mai jos întoarce un 404 în producție.
+ *
+ * Cum ne-a costat deja: paleta de căutare (⌘K) chema `fetchLeadsList` de aici, deci căutarea de
+ * leaduri era moartă în aplicație — tăcut, fiindcă rezultatul gol arată identic cu „n-am găsit
+ * nimic". Reparat prin re-pointare la `listCrmLeads`.
+ *
+ * Nu e șters doar fiindcă îl mai importă câteva teste din alte module (comm, integ), care n-au
+ * legătură cu CRM-ul și n-au fost revizuite aici. Când le atinge cineva, fișierul ăsta pleacă
+ * odată cu ele.
+ */
 import { api } from "../api";
 
 export type LeadStage = "new" | "contacted" | "trial" | "paid" | "lost";

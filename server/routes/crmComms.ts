@@ -26,6 +26,7 @@ import { z } from "zod";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions } from "../db/schema/leads";
+import { stopCadencesOnReply } from "../lib/crm/cadences";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { emailSendDecision } from "../lib/emailGuard";
@@ -171,6 +172,12 @@ crmCommsRoutes.post("/log", zValidator("json", logInput), async (c) => {
       userId: user.id,
     })
     .returning();
+
+  // Un apel PRIMIT sau un mesaj primit înseamnă că omul a răspuns: urmărirea automată se oprește
+  // aici, nu peste două zile, când i-ar pica agentului taskul „sună clientul, nu răspunde".
+  if (interaction.direction === "inbound") {
+    await stopCadencesOnReply(user.tenantId, lead.id, user.id);
+  }
 
   return c.json(interaction, 201);
 });

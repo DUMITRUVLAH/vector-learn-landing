@@ -260,3 +260,65 @@ export async function enrollByStage(tenantId: string, leadId: string, stageKey: 
 export async function listCadences(tenantId: string): Promise<CrmCadence[]> {
   return db.select().from(crmCadences).where(eq(crmCadences.tenantId, tenantId)).orderBy(asc(crmCadences.createdAt));
 }
+
+/**
+ * Clientul a răspuns → cadențele lui active se opresc.
+ *
+ * NU e din crm-vector: acolo o secvență merge mai departe chiar dacă omul a sunat înapoi. E din
+ * specul mai vechi al FinFlow (CRM-126, „inbound interaction pauses active enrollment") și e
+ * singura parte din el care merită păstrată, fiindcă previne o umilință reală: clientul
+ * răspunde luni, iar miercuri agentul primește tot „sună clientul, nu răspunde".
+ *
+ * Oprirea e vizibilă, nu tăcută: lasă o notă de sistem în cronologie, iar panoul din fișă arată
+ * cadența drept „oprită" și permite reînscrierea cu un click.
+ *
+ * Best-effort: o problemă aici nu are voie să răstoarne salvarea interacțiunii care tocmai a
+ * produs-o — omul a notat un apel primit, ăsta e lucrul care trebuie să rămână.
+ */
+export async function stopCadencesOnReply(
+  tenantId: string,
+  leadId: string,
+  userId?: string | null
+): Promise<number> {
+  try {
+    const active = await db
+      .select({ id: crmCadenceEnrollments.id, cadenceId: crmCadenceEnrollments.cadenceId })
+      .from(crmCadenceEnrollments)
+      .where(
+        and(
+          eq(crmCadenceEnrollments.tenantId, tenantId),
+          eq(crmCadenceEnrollments.leadId, leadId),
+          eq(crmCadenceEnrollments.status, "active")
+        )
+      );
+    if (active.length === 0) return 0;
+
+    const names = await db
+      .select({ id: crmCadences.id, name: crmCadences.name })
+      .from(crmCadences)
+      .where(eq(crmCadences.tenantId, tenantId));
+    const nameById = new Map(names.map((n) => [n.id, n.name]));
+
+    for (const enrollment of active) {
+      await db
+        .update(crmCadenceEnrollments)
+        .set({ status: "cancelled", nextFireAt: null, updatedAt: new Date() })
+        .where(eq(crmCadenceEnrollments.id, enrollment.id));
+
+      await db.insert(leadInteractions).values({
+        tenantId,
+        leadId,
+        type: "system",
+        direction: "internal",
+        body: `Cadența „${nameById.get(enrollment.cadenceId) ?? "urmărire"}” s-a oprit: clientul a răspuns.`,
+        metadata: { cadenceId: enrollment.cadenceId, stoppedBy: "inbound_reply" },
+        userId: userId ?? null,
+      });
+    }
+
+    return active.length;
+  } catch (e) {
+    console.error("[crm/cadences] oprirea la răspuns a eșuat:", e instanceof Error ? e.message : e);
+    return 0;
+  }
+}

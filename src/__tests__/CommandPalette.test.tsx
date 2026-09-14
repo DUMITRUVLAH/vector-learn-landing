@@ -28,12 +28,33 @@ vi.mock("@/lib/api/students", () => ({
   }),
 }));
 
-vi.mock("@/lib/api/leads", () => ({
-  fetchLeadsList: vi.fn().mockResolvedValue({
+// Paleta caută leadurile prin API-ul CRM REAL (`/api/crm/leads`). Mock-ul de dinainte era pe
+// `@/lib/api/leads`, un client care lovea `/api/leads` — endpoint inexistent pe server. Testul
+// trecea, dar căutarea de leaduri era moartă în aplicație: nimeni nu verifica rezultatul.
+vi.mock("@/lib/api/crm", () => ({
+  listCrmLeads: vi.fn().mockResolvedValue({
     items: [
-      { id: "lead-1", fullName: "Ana Ionescu", stage: "new", phone: null, email: null, valueCents: 0, debtCents: 0, source: "manual", createdAt: "", updatedAt: "" },
+      {
+        id: "lead-1",
+        fullName: "Ana Ionescu",
+        dealName: null,
+        stage: "new",
+        phone: null,
+        email: null,
+        company: null,
+        interestCourse: null,
+        valueCents: 0,
+        source: "manual",
+        assignedTo: null,
+        lostReason: null,
+        createdAt: "",
+        updatedAt: "",
+      },
     ],
-    page: 1, pageSize: 5, total: 1, totalPages: 1,
+    page: 1,
+    pageSize: 5,
+    total: 1,
+    totalPages: 1,
   }),
 }));
 
@@ -88,6 +109,18 @@ describe("CommandPalette component", () => {
     const input = screen.getByRole("combobox");
     expect(input).toBeDefined();
     expect(input.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("[blocant] caută leaduri prin API-ul CRM și le arată cu etapa lor", async () => {
+    render(<CommandPalette isOpen={true} onClose={onClose} />);
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "ana" } });
+
+    // Căutarea e amânată (debounce) — altfel ar pleca o cerere la fiecare tastă. Așteptăm
+    // rezultatul real, nu un ceas fals: `findByText` reîncearcă până apare.
+    expect(await screen.findByText("Ana Ionescu", {}, { timeout: 3000 })).toBeInTheDocument();
+    const { listCrmLeads } = await import("@/lib/api/crm");
+    expect(listCrmLeads).toHaveBeenCalledWith({ search: "ana", pageSize: 5 });
   });
 
   // T-POLISH-001-3: Escape closes the palette

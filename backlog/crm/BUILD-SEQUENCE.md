@@ -140,13 +140,20 @@ modulului marcate „În curând".
 
 Descoperit pe parcurs și **neimplementat** (în afara scopului fazei):
 
-1. **42 de teste orfane în `src/__tests__/crm/`** — rămase din modulul scos în
-   `43859c43`. Importă `@/pages/app/LeadsPage` și `@/components/crm/*` care nu
-   mai există, deci sunt roșii pe `main` de atunci. De decis: reînviate contra
-   noilor pagini, sau șterse. Acum doar adaugă zgomot în suită.
-2. **`src/lib/api/leads.ts` (582 linii) e cod mort** — cheamă `/api/leads/*`,
-   endpointuri care nu există. Noul modul folosește `/api/crm/*` și un client
-   propriu. De curățat sau de re-pointat.
+1. ~~**42 de teste orfane în `src/__tests__/crm/`**~~ — **rezolvat (14.09.2026).**
+   Șterse 24 de fișiere: 22 nu se puteau nici măcar importa (componente scoase în
+   `43859c43`), iar 2 treceau dar erau tautologii — `open-duplicate.test.tsx`
+   randa un stub scris de el însuși, `cadences.test.ts` descria un design
+   (`delay_days`, `send_template`) care n-a existat niciodată în FinFlow.
+   Comportamentele lor reale sunt acoperite de `server/__tests__/crmDuplicates.test.ts`
+   și `server/__tests__/crm-cadences.routes.test.ts`. Folderul e verde: 31/31.
+   O idee din ele a fost păstrată și implementată: cadența se oprește când
+   clientul răspunde.
+2. ~~**`src/lib/api/leads.ts` (582 linii) e cod mort**~~ — **parțial (14.09.2026).**
+   Avea un consumator VIU: paleta ⌘K chema `fetchLeadsList` → `/api/leads`, adică
+   404 — căutarea de leaduri era moartă, tăcut. Re-pointată la `listCrmLeads`.
+   Fișierul e marcat „COD MORT" în antet, dar nu e șters: îl mai importă teste din
+   `comm/` și `integ/`, nerevizuite aici.
 3. **Etape configurabile.** `src/lib/api/pipeline.ts` așteaptă `pipeline_stages`,
    tabelă care nu există; etapele sunt azi un `pgEnum` fix. Kanbanul CORE §5.1
    presupune etape per-tenant — cere tabelă + migrare.

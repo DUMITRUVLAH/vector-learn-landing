@@ -42,7 +42,7 @@ import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
 import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
 import { crmPipelines, type CrmPipeline } from "../db/schema/crmPipelines";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
-import { enrollByStage } from "../lib/crm/cadences";
+import { enrollByStage, stopCadencesOnReply } from "../lib/crm/cadences";
 import { logCrmAudit } from "../lib/crm/audit";
 
 /**
@@ -921,6 +921,11 @@ crmLeadsRoutes.post(
     if (metadata !== undefined) values.metadata = metadata;
 
     const [row] = await db.insert(leadInteractions).values(values).returning();
+
+    // Clientul a răspuns → urmărirea automată se oprește. Altfel, peste două zile, agentul
+    // primește „sună clientul, nu răspunde" despre un om care a sunat deja.
+    if (row.direction === "inbound") await stopCadencesOnReply(user.tenantId, id, user.id);
+
     return c.json(row, 201);
   }
 );

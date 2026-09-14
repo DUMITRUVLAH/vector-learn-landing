@@ -47,6 +47,8 @@ let vectorTenant: string;
 let aticTenant: string;
 let ana: string;
 let borisAtic: string;
+/** Leadul care „sună înapoi" — verificat în două teste: se oprește, și rămâne oprit. */
+let leadCareRaspunde: string;
 
 const DAY = 86_400_000;
 
@@ -204,6 +206,44 @@ describe("Motorul cadențelor", () => {
     const enrolled = await post("/api/crm/cadences/enroll", { leadId, cadenceId: created.body.id });
     expect(enrolled.body.status).toBe("done");
     expect(enrolled.body.nextFireAt).toBeNull();
+  });
+});
+
+describe("Clientul răspunde", () => {
+  it("[blocant] un apel PRIMIT oprește cadențele active ale leadului, cu urmă în cronologie", async () => {
+    const { stopCadencesOnReply } = await import("../lib/crm/cadences");
+    session = { id: ana, tenantId: vectorTenant, role: "admin", email: "ana@vector.md" };
+
+    const [cadence] = await testDb.select().from(crmCadences).where(eq(crmCadences.tenantId, vectorTenant));
+    const leadId = await mkLead(vectorTenant, "Client care sună înapoi");
+    leadCareRaspunde = leadId;
+    const enrolled = await post("/api/crm/cadences/enroll", { leadId, cadenceId: cadence.id });
+    expect(enrolled.body.status).toBe("active");
+
+    const stopped = await stopCadencesOnReply(vectorTenant, leadId, ana);
+    expect(stopped).toBe(1);
+
+    const [after] = await testDb
+      .select()
+      .from(crmCadenceEnrollments)
+      .where(eq(crmCadenceEnrollments.id, enrolled.body.id as unknown as string));
+    expect(after.status).toBe("cancelled");
+    expect(after.nextFireAt).toBeNull();
+
+    // Oprirea e vizibilă: altfel agentul ar crede că secvența merge mai departe.
+    const notes = await testDb.select().from(leadInteractions).where(eq(leadInteractions.leadId, leadId));
+    expect(notes.some((n) => (n.body ?? "").includes("clientul a răspuns"))).toBe(true);
+  });
+
+  it("[blocant] cadența oprită NU mai produce niciun task, oricât de departe ar merge cronul", async () => {
+    const { processDueEnrollments } = await import("../lib/crm/cadences");
+
+    // Peste o lună: dacă oprirea ar fi doar cosmetică, ambii pași ai cadenței ar fi scadenți de
+    // mult și leadul s-ar trezi cu „Sună clientul".
+    await processDueEnrollments(new Date(Date.now() + 30 * DAY), vectorTenant);
+
+    const tasks = await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, leadCareRaspunde));
+    expect(tasks).toHaveLength(0);
   });
 });
 
