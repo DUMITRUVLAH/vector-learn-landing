@@ -53,7 +53,6 @@ import { Link } from "@/router/HashRouter";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Badge, Button, Card, Input, LanguageSwitcher, Label, Textarea } from "@/components/ds";
 import { useT, type TranslationKey } from "@/lib/i18n";
-import { TRUSTED_BY } from "@/data/trustedBy";
 
 /** Adresa pe care ajung cererile de demo. Un singur loc de schimbat. */
 const CONTACT_EMAIL = "contact@finflow.best";
@@ -79,7 +78,6 @@ export function BusinessLandingPage() {
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <Navbar />
       <Hero />
-      <TrustedBy />
       <PainSection />
       <BeforeAfter />
       <FlowSection />
@@ -334,30 +332,6 @@ function HeroMock() {
         </div>
       </div>
     </div>
-  );
-}
-
-/* ─────────────────────────── Utilizat de ─────────────────────────── */
-
-function TrustedBy() {
-  return (
-    <section aria-labelledby="utilizat-de" className="px-4 pb-14 pt-6 sm:px-6">
-      <div className="mx-auto max-w-5xl">
-        <h2 id="utilizat-de" className="mb-6 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Utilizat de
-        </h2>
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-          {TRUSTED_BY.map((l) => (
-            <span
-              key={l.name}
-              className="flex items-center justify-center rounded-xl border border-border/60 bg-white px-4 py-3 shadow-sm transition-transform duration-200 hover:-translate-y-0.5"
-            >
-              <img src={l.src} alt={l.name} loading="lazy" className={`${l.size} w-auto max-w-[140px] object-contain`} />
-            </span>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
 

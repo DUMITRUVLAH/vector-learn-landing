@@ -106,24 +106,9 @@ describe("BusinessLandingPage (FinFlow)", () => {
     renderPage();
     const text = document.body.textContent ?? "";
     // Prima versiune afișa numele, proiectul, IDNP-ul și IBAN-ul din formularul real al unui client.
-    // (Numele organizațiilor din banda „Utilizat de" sunt altceva: sunt afișate cu acordul lor,
-    // ca referință comercială — nu sunt datele personale ale unui beneficiar de plată.)
     for (const real of ["Ana Chiriță", "Irina Oriol", "Daria Roitman", "Digital Safeguard", "MD48", "2008001007903"]) {
       expect(text, `pagina conține date reale: ${real}`).not.toContain(real);
     }
-  });
-
-  it("arată organizațiile care folosesc platforma, cu logouri care se încarcă", () => {
-    renderPage();
-    const strip = document.querySelector('section[aria-labelledby="utilizat-de"]');
-    expect(strip).not.toBeNull();
-    const logos = within(strip as HTMLElement).getAllByRole("img");
-    expect(logos).toHaveLength(6);
-    for (const name of ["ATIC", "Tekwill", "Tekwill Academy", "Inotek", "Clubul Tinerilor Makeri", "iHUB"]) {
-      expect(within(strip as HTMLElement).getByAltText(name)).toBeTruthy();
-    }
-    // Fișierele trebuie să existe în `public/logos/`, altfel utilizatorul vede textul alt.
-    for (const img of logos) expect(img.getAttribute("src")).toMatch(/^\/logos\/[\w.-]+$/);
   });
 
   it("prima jumătate vorbește despre problemă, nu despre funcționalități", () => {
