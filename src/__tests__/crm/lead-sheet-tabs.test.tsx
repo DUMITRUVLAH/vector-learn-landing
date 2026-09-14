@@ -46,6 +46,10 @@ const getCrmPersonHistory = vi.fn();
 const listCrmCustomFields = vi.fn();
 const listCrmLeadFieldValues = vi.fn();
 const setCrmLeadFieldValue = vi.fn();
+const listCrmCadences = vi.fn().mockResolvedValue({ items: [] });
+const listCrmLeadEnrollments = vi.fn().mockResolvedValue({ items: [] });
+const enrollCrmLeadInCadence = vi.fn();
+const listCrmAudit = vi.fn().mockResolvedValue({ items: [] });
 
 vi.mock("@/lib/api/crm", () => ({
   // Drepturile utilizatorului: ecranele CRM le cer ca să știe ce butoane să arate.
@@ -78,6 +82,11 @@ vi.mock("@/lib/api/crm", () => ({
   removeCrmLeadTag: vi.fn(),
   listCrmTagSuggestions: vi.fn().mockResolvedValue({ items: [] }),
   listCrmLostReasons: vi.fn().mockResolvedValue({ items: [] }),
+  listCrmCadences: (...a: unknown[]) => listCrmCadences(...a),
+  listCrmLeadEnrollments: (...a: unknown[]) => listCrmLeadEnrollments(...a),
+  enrollCrmLeadInCadence: (...a: unknown[]) => enrollCrmLeadInCadence(...a),
+  cancelCrmEnrollment: vi.fn(),
+  listCrmAudit: (...a: unknown[]) => listCrmAudit(...a),
 }));
 
 const { LeadDetailSheet } = await import("@/components/crm/LeadDetailSheet");
@@ -221,5 +230,89 @@ describe("Fișa leadului pe file", () => {
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Activitate" })).toHaveAttribute("aria-selected", "true")
     );
+  });
+});
+
+describe("Cadențele leadului", () => {
+  it("[blocant] agentul își înscrie leadul într-o cadență din fișă", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    listCrmCadences.mockResolvedValue({
+      items: [
+        { id: "cad-1", name: "Urmărire ofertă", triggerStage: null, enabled: true, steps: [], createdAt: "", updatedAt: "" },
+      ],
+    });
+    listCrmLeadEnrollments.mockResolvedValue({ items: [] });
+    enrollCrmLeadInCadence.mockResolvedValue({
+      id: "enr-1",
+      leadId: "lead-1",
+      cadenceId: "cad-1",
+      status: "active",
+      currentStep: 0,
+      nextFireAt: "2026-03-20T10:00:00.000Z",
+      enrolledAt: "2026-03-13T10:00:00.000Z",
+    });
+
+    renderSheet();
+    const select = await screen.findByLabelText("Înscrie în cadență");
+    fireEvent.change(select, { target: { value: "cad-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Înscrie" }));
+
+    await waitFor(() => expect(enrollCrmLeadInCadence).toHaveBeenCalledWith("lead-1", "cad-1"));
+    // Înscrierea apare pe loc, cu pasul și data următoare — nu după un refresh de pagină.
+    expect(await screen.findByText("Urmărire ofertă")).toBeInTheDocument();
+    expect(screen.getByText(/pasul 1/)).toBeInTheDocument();
+  });
+
+  it("[normal] fără nicio cadență în workspace, secțiunea nu există deloc", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    listCrmCadences.mockResolvedValue({ items: [] });
+    listCrmLeadEnrollments.mockResolvedValue({ items: [] });
+
+    renderSheet();
+    await screen.findByRole("tab", { name: "Activitate" });
+
+    expect(screen.queryByText("Cadențe")).not.toBeInTheDocument();
+  });
+});
+
+describe("Modificările din fișă", () => {
+  it("[blocant] „Istoric” arată CINE a schimbat fișa, separat de ce s-a discutat", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    getCrmPersonHistory.mockResolvedValue({ leads: [], notesByLead: {} });
+    listCrmAudit.mockResolvedValue({
+      items: [
+        {
+          id: "a1",
+          actionType: "crm.lead.stage_changed",
+          targetType: "crm_lead",
+          targetId: "lead-1",
+          oldValue: { stage: "new" },
+          newValue: { stage: "paid" },
+          occurredAt: "2026-03-01T10:00:00.000Z",
+          actorId: "user-2",
+          actorName: "Boris Agent",
+        },
+      ],
+    });
+
+    renderSheet();
+    fireEvent.click(await screen.findByRole("tab", { name: "Istoric" }));
+
+    expect(await screen.findByText("Mutat între etape")).toBeInTheDocument();
+    expect(screen.getByText(/Boris Agent/)).toBeInTheDocument();
+    expect(screen.getByText(/stage: new → paid/)).toBeInTheDocument();
+    expect(listCrmAudit).toHaveBeenCalledWith({ targetId: "lead-1", limit: 50 });
+  });
+
+  it("[blocant] fără dreptul de jurnal (403), blocul lipsește — nu arată o secțiune goală", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    getCrmPersonHistory.mockResolvedValue({ leads: [], notesByLead: {} });
+    listCrmAudit.mockRejectedValue(new Error("forbidden"));
+
+    renderSheet();
+    fireEvent.click(await screen.findByRole("tab", { name: "Istoric" }));
+
+    await screen.findByText(/Nicio altă cerere/);
+    expect(screen.queryByText("Modificări în fișă")).not.toBeInTheDocument();
   });
 });

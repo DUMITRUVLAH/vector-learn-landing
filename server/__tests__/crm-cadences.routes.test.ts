@@ -207,6 +207,40 @@ describe("Motorul cadențelor", () => {
   });
 });
 
+describe("Cine poate ce", () => {
+  it("[blocant] agentul își înscrie leadul într-o cadență existentă — nu e administrare", async () => {
+    // Prima variantă a porții tăia și asta: un `post("/*")` cu `cadences.manage` bloca agentul
+    // să-și urmărească propriul lead cu o cadență făcută de altcineva.
+    session = { id: ana, tenantId: vectorTenant, role: "teacher", email: "agent@vector.md" };
+    const [cadence] = await testDb.select().from(crmCadences).where(eq(crmCadences.tenantId, vectorTenant));
+    const leadId = await mkLead(vectorTenant, "Leadul agentului");
+
+    const enrolled = await post("/api/crm/cadences/enroll", { leadId, cadenceId: cadence.id });
+    expect(enrolled.status).toBe(201);
+
+    const cancelled = await post(`/api/crm/cadences/enrollments/${enrolled.body.id}/cancel`);
+    expect(cancelled.status).toBe(200);
+  });
+
+  it("[blocant] agentul NU poate construi o cadență sau o regulă de reactivare", async () => {
+    session = { id: ana, tenantId: vectorTenant, role: "teacher", email: "agent@vector.md" };
+
+    const cadence = await post("/api/crm/cadences", { name: "A agentului", steps: [] });
+    expect(cadence.status).toBe(403);
+
+    const rule = await post("/api/crm/cadences/reengagement/rules", {
+      name: "A agentului",
+      afterMonths: 6,
+      action: "create_task",
+    });
+    expect(rule.status).toBe(403);
+
+    // Nici pornirea pe tot workspace-ul: aia scrie taskuri pe leadurile tuturor.
+    const run = await post("/api/crm/cadences/run");
+    expect(run.status).toBe(403);
+  });
+});
+
 describe("Reactivarea clienților pierduți", () => {
   it("[blocant] un lead pierdut de 7 luni e scadent pentru o regulă la 6 luni; unul de 2 luni nu", async () => {
     session = { id: ana, tenantId: vectorTenant, role: "admin", email: "ana@vector.md" };

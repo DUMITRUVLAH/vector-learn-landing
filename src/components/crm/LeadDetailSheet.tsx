@@ -77,6 +77,8 @@ import { LeadContactsTab } from "@/components/crm/LeadContactsTab";
 import { LeadFilesTab } from "@/components/crm/LeadFilesTab";
 import { LeadPersonHistoryTab } from "@/components/crm/LeadPersonHistoryTab";
 import { LeadCustomFields } from "@/components/crm/LeadCustomFields";
+import { LeadCadencePanel } from "@/components/crm/LeadCadencePanel";
+import { LeadAuditTrail } from "@/components/crm/LeadAuditTrail";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 export interface LeadDetailSheetToast {
@@ -728,6 +730,11 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
 
             {tab === "activitate" && (
               <div className="flex flex-col gap-6">
+                {/* Cadențele stau lângă taskuri, nu într-o filă proprie: sunt tot „ce urmează",
+                    doar că programat dinainte. Secțiunea dispare complet dacă workspace-ul n-are
+                    nicio cadență. */}
+                <LeadCadencePanel leadId={lead.id} onToast={onToast} onChanged={onChanged} />
+
             {/* Taskuri */}
             <section className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold text-foreground">Taskuri</h3>
@@ -1036,15 +1043,20 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
             )}
 
             {tab === "istoric" && (
-              <LeadPersonHistoryTab
-                leadId={lead.id}
-                stages={stages}
-                onOpenLead={(id) => {
-                  // Fișa e controlată de părinte (`leadId`): fără el, „Deschide" dintr-un lead
-                  // înrudit n-ar avea unde naviga.
-                  onOpenLead?.(id);
-                }}
-              />
+              <div className="flex flex-col gap-4">
+                <LeadPersonHistoryTab
+                  leadId={lead.id}
+                  stages={stages}
+                  onOpenLead={(id) => {
+                    // Fișa e controlată de părinte (`leadId`): fără el, „Deschide" dintr-un lead
+                    // înrudit n-ar avea unde naviga.
+                    onOpenLead?.(id);
+                  }}
+                />
+                {/* Ce s-a SCHIMBAT în fișă și de către cine — altă întrebare decât ce s-a
+                    DISCUTAT cu clientul (aia e cronologia din „Activitate"). */}
+                <LeadAuditTrail leadId={lead.id} />
+              </div>
             )}
 
           </div>

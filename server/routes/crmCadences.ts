@@ -19,6 +19,9 @@
  * GET    /api/crm/cadences/reengagement/preview    — ce s-ar trezi acum, FĂRĂ efecte
  * POST   /api/crm/cadences/reengagement/run        — aplică efectiv
  *
+ * Drepturi: crearea/editarea cadențelor și a regulilor cere `cadences.manage`; înscrierea unui
+ * lead într-o cadență existentă cere doar `leads.edit` — e munca agentului, nu administrare.
+ *
  * Preview-ul există dinadins ca rută separată: reactivarea atinge clienți pierduți, iar un buton
  * care aplică direct, fără să arate pe cine, e un mod bun de a trimite 300 de taskuri din greșeală.
  */
@@ -44,11 +47,18 @@ import { logCrmAudit } from "../lib/crm/audit";
 
 export const crmCadencesRoutes = new Hono<{ Variables: AuthVariables }>();
 crmCadencesRoutes.use("/*", requireAuth);
-// Cadențele și reactivarea scriu singure taskuri și etichete pe clienți reali — nu sunt ceva ce
-// poate porni oricine trece pe ecran.
-crmCadencesRoutes.post("/*", requireCrmPermission("cadences.manage"));
-crmCadencesRoutes.patch("/*", requireCrmPermission("cadences.manage"));
-crmCadencesRoutes.delete("/*", requireCrmPermission("cadences.manage"));
+
+/**
+ * Poarta e per rută, nu una singură peste toate metodele. Prima variantă (un `post("/*")` cu
+ * `cadences.manage`) tăia și înscrierea unui lead — iar asta nu e administrare, e munca de zi cu
+ * zi a agentului: cadența e deja făcută de altcineva, el doar bagă clientul în ea. Cu poarta
+ * largă, un agent nu-și putea urmări propriul lead.
+ *
+ * Deci: A CONSTRUI o cadență sau o regulă de reactivare (și a le porni pe tot workspace-ul) cere
+ * `cadences.manage`; A ÎNSCRIE sau a opri un lead cere doar `leads.edit`.
+ */
+const manageCadences = requireCrmPermission("cadences.manage");
+const editLeads = requireCrmPermission("leads.edit");
 
 const stepSchema = z.object({
   dayOffset: z.number().int().min(0).max(365),
@@ -95,7 +105,7 @@ crmCadencesRoutes.get("/reengagement/rules", async (c) => {
   }
 });
 
-crmCadencesRoutes.post("/reengagement/rules", zValidator("json", ruleSchema), async (c) => {
+crmCadencesRoutes.post("/reengagement/rules", manageCadences, zValidator("json", ruleSchema), async (c) => {
   const user = c.get("user");
   const body = c.req.valid("json");
 
@@ -139,7 +149,7 @@ crmCadencesRoutes.post("/reengagement/rules", zValidator("json", ruleSchema), as
   return c.json(row, 201);
 });
 
-crmCadencesRoutes.patch("/reengagement/rules/:id", zValidator("json", updateRuleSchema), async (c) => {
+crmCadencesRoutes.patch("/reengagement/rules/:id", manageCadences, zValidator("json", updateRuleSchema), async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const body = c.req.valid("json");
@@ -173,7 +183,7 @@ crmCadencesRoutes.patch("/reengagement/rules/:id", zValidator("json", updateRule
   return c.json(row);
 });
 
-crmCadencesRoutes.delete("/reengagement/rules/:id", async (c) => {
+crmCadencesRoutes.delete("/reengagement/rules/:id", manageCadences, async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const [deleted] = await db
@@ -221,7 +231,7 @@ crmCadencesRoutes.get("/reengagement/preview", async (c) => {
   });
 });
 
-crmCadencesRoutes.post("/reengagement/run", async (c) => {
+crmCadencesRoutes.post("/reengagement/run", manageCadences, async (c) => {
   const user = c.get("user");
   const result = await runReengagement(user.tenantId);
   return c.json({ ok: true, ...result });
@@ -259,6 +269,7 @@ crmCadencesRoutes.get("/enrollments", async (c) => {
 
 crmCadencesRoutes.post(
   "/enroll",
+  editLeads,
   zValidator("json", z.object({ leadId: z.string().uuid(), cadenceId: z.string().uuid() })),
   async (c) => {
     const user = c.get("user");
@@ -270,7 +281,7 @@ crmCadencesRoutes.post(
   }
 );
 
-crmCadencesRoutes.post("/enrollments/:id/cancel", async (c) => {
+crmCadencesRoutes.post("/enrollments/:id/cancel", editLeads, async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const [row] = await db
@@ -283,7 +294,7 @@ crmCadencesRoutes.post("/enrollments/:id/cancel", async (c) => {
 });
 
 /** Butonul „rulează acum": aprinde pașii scadenți DOAR ai workspace-ului curent. */
-crmCadencesRoutes.post("/run", async (c) => {
+crmCadencesRoutes.post("/run", manageCadences, async (c) => {
   const user = c.get("user");
   const result = await processDueEnrollments(new Date(), user.tenantId);
   return c.json({ ok: true, ...result });
@@ -306,7 +317,7 @@ crmCadencesRoutes.get("/", async (c) => {
   }
 });
 
-crmCadencesRoutes.post("/", zValidator("json", createCadenceSchema), async (c) => {
+crmCadencesRoutes.post("/", manageCadences, zValidator("json", createCadenceSchema), async (c) => {
   const user = c.get("user");
   const body = c.req.valid("json");
 
@@ -329,7 +340,7 @@ crmCadencesRoutes.post("/", zValidator("json", createCadenceSchema), async (c) =
   return c.json(row, 201);
 });
 
-crmCadencesRoutes.patch("/:id", zValidator("json", updateCadenceSchema), async (c) => {
+crmCadencesRoutes.patch("/:id", manageCadences, zValidator("json", updateCadenceSchema), async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const body = c.req.valid("json");
@@ -349,7 +360,7 @@ crmCadencesRoutes.patch("/:id", zValidator("json", updateCadenceSchema), async (
   return c.json(row);
 });
 
-crmCadencesRoutes.delete("/:id", async (c) => {
+crmCadencesRoutes.delete("/:id", manageCadences, async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const [deleted] = await db
