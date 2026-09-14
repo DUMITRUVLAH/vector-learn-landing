@@ -124,7 +124,12 @@ async function probePipelineQuery(): Promise<{ ok: boolean; error?: string }> {
       .select({
         stage: leads.stage,
         cnt: sql<number>`count(*)::int`,
-        sumValue: sql<number>`coalesce(sum(${leads.valueCents}), 0)::int`,
+        // `sum()` peste `integer` întoarce BIGINT. Turnat în `::int`, orice pâlnie
+        // care trece de ~21 mil. în valoare totală arunca „integer out of range"
+        // și dobora toată pagina — exact bug-ul de pe producție. Păstrăm bigint
+        // (postgres-js îl dă ca string) și convertim în JS, unde întregii sunt
+        // exacți până la 2^53, cu mult peste orice sumă în bani.
+        sumValue: sql<string>`coalesce(sum(${leads.valueCents}), 0)::bigint`,
       })
       .from(leads)
       .where(eq(leads.tenantId, NIL_TENANT))
@@ -161,7 +166,12 @@ async function probeEachTenant(): Promise<
         .select({
           stage: leads.stage,
           cnt: sql<number>`count(*)::int`,
-          sumValue: sql<number>`coalesce(sum(${leads.valueCents}), 0)::int`,
+          // `sum()` peste `integer` întoarce BIGINT. Turnat în `::int`, orice pâlnie
+        // care trece de ~21 mil. în valoare totală arunca „integer out of range"
+        // și dobora toată pagina — exact bug-ul de pe producție. Păstrăm bigint
+        // (postgres-js îl dă ca string) și convertim în JS, unde întregii sunt
+        // exacți până la 2^53, cu mult peste orice sumă în bani.
+        sumValue: sql<string>`coalesce(sum(${leads.valueCents}), 0)::bigint`,
         })
         .from(leads)
         .where(eq(leads.tenantId, t.id))

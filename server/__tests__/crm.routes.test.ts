@@ -428,3 +428,28 @@ describe("Schemă în urma codului (producție)", () => {
     expect(body.schemaLag).toBeUndefined();
   });
 });
+
+describe("Valori mari în pipeline", () => {
+  it("[blocant] o pâlnie de miliarde nu mai dă „integer out of range”", async () => {
+    // Bug-ul real de pe producție: `sum(value_cents)` întoarce BIGINT, iar codul
+    // îl turna în `::int`. Orice workspace cu o valoare totală peste ~21 mil.
+    // (2^31 de bani) dobora TOATĂ pagina de pipeline, nu doar o cifră.
+    currentUser = { id: userA, tenantId: tenantA, role: "admin", email: "ana@test-a.md" };
+    const big = 2_000_000_000; // 2 mld. de bani; două astfel de rânduri depășesc int4
+    for (let i = 0; i < 2; i++) {
+      const res = await app.request("/api/crm/leads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fullName: `Contract mare ${i}`, valueCents: big }),
+      });
+      expect(res.status).toBe(201);
+    }
+
+    const res = await app.request("/api/crm/leads/pipeline");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Suma trebuie să fie exactă, nu trunchiată sau întoarsă ca text.
+    expect(typeof body.totalValueCents).toBe("number");
+    expect(body.totalValueCents).toBeGreaterThanOrEqual(2 * big);
+  });
+});
