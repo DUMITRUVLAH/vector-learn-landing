@@ -131,7 +131,14 @@ crmHealthRoutes.get("/", async (c) => {
       console.error(`[crm/health] ${probe.name}:`, e instanceof Error ? e.message : e);
     }
   }
+  // Ce commit rulează efectiv. Fără asta nu pot distinge „fixul nu merge" de
+  // „fixul nu e încă deployat" — și am pierdut deja runde pe confuzia asta.
+  const build = {
+    commit: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 8),
+    env: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "unknown",
+  };
+
   const pipelineQuery = await probePipelineQuery();
   const ok = Object.values(tables).every((t) => t.ok) && pipelineQuery.ok;
-  return c.json({ ok, tables, pipelineQuery }, ok ? 200 : 503);
+  return c.json({ ok, build, tables, pipelineQuery }, ok ? 200 : 503);
 });
