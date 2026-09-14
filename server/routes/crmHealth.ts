@@ -87,6 +87,19 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
             FROM crm_products LIMIT 0`
       ),
   },
+  // Tabelele adăugate de Fazele 3-7. Fiecare e pe calea unei pagini sau a
+  // salvării unui lead: dacă o migrare n-a ajuns pe un workspace, vreau să știu
+  // de aici, nu de la owner care vede „internal_error" pe ecran.
+  { name: "crm_lead_tasks", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, title, due_at, status FROM crm_lead_tasks LIMIT 0`) },
+  { name: "crm_companies", run: () => db.execute(sql`SELECT id, tenant_id, name, name_normalized, idno FROM crm_companies LIMIT 0`) },
+  { name: "crm_import_jobs", run: () => db.execute(sql`SELECT id, tenant_id, file_name, created_count FROM crm_import_jobs LIMIT 0`) },
+  { name: "crm_import_mappings", run: () => db.execute(sql`SELECT id, tenant_id, name, mapping FROM crm_import_mappings LIMIT 0`) },
+  { name: "crm_automations", run: () => db.execute(sql`SELECT id, tenant_id, name, enabled, trigger, conditions, actions FROM crm_automations LIMIT 0`) },
+  { name: "crm_automation_runs", run: () => db.execute(sql`SELECT id, tenant_id, automation_id, lead_id, status FROM crm_automation_runs LIMIT 0`) },
+  { name: "crm_assignment_rules", run: () => db.execute(sql`SELECT id, tenant_id, name, strategy, conditions, user_ids FROM crm_assignment_rules LIMIT 0`) },
+  { name: "crm_sales_settings", run: () => db.execute(sql`SELECT id, tenant_id, user_id, is_active, daily_capacity, weight FROM crm_sales_settings LIMIT 0`) },
+  { name: "crm_assignment_log", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, user_id, reason FROM crm_assignment_log LIMIT 0`) },
+  { name: "doc_documents_accepta_crm_lead", run: () => db.execute(sql`SELECT id, counterparty_kind, counterparty_id FROM doc_documents LIMIT 0`) },
 ];
 
 /**
