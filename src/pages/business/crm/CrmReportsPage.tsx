@@ -9,9 +9,12 @@
  * Exportul e CSV cu BOM UTF-8: fără el, Excel deschide „Preț" ca „PreÈ›".
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, Download, Loader2 } from "lucide-react";
+import { BarChart3, Download, FileText, Loader2 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
-import { Alert, Button, Card, EmptyState, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
+import { Alert, Button, Card, EmptyState, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
+import { TimelineChart, ConversionChart, LostReasonsChart } from "@/components/crm/ReportsCharts";
+import { downloadCrmReportPdf } from "@/lib/crmReportPdf";
+import { useBusinessSession } from "@/hooks/useBusinessSession";
 import {
   getCrmReports,
   presetRange,
@@ -64,12 +67,41 @@ const KPI_LABELS: { key: keyof CrmReportsResponse["kpis"]; label: string; money?
 
 export function CrmReportsPage() {
   const [preset, setPreset] = useState<CrmPeriodPreset>("thisMonth");
+  /** Interval ales manual (cerința 57 — „pe perioadă selectată de utilizator"). */
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [owner, setOwner] = useState<string>("all");
+  const [exporting, setExporting] = useState(false);
+  const { data: session } = useBusinessSession();
   const [data, setData] = useState<CrmReportsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const range = useMemo(() => presetRange(preset), [preset]);
+  const range = useMemo(() => {
+    if (preset !== "custom") return presetRange(preset);
+    // Intervalul e semi-deschis [from, to): ziua „până la" se include mutând limita la miezul
+    // nopții următoare, altfel ultima zi aleasă ar lipsi din raport.
+    const from = customFrom ? new Date(`${customFrom}T00:00:00`).toISOString() : null;
+    const to = customTo ? new Date(`${customTo}T00:00:00`) : null;
+    if (to) to.setDate(to.getDate() + 1);
+    return { from, to: to ? to.toISOString() : null };
+  }, [preset, customFrom, customTo]);
+
+  /** Perioada în cuvinte — pentru antetul PDF-ului și pentru numele fișierelor. */
+  const periodLabel = useMemo(() => {
+    if (preset === "all") return "toate perioadele";
+    if (preset !== "custom") return CRM_PERIOD_LABELS[preset].toLowerCase();
+    if (!customFrom && !customTo) return "toate perioadele";
+    const fmt = (v: string) => new Date(`${v}T00:00:00`).toLocaleDateString("ro-MD", { day: "2-digit", month: "long", year: "numeric" });
+    if (customFrom && customTo) return `${fmt(customFrom)} – ${fmt(customTo)}`;
+    return customFrom ? `din ${fmt(customFrom)}` : `până la ${fmt(customTo)}`;
+  }, [preset, customFrom, customTo]);
+
+  const ownerLabel = useMemo(() => {
+    if (owner === "all") return "toată echipa";
+    return data?.owners.find((o) => o.id === owner)?.name ?? "agent";
+    // `data` intră înadins: numele agentului vine din răspuns, nu dintr-o listă locală.
+  }, [owner, data]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,9 +135,73 @@ export function CrmReportsPage() {
     for (const o of data.perOwner) {
       rows.push([o.ownerName, ...KPI_LABELS.map((k) => (k.money ? money(o[k.key] as number) : (o[k.key] as number)))]);
     }
-    rows.push([], ["Motiv pierdere", "Număr", "Procent"]);
-    for (const r of data.lostReasons) rows.push([r.reason, r.count, `${r.pct}%`]);
+    rows.push([], ["Motiv pierdere", "Număr", "Procent", "Valoare pierdută"]);
+    for (const r of data.lostReasons) rows.push([r.reason, r.count, `${r.pct}%`, money(r.valueCents)]);
+    rows.push([], ["Produs", "Total", "Câștigate", "Pierdute", "Rată", "Valoare"]);
+    for (const p of data.perProduct) {
+      rows.push([p.product, p.total, p.won, p.lost, `${p.winRatePct}%`, money(p.valueCents)]);
+    }
+    rows.push([], ["Din", "În", "Au ajuns", "Au avansat", "Rată"]);
+    for (const r of data.conversion) {
+      rows.push([r.fromLabel, r.toLabel, r.reached, r.advanced, `${r.conversionPct}%`]);
+    }
     downloadCsv(`rapoarte-crm-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows));
+  }
+
+  /**
+   * PDF-ul poartă aceleași cifre ca ecranul, plus perioada și agentul în antet. Cerința 58 cere
+   * explicit „Excel și PDF" — CSV-ul de mai sus acoperă Excel (separator `;` + BOM, cum îl vrea
+   * Excel-ul în română).
+   */
+  async function exportPdf() {
+    if (!data) return;
+    setExporting(true);
+    try {
+      await downloadCrmReportPdf(
+        {
+          orgName: session?.tenant.name ?? "Workspace",
+          periodLabel,
+          ownerLabel,
+          kpis: KPI_LABELS.map((k) => ({
+            label: k.label,
+            value: k.money ? money(data.kpis[k.key] as number) : String(data.kpis[k.key]),
+          })),
+          cycleLabel: data.cycleDays ? `${data.cycleDays.toFixed(1)} zile` : "—",
+          tables: [
+            {
+              title: "Conversia între etape",
+              head: ["Din", "În", "Au ajuns", "Au avansat", "Rată"],
+              rows: data.conversion.map((r) => [r.fromLabel, r.toLabel, r.reached, r.advanced, `${r.conversionPct}%`]),
+              numericFrom: 2,
+            },
+            {
+              title: "Rezultate pe agent",
+              head: ["Agent", "Leaduri", "Apeluri", "Contracte", "Valoare"],
+              rows: data.perOwner.map((o) => [
+                o.ownerName,
+                o.leadsAllocated,
+                o.callsMade,
+                o.contractsSigned,
+                money(o.salesValueCents),
+              ]),
+            },
+            {
+              title: "De ce pierdem",
+              head: ["Motiv", "Număr", "Procent", "Valoare pierdută"],
+              rows: data.lostReasons.map((r) => [r.reason, r.count, `${r.pct}%`, money(r.valueCents)]),
+            },
+            {
+              title: "Rezultate pe produs",
+              head: ["Produs", "Total", "Câștigate", "Pierdute", "Rată", "Valoare"],
+              rows: data.perProduct.map((p) => [p.product, p.total, p.won, p.lost, `${p.winRatePct}%`, money(p.valueCents)]),
+            },
+          ],
+        },
+        `raport-crm-${new Date().toISOString().slice(0, 10)}.pdf`
+      );
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -113,10 +209,20 @@ export function CrmReportsPage() {
       pageTitle="Rapoarte"
       pageDescription="Indicatorii de vânzări, pe agent și pe echipă, pentru perioada aleasă."
       actions={
-        <Button variant="outline" onClick={exportCsv} disabled={!data || loading}>
-          <Download className="h-4 w-4" aria-hidden="true" />
-          Export CSV
-        </Button>
+        <>
+          <Button variant="outline" onClick={exportCsv} disabled={!data || loading}>
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Export Excel
+          </Button>
+          <Button variant="outline" onClick={() => void exportPdf()} disabled={!data || loading || exporting}>
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <FileText className="h-4 w-4" aria-hidden="true" />
+            )}
+            Export PDF
+          </Button>
+        </>
       }
     >
       <div className="space-y-6">
@@ -128,15 +234,27 @@ export function CrmReportsPage() {
               value={preset}
               onChange={(e) => setPreset(e.target.value as CrmPeriodPreset)}
             >
-              {(Object.keys(CRM_PERIOD_LABELS) as CrmPeriodPreset[])
-                .filter((p) => p !== "custom")
-                .map((p) => (
-                  <option key={p} value={p}>
-                    {CRM_PERIOD_LABELS[p]}
-                  </option>
-                ))}
+              {(Object.keys(CRM_PERIOD_LABELS) as CrmPeriodPreset[]).map((p) => (
+                <option key={p} value={p}>
+                  {CRM_PERIOD_LABELS[p]}
+                </option>
+              ))}
             </Select>
           </div>
+
+          {/* Cerința 57: perioada aleasă de utilizator, nu doar preseturile. */}
+          {preset === "custom" && (
+            <>
+              <div className="space-y-1">
+                <Label htmlFor="rap-de-la">De la</Label>
+                <Input id="rap-de-la" type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="rap-pana-la">Până la</Label>
+                <Input id="rap-pana-la" type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+              </div>
+            </>
+          )}
           <div className="space-y-1">
             <Label htmlFor="rap-agent">Agent</Label>
             <Select id="rap-agent" value={owner} onChange={(e) => setOwner(e.target.value)}>
@@ -181,9 +299,21 @@ export function CrmReportsPage() {
               </Card>
             </div>
 
+            {/* Evoluția perioadei — imaginea care lipsea. Un tabel îți spune cât ai vândut;
+                graficul îți spune dacă urci sau cobori. */}
+            <section className="space-y-2">
+              <h2 className="text-lg font-semibold">Evoluția perioadei</h2>
+              <Card className="p-3">
+                <TimelineChart data={data.timeline ?? []} size={data.bucketSize ?? "day"} />
+              </Card>
+            </section>
+
             {data.conversion.length > 0 && (
               <section className="space-y-2">
                 <h2 className="text-lg font-semibold">Conversia între etape</h2>
+                <Card className="p-3">
+                  <ConversionChart rows={data.conversion} />
+                </Card>
                 <Table aria-label="Conversia între etape">
                   <TableHeader>
                     <TableRow>
@@ -199,9 +329,9 @@ export function CrmReportsPage() {
                       <TableRow key={`${r.fromKey}-${r.toKey}`}>
                         <TableCell>{r.fromLabel}</TableCell>
                         <TableCell className="text-muted-foreground">{r.toLabel}</TableCell>
-                        <TableCell className="text-right tabular-nums">{r.entered}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.reached}</TableCell>
                         <TableCell className="text-right tabular-nums">{r.advanced}</TableCell>
-                        <TableCell className="text-right tabular-nums">{r.ratePct}%</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.conversionPct}%</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -240,12 +370,16 @@ export function CrmReportsPage() {
             {data.lostReasons.length > 0 && (
               <section className="space-y-2">
                 <h2 className="text-lg font-semibold">De ce pierdem</h2>
+                <Card className="p-3">
+                  <LostReasonsChart rows={data.lostReasons} />
+                </Card>
                 <Table aria-label="Motivele pierderii">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Motiv</TableHead>
                       <TableHead className="text-right">Număr</TableHead>
                       <TableHead className="text-right">Procent</TableHead>
+                      <TableHead className="text-right">Valoare pierdută</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -254,6 +388,7 @@ export function CrmReportsPage() {
                         <TableCell>{r.reason}</TableCell>
                         <TableCell className="text-right tabular-nums">{r.count}</TableCell>
                         <TableCell className="text-right tabular-nums">{r.pct}%</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(r.valueCents)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -270,18 +405,20 @@ export function CrmReportsPage() {
                       <TableHead>Produs</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead className="text-right">Câștigate</TableHead>
+                      <TableHead className="text-right">Pierdute</TableHead>
                       <TableHead className="text-right">Rată</TableHead>
                       <TableHead className="text-right">Valoare</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {data.perProduct.map((p) => (
-                      <TableRow key={p.productKey}>
-                        <TableCell>{p.productName}</TableCell>
+                      <TableRow key={p.product}>
+                        <TableCell>{p.product}</TableCell>
                         <TableCell className="text-right tabular-nums">{p.total}</TableCell>
                         <TableCell className="text-right tabular-nums">{p.won}</TableCell>
+                        <TableCell className="text-right tabular-nums">{p.lost}</TableCell>
                         <TableCell className="text-right tabular-nums">{p.winRatePct}%</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(p.wonValueCents)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(p.valueCents)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

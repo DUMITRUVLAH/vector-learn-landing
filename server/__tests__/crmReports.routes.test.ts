@@ -232,3 +232,162 @@ describe("GET /api/crm/reports", () => {
     expect(rowForAna.salesValueCents).toBe(single.kpis.salesValueCents);
   });
 });
+
+describe("Perioada aleasă se aplică ÎNTREGULUI raport", () => {
+  /**
+   * Bugul (reparat 14.09.2026): doar plăcuțele și tabelul pe agent primeau intervalul. Alegeai
+   * „luna aceasta" și conversia, durata ciclului, motivele pierderii și produsele arătau, tăcut,
+   * datele dintotdeauna — antetul spunea o perioadă, tabelele alta.
+   */
+  it("[blocant] motivele pierderii sunt ale perioadei, nu dintotdeauna", async () => {
+    const acum = new Date();
+    const anulTrecut = new Date(acum.getFullYear() - 1, 2, 15);
+
+    // Pierdut anul trecut — nu are ce căuta în raportul lunii curente.
+    const vechi = await makeLead({
+      tenantId: tenantA,
+      stage: "refuzat",
+      lostReason: "Preț prea mare",
+      createdAt: anulTrecut,
+    });
+    await testDb.insert(leadInteractions).values({
+      tenantId: tenantA,
+      leadId: vechi.id,
+      type: "stage_change",
+      direction: "internal",
+      body: "new → refuzat",
+      metadata: { from: "new", to: "refuzat" },
+      occurredAt: anulTrecut,
+    });
+
+    // Pierdut acum.
+    const recent = await makeLead({ tenantId: tenantA, stage: "refuzat", lostReason: "A ales alt furnizor" });
+    await testDb.insert(leadInteractions).values({
+      tenantId: tenantA,
+      leadId: recent.id,
+      type: "stage_change",
+      direction: "internal",
+      body: "new → refuzat",
+      metadata: { from: "new", to: "refuzat" },
+      occurredAt: acum,
+    });
+
+    const from = new Date(acum.getFullYear(), acum.getMonth(), 1).toISOString();
+    const res = await app.request(`/api/crm/reports?from=${encodeURIComponent(from)}`);
+    const body = await res.json();
+
+    const motive = (body.lostReasons as Array<{ reason: string }>).map((r) => r.reason);
+    expect(motive).toEqual(["A ales alt furnizor"]);
+    expect(motive).not.toContain("Preț prea mare");
+  });
+
+  it("[blocant] fără interval, raportul arată tot — filtrul nu ascunde date din greșeală", async () => {
+    const anulTrecut = new Date(new Date().getFullYear() - 1, 2, 15);
+    const vechi = await makeLead({
+      tenantId: tenantA,
+      stage: "refuzat",
+      lostReason: "Preț prea mare",
+      createdAt: anulTrecut,
+    });
+    await testDb.insert(leadInteractions).values({
+      tenantId: tenantA,
+      leadId: vechi.id,
+      type: "stage_change",
+      direction: "internal",
+      body: "new → refuzat",
+      metadata: { from: "new", to: "refuzat" },
+      occurredAt: anulTrecut,
+    });
+
+    const body = await (await app.request("/api/crm/reports")).json();
+    expect((body.lostReasons as Array<{ reason: string }>).map((r) => r.reason)).toContain("Preț prea mare");
+  });
+
+  it("[blocant] conversia numără tranzițiile DIN perioadă", async () => {
+    const acum = new Date();
+    const anulTrecut = new Date(acum.getFullYear() - 1, 5, 1);
+
+    /** Un lead care trece prin „Contactat" și apoi e câștigat, la o dată dată. */
+    const parcurs = async (cand: Date) => {
+      const lead = await makeLead({ tenantId: tenantA, stage: "castigat", valueCents: 100_00, createdAt: cand });
+      await testDb.insert(leadInteractions).values([
+        {
+          tenantId: tenantA,
+          leadId: lead.id,
+          type: "stage_change",
+          direction: "internal",
+          body: "new → contacted",
+          metadata: { from: "new", to: "contacted" },
+          occurredAt: cand,
+        },
+        {
+          tenantId: tenantA,
+          leadId: lead.id,
+          type: "stage_change",
+          direction: "internal",
+          body: "contacted → castigat",
+          metadata: { from: "contacted", to: "castigat" },
+          occurredAt: new Date(cand.getTime() + 3600_000),
+        },
+      ]);
+    };
+
+    await parcurs(anulTrecut);
+    await parcurs(acum);
+
+    const from = new Date(acum.getFullYear(), acum.getMonth(), 1).toISOString();
+    const body = await (await app.request(`/api/crm/reports?from=${encodeURIComponent(from)}`)).json();
+
+    // Două parcursuri în bază, unul singur în perioadă.
+    const pereche = (body.conversion as Array<{ fromKey: string; toKey: string; reached: number; advanced: number }>).find(
+      (r) => r.fromKey === "contacted" && r.toKey === "castigat"
+    );
+    expect(pereche?.reached).toBe(1);
+    expect(pereche?.advanced).toBe(1);
+
+    const totIstoricul = await (await app.request("/api/crm/reports")).json();
+    const perecheTot = (totIstoricul.conversion as Array<{ fromKey: string; toKey: string; reached: number }>).find(
+      (r) => r.fromKey === "contacted" && r.toKey === "castigat"
+    );
+    expect(perecheTot?.reached).toBe(2);
+  });
+});
+
+describe("Evoluția în timp", () => {
+  it("[blocant] graficul numără vânzarea o singură dată, la data la care s-a produs", async () => {
+    const acum = new Date();
+    const from = new Date(acum.getFullYear(), acum.getMonth(), 1).toISOString();
+    const lead = await makeLead({ tenantId: tenantA, stage: "castigat", valueCents: 500_00, wonAt: acum });
+    // Plimbată înapoi și înainte: nu are voie să devină două vânzări.
+    await testDb.insert(leadInteractions).values({
+      tenantId: tenantA,
+      leadId: lead.id,
+      type: "stage_change",
+      direction: "internal",
+      body: "castigat → castigat",
+      metadata: { from: "contacted", to: "castigat" },
+      occurredAt: new Date(acum.getTime() + 3600_000),
+    });
+
+    const body = await (await app.request(`/api/crm/reports?from=${encodeURIComponent(from)}`)).json();
+    const puncte = body.timeline as Array<{ contractsSigned: number; salesValueCents: number }>;
+
+    expect(puncte.reduce((s, p) => s + p.contractsSigned, 0)).toBe(1);
+    expect(puncte.reduce((s, p) => s + p.salesValueCents, 0)).toBe(500_00);
+    // O lună se taie pe zile, ca graficul să fie citibil.
+    expect(body.bucketSize).toBe("day");
+  });
+
+  it("[normal] graficul și plăcuțele spun ACELAȘI lucru despre vânzări", async () => {
+    const acum = new Date();
+    const from = new Date(acum.getFullYear(), acum.getMonth(), 1).toISOString();
+    await makeLead({ tenantId: tenantA, stage: "castigat", valueCents: 100_00, wonAt: acum });
+    await makeLead({ tenantId: tenantA, stage: "castigat", valueCents: 250_00, wonAt: acum });
+
+    const body = await (await app.request(`/api/crm/reports?from=${encodeURIComponent(from)}`)).json();
+    const puncte = body.timeline as Array<{ contractsSigned: number; salesValueCents: number }>;
+
+    expect(puncte.reduce((s, p) => s + p.contractsSigned, 0)).toBe(body.kpis.contractsSigned);
+    expect(puncte.reduce((s, p) => s + p.salesValueCents, 0)).toBe(body.kpis.salesValueCents);
+  });
+});

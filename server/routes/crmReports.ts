@@ -38,6 +38,9 @@ import {
   type ReportInteraction,
   type StageChange,
   type DateRange,
+  timeline,
+  bucketSizeFor,
+  inRange,
 } from "../lib/crm/reports";
 
 export const crmReportsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -59,6 +62,8 @@ crmReportsRoutes.get("/", async (c) => {
   const to = c.req.query("to") ?? null;
   const owner = c.req.query("owner");
   const range: DateRange = { from, to };
+  // Cât de fin se taie graficul de evoluție: zi / săptămână / lună, după lungimea perioadei.
+  const bucketSize = bucketSizeFor(range);
 
   try {
     await ensureTenantStages(tenantId);
@@ -172,18 +177,51 @@ crmReportsRoutes.get("/", async (c) => {
 
     const owners = memberRows.map((m) => ({ id: m.id, name: m.name ?? "—" }));
 
+    /**
+     * Perioada și agentul se aplică TUTUROR secțiunilor, nu doar plăcuțelor.
+     *
+     * Până acum `conversion`, `cycleDays`, `perProduct`, `lostReasons` și `taskCompliance`
+     * primeau rândurile brute: alegeai „luna aceasta" și patru din șase tabele arătau, în tăcere,
+     * datele dintotdeauna. Antetul paginii spunea o perioadă, conținutul alta — iar cine compara
+     * două cifre de pe același ecran credea că sistemul greșește.
+     */
+    const ownerOfLead = new Map(reportLeads.map((l) => [l.id, l.assignedTo]));
+    const ownedLead = (id: string | null | undefined) => !owner || (id != null && ownerOfLead.get(id) === owner);
+
+    const scopedLeads = reportLeads.filter(
+      (l) => (!owner || l.assignedTo === owner) && inRange(l.createdAt, range)
+    );
+    // Tranzițiile din perioadă, ale leadurilor agentului ales. `conversion` și `cycleDays` se
+    // sprijină pe ele, deci „rata de conversie" devine a perioadei, nu a istoriei.
+    const scopedChanges = stageChanges.filter((ch) => inRange(ch.occurredAt, range) && ownedLead(ch.leadId));
+    const scopedTasks = reportTasks.filter((t) => !owner || t.assignedTo === owner);
+
     return c.json({
       range,
       owner: owner ?? null,
       stages: reportStages,
       owners,
       kpis: salesKpis(reportLeads, reportInteractions, reportTasks, stageChanges, reportStages, range, owner || undefined),
-      conversion: stageConversion(stageChanges, reportStages),
-      cycleDays: averageCycleDays(reportLeads, stageChanges, reportStages),
+      conversion: stageConversion(scopedChanges, reportStages),
+      cycleDays: averageCycleDays(reportLeads, scopedChanges, reportStages),
       perOwner: perOwnerBreakdown(reportLeads, reportInteractions, reportTasks, stageChanges, reportStages, range, owners),
-      perProduct: perProductBreakdown(reportLeads, reportStages),
-      lostReasons: lostReasonBreakdown(reportLeads),
-      taskCompliance: taskCompliance(reportTasks),
+      perProduct: perProductBreakdown(scopedLeads, reportStages),
+      lostReasons: lostReasonBreakdown(reportLeads, {
+        stageChanges: scopedChanges,
+        stages: reportStages,
+        range,
+      }),
+      taskCompliance: taskCompliance(scopedTasks),
+      timeline: timeline(
+        // Evoluția are nevoie de TOATE leadurile agentului (ca să lege o vânzare de valoarea ei),
+        // dar numără doar ce cade în perioadă — filtrarea e înăuntru.
+        owner ? reportLeads.filter((l) => l.assignedTo === owner) : reportLeads,
+        scopedChanges,
+        reportStages,
+        range,
+        bucketSize
+      ),
+      bucketSize,
     });
   } catch (e) {
     // Aceeași degradare ca la /pipeline: o schemă rămasă în urma codului nu are

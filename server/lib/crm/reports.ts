@@ -395,24 +395,60 @@ export function perProductBreakdown(
 // ─── cerința 55 — motive de pierdere agregate ───────────────────────────────
 
 export interface LostReasonRow {
+  /** Cât din leadurile pierdute ale perioadei cad pe acest motiv (întreg, 0-100). */
   reason: string;
   count: number;
   valueCents: number;
+  pct: number;
 }
 
 /** Motive de pierdere agregate (cerința 55) — leads fără `lostReason` (nesetat
  *  la momentul pierderii) sunt ignorate, nu grupate sub un fals „necunoscut”. */
-export function lostReasonBreakdown(leads: ReportLead[]): LostReasonRow[] {
+
+/**
+ * Leadurile care au intrat într-o etapă „pierdut" ÎN perioadă. `null` când nu se cere filtrare
+ * (fără interval, sau fără cronologia tranzițiilor) — apelantul folosește atunci toate rândurile.
+ */
+function lostLeadIdsInRange(
+  stageChanges?: StageChange[],
+  stages?: ReportStage[],
+  range?: DateRange
+): Set<string> | null {
+  if (!range || (!range.from && !range.to)) return null;
+  if (!stageChanges || !stages) return null;
+  const lost = lostKeySet(stages);
+  const ids = new Set<string>();
+  for (const ch of stageChanges) {
+    if (!ch.leadId || !ch.to || !lost.has(ch.to)) continue;
+    if (!inRange(ch.occurredAt, range)) continue;
+    ids.add(ch.leadId);
+  }
+  return ids;
+}
+
+export function lostReasonBreakdown(
+  leads: ReportLead[],
+  opts: { stageChanges?: StageChange[]; stages?: ReportStage[]; range?: DateRange } = {}
+): LostReasonRow[] {
+  // Un motiv de pierdere aparține MOMENTULUI în care leadul s-a pierdut, nu zilei în care a fost
+  // creat. Fără filtrul ăsta, „luna aceasta" arăta motivele dintotdeauna — raportul spunea în
+  // antet o perioadă, iar în tabel alta.
+  const lostInRange = lostLeadIdsInRange(opts.stageChanges, opts.stages, opts.range);
+
   const map = new Map<string, { count: number; valueCents: number }>();
   for (const l of leads) {
     if (!l.lostReason) continue;
+    if (lostInRange && !lostInRange.has(l.id)) continue;
     const b = map.get(l.lostReason) ?? { count: 0, valueCents: 0 };
     b.count++;
     b.valueCents += l.valueCents ?? 0;
     map.set(l.lostReason, b);
   }
+  // Procentul e din leadurile PIERDUTE ale perioadei, nu din toate leadurile: „40% dintre
+  // pierderi sunt din preț" e o frază utilă; „40% din leaduri" ar fi alt număr și altă concluzie.
+  const totalLost = [...map.values()].reduce((sum, b) => sum + b.count, 0);
   return [...map.entries()]
-    .map(([reason, b]) => ({ reason, ...b }))
+    .map(([reason, b]) => ({ reason, ...b, pct: totalLost ? Math.round((b.count / totalLost) * 100) : 0 }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -448,3 +484,110 @@ export function taskCompliance(tasks: ReportTask[], now: Date = new Date()): Tas
 
 // ─── Strat de date (I/O) ─────────────────────────────────────────────────────
 
+
+// ─── Evoluția în timp (cerința 57 — „pe perioadă selectată") ─────────────────
+
+export interface TimelineBucket {
+  /** Începutul intervalului, ISO (zi, săptămână sau lună — vezi `bucketSizeFor`). */
+  bucket: string;
+  leadsCreated: number;
+  offersSent: number;
+  contractsSigned: number;
+  salesValueCents: number;
+}
+
+export type BucketSize = "day" | "week" | "month";
+
+/**
+ * Cât de fin se taie perioada. O lună pe zile e citibilă; un an pe zile e un gard de 365 de bare
+ * în care nu vezi nimic. Pragurile sunt alese ca graficul să aibă între ~10 și ~60 de puncte.
+ */
+export function bucketSizeFor(range: DateRange, now: Date = new Date()): BucketSize {
+  const from = range.from ? new Date(range.from) : null;
+  const to = range.to ? new Date(range.to) : now;
+  if (!from) return "month"; // „tot timpul"
+  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000));
+  if (days <= 62) return "day";
+  if (days <= 400) return "week";
+  return "month";
+}
+
+/** Eticheta intervalului în care cade o dată (ziua, lunea săptămânii, sau întâi luna). */
+export function bucketKey(iso: string, size: BucketSize): string {
+  const d = new Date(iso);
+  if (size === "month") return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  if (size === "week") {
+    const copy = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    // Luni ca prima zi (ro-MD): duminica (0) se trage cu 6 zile înapoi, nu cu 0.
+    const shift = (copy.getUTCDay() + 6) % 7;
+    copy.setUTCDate(copy.getUTCDate() - shift);
+    return copy.toISOString().slice(0, 10);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Evoluția în perioada aleasă: leaduri intrate, oferte trimise, contracte semnate și valoarea lor.
+ *
+ * Pură, ca restul fișierului. „Contract semnat" e, ca peste tot aici, PRIMA tranziție către o
+ * etapă cu flagul `isWon` — nu starea curentă a leadului, care n-ar ști să spună CÂND s-a
+ * întâmplat.
+ */
+export function timeline(
+  leads: ReportLead[],
+  stageChanges: StageChange[],
+  stages: ReportStage[],
+  range: DateRange,
+  size: BucketSize
+): TimelineBucket[] {
+  const won = wonKeySet(stages);
+  // Aceeași regulă ca în `salesKpis`: o „ofertă trimisă" e intrarea într-o etapă de ofertă.
+  // Dacă graficul ar număra altfel decât plăcuța de deasupra lui, raportul s-ar contrazice
+  // singur pe același ecran.
+  const offer = offerKeySet(stages);
+  const leadById = new Map(leads.map((l) => [l.id, l]));
+  const buckets = new Map<string, TimelineBucket>();
+
+  const touch = (iso: string): TimelineBucket => {
+    const key = bucketKey(iso, size);
+    let b = buckets.get(key);
+    if (!b) {
+      b = { bucket: key, leadsCreated: 0, offersSent: 0, contractsSigned: 0, salesValueCents: 0 };
+      buckets.set(key, b);
+    }
+    return b;
+  };
+
+  for (const lead of leads) {
+    if (!inRange(lead.createdAt, range)) continue;
+    touch(lead.createdAt).leadsCreated++;
+  }
+
+  const offerSeen = new Set<string>();
+  for (const ch of stageChanges) {
+    if (!ch.leadId || !ch.to || !ch.occurredAt || !offer.has(ch.to)) continue;
+    if (!inRange(ch.occurredAt, range)) continue;
+    // O singură ofertă per lead, ca în `salesKpis`: un lead plimbat de două ori prin etapa de
+    // ofertă n-a produs două oferte.
+    if (offerSeen.has(ch.leadId)) continue;
+    offerSeen.add(ch.leadId);
+    touch(ch.occurredAt).offersSent++;
+  }
+
+  // Prima intrare într-o etapă câștigată, per lead — altfel o cerere plimbată înainte-înapoi ar
+  // fi numărată de mai multe ori ca vânzare.
+  const firstWonAt = new Map<string, string>();
+  for (const ch of stageChanges) {
+    if (!ch.leadId || !ch.to || !ch.occurredAt || !won.has(ch.to)) continue;
+    const prev = firstWonAt.get(ch.leadId);
+    if (!prev || ch.occurredAt < prev) firstWonAt.set(ch.leadId, ch.occurredAt);
+  }
+  for (const [leadId, at] of firstWonAt) {
+    if (!inRange(at, range)) continue;
+    const b = touch(at);
+    b.contractsSigned++;
+    b.salesValueCents += leadById.get(leadId)?.valueCents ?? 0;
+  }
+
+  return [...buckets.values()].sort((a, b) => (a.bucket < b.bucket ? -1 : 1));
+}

@@ -19,14 +19,23 @@ export interface CrmSalesKpis {
   tasksOverdue: number;
 }
 
+/**
+ * ATENȚIE la nume: acestea sunt EXACT câmpurile pe care le întoarce serverul
+ * (`StageConversionRow` din server/lib/crm/reports.ts). Tipurile de aici scriseseră
+ * `entered`/`ratePct`, care nu există — iar pagina afișa, în producție, o coloană goală și
+ * „undefined%". Nimic nu prinsese asta, fiindcă TypeScript verifică tipul declarat, nu ce vine
+ * de pe fir.
+ */
 export interface CrmConversionRow {
   fromKey: string;
   fromLabel: string;
   toKey: string;
   toLabel: string;
-  entered: number;
+  /** Câte leaduri distincte au ajuns vreodată în etapa `fromKey`. */
+  reached: number;
+  /** Dintre acelea, câte au ajuns și în `toKey`. */
   advanced: number;
-  ratePct: number;
+  conversionPct: number;
 }
 
 export interface CrmOwnerRow extends CrmSalesKpis {
@@ -35,25 +44,42 @@ export interface CrmOwnerRow extends CrmSalesKpis {
 }
 
 export interface CrmProductRow {
-  productKey: string;
-  productName: string;
+  /** Numele produsului/cursului — cheia de grupare e chiar el. */
+  product: string;
   total: number;
   won: number;
-  wonValueCents: number;
+  lost: number;
+  /** Valoarea leadurilor câștigate, în cenți. */
+  valueCents: number;
+  /** % din cele DECISE (câștigate + pierdute); cele deschise nu intră la numitor. */
   winRatePct: number;
 }
 
 export interface CrmLostReasonRow {
   reason: string;
   count: number;
+  /** Valoarea totală a leadurilor pierdute pe acest motiv, în cenți. */
+  valueCents: number;
+  /** Procent din leadurile pierdute ale perioadei. */
   pct: number;
 }
 
 export interface CrmTaskCompliance {
   done: number;
-  open: number;
   overdue: number;
-  onTimePct: number;
+  /** Deschise, dar încă nescadente. */
+  openNotYetDue: number;
+  /** % finalizate din totalul cunoscut (finalizate + restante + în așteptare). */
+  totalPct: number;
+}
+
+export interface CrmTimelineBucket {
+  /** Începutul intervalului (ISO, doar data). */
+  bucket: string;
+  leadsCreated: number;
+  offersSent: number;
+  contractsSigned: number;
+  salesValueCents: number;
 }
 
 export interface CrmReportsResponse {
@@ -68,6 +94,9 @@ export interface CrmReportsResponse {
   perProduct: CrmProductRow[];
   lostReasons: CrmLostReasonRow[];
   taskCompliance: CrmTaskCompliance;
+  /** Evoluția în perioadă, tăiată pe zi/săptămână/lună (vezi `bucketSize`). */
+  timeline?: CrmTimelineBucket[];
+  bucketSize?: "day" | "week" | "month";
   /** Prezent doar când baza a rămas în urma codului — pagina arată gol, nu eroare. */
   schemaLag?: boolean;
 }
