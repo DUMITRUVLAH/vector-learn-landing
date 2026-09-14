@@ -1135,6 +1135,20 @@
       "when": 1787000203016,
       "tag": "0162_crm_pipeline_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "7",
+      "when": 1787000203017,
+      "tag": "0163_crm_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 164,
+      "version": "7",
+      "when": 1787000203018,
+      "tag": "0164_crm_companies",
+      "breakpoints": true
     }
   ]
 }

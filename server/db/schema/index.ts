@@ -60,6 +60,8 @@ export * from "./leads";
 // CRM — catalogul de produse/servicii (CRM Faza 1)
 export * from "./crmProducts";
 export * from "./crmPipelineStages";
+export * from "./crmTasks";
+export * from "./crmCompanies";
 export * from "./families";
 export * from "./teachers";
 export * from "./branches";

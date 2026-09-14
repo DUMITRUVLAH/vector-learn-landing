@@ -500,6 +500,80 @@ async function main() {
     )`,
     `CREATE INDEX IF NOT EXISTS "crm_stages_tenant_idx" ON "crm_pipeline_stages" ("tenant_id","order_index")`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "crm_stages_tenant_key_uniq" ON "crm_pipeline_stages" ("tenant_id","key")`,
+    // CRM Fazele 3-4: taskuri, motive de pierdere, firme, jurnal de import.
+    // Toate sunt pe calea de request, deci au nevoie de CREATE TABLE explicit —
+    // healul generic adaugă doar coloane, nu tabele.
+    `CREATE TABLE IF NOT EXISTS "crm_lead_tasks" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "lead_id" uuid NOT NULL REFERENCES "leads"("id") ON DELETE cascade,
+      "title" varchar(300) NOT NULL,
+      "due_at" timestamp with time zone,
+      "status" varchar(20) NOT NULL DEFAULT 'open',
+      "assigned_to" uuid,
+      "created_by" uuid,
+      "completed_at" timestamp with time zone,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "crm_tasks_tenant_idx" ON "crm_lead_tasks" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "crm_tasks_lead_idx" ON "crm_lead_tasks" ("lead_id")`,
+    `CREATE INDEX IF NOT EXISTS "crm_tasks_due_idx" ON "crm_lead_tasks" ("tenant_id","status","due_at")`,
+    `CREATE TABLE IF NOT EXISTS "crm_lost_reasons" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "label" varchar(200) NOT NULL,
+      "order_index" integer NOT NULL DEFAULT 0,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "crm_lost_reasons_tenant_idx" ON "crm_lost_reasons" ("tenant_id","order_index")`,
+    `CREATE TABLE IF NOT EXISTS "crm_companies" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "name" varchar(300) NOT NULL,
+      "name_normalized" varchar(300),
+      "idno" varchar(40),
+      "industry" varchar(120),
+      "region" varchar(120),
+      "company_size" varchar(40),
+      "annual_consumption_kwh" numeric,
+      "website" varchar(300),
+      "phone" varchar(32),
+      "phone_normalized" varchar(32),
+      "email" varchar(255),
+      "email_normalized" varchar(255),
+      "address" varchar(500),
+      "notes" text,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "crm_companies_tenant_idx" ON "crm_companies" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "crm_companies_name_idx" ON "crm_companies" ("tenant_id","name_normalized")`,
+    `CREATE INDEX IF NOT EXISTS "crm_companies_phone_idx" ON "crm_companies" ("tenant_id","phone_normalized")`,
+    `CREATE INDEX IF NOT EXISTS "crm_companies_email_idx" ON "crm_companies" ("tenant_id","email_normalized")`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "company_id" uuid`,
+    `CREATE TABLE IF NOT EXISTS "crm_import_jobs" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "file_name" varchar(300),
+      "source" varchar(40) NOT NULL DEFAULT 'file',
+      "mapping" jsonb,
+      "total_rows" integer NOT NULL DEFAULT 0,
+      "created_count" integer NOT NULL DEFAULT 0,
+      "duplicate_count" integer NOT NULL DEFAULT 0,
+      "error_count" integer NOT NULL DEFAULT 0,
+      "errors" jsonb,
+      "created_by" uuid,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS "crm_import_mappings" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "name" varchar(200) NOT NULL,
+      "mapping" jsonb NOT NULL,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
     // Migrarea 0149: flag de urgență pe cerere. is_urgent e NOT NULL DEFAULT false — healul
     // generic de mai sus adaugă coloana FĂRĂ modificatori, deci rândurile existente ar rămâne
     // NULL. Explicit aici, ca la par_budget_codes.currency (migrarea 0147).
