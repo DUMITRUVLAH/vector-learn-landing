@@ -853,7 +853,7 @@ parReportsRoutes.get("/audit-package.zip", async (c) => {
     // Dosarul complet al cererii, generat live — fișa aprobărilor, formularul și actele, în ordine.
     // Nu depinde de cineva care a apăsat cândva „descarcă": se construiește acum, din date.
     try {
-      const dosar = await buildDosar(par.id, tenantId);
+      const dosar = await buildDosar(par.id, tenantId, { requestOrigin: new URL(c.req.url).origin });
       if (dosar) zip.file(`dosare/${folder}.pdf`, dosar.bytes);
     } catch {
       // O cerere al cărei dosar nu se poate genera nu are voie să oprească tot pachetul.

@@ -73,7 +73,13 @@ export interface BuiltDosar {
 }
 
 /** Asamblează dosarul complet. `null` dacă cererea nu există în tenantul dat. */
-export async function buildDosar(parId: string, tenantId: string): Promise<BuiltDosar | null> {
+export async function buildDosar(
+  parId: string,
+  tenantId: string,
+  /** Originea cererii, când dosarul e cerut dintr-o rută. Jobul săptămânal de Drive n-are una și
+   *  cade pe `APP_URL` — vezi `verifyUrl`. */
+  opts?: { requestOrigin?: string | null }
+): Promise<BuiltDosar | null> {
   const [par] = await db
     .select()
     .from(parRequests)
@@ -333,7 +339,7 @@ export async function buildDosar(parId: string, tenantId: string): Promise<Built
         // cel mai mult ca hârtia să poată fi verificată ani mai târziu.
         const token = await ensureVerifyToken(parId, tenantId);
         const formBytes = await renderDosarPagesPdf(
-          buildParFormDefinition(formData, token ? { token } : null)
+          buildParFormDefinition(formData, token ? { token, requestOrigin: opts?.requestOrigin } : null)
         );
         plan.push({
           separator: { title: "Formularul PAR" },

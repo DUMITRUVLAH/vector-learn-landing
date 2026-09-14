@@ -2023,7 +2023,13 @@ parRoutes.get("/:id/form.pdf", async (c) => {
   if (!data) return c.json({ error: "not_found" }, 404);
 
   const token = await ensureVerifyToken(parId, tenantId);
-  const bytes = await renderDosarPagesPdf(buildParFormDefinition(data, token ? { token } : null));
+  // Originea de pe care tocmai s-a descărcat formularul e adresa la care omul se poate întoarce
+  // scanând codul — o certitudine, spre deosebire de o variabilă de mediu pe care n-o poate citi
+  // nimeni (vezi `verifyUrl`).
+  const origin = new URL(c.req.url).origin;
+  const bytes = await renderDosarPagesPdf(
+    buildParFormDefinition(data, token ? { token, requestOrigin: origin } : null)
+  );
   c.header("Content-Type", "application/pdf");
   c.header("Content-Disposition", contentDisposition("attachment", parFormFileName(par.requestNo, parId)));
   return c.body(bytes);
@@ -2060,7 +2066,7 @@ parRoutes.get("/:id/verify-code", async (c) => {
   return c.json({
     issued: true,
     code: formatToken(row.token),
-    url: data ? verifyUrl(row.token, stateFingerprint(data)) : null,
+    url: data ? verifyUrl(row.token, stateFingerprint(data), new URL(c.req.url).origin) : null,
     revokedAt: row.revokedAt,
     scanCount: row.scanCount,
     lastUsedAt: row.lastUsedAt,
@@ -2139,7 +2145,7 @@ parRoutes.get("/:id/dosar", async (c) => {
 
   // Asamblarea trăiește în lib/par/buildDosar.ts: același dosar îl urcă și jobul de Google Drive,
   // care n-are sesiune de browser. Aici rămâne doar controlul de acces și livrarea octeților.
-  const built = await buildDosar(parId, tenantId);
+  const built = await buildDosar(parId, tenantId, { requestOrigin: new URL(c.req.url).origin });
   if (!built) return c.json({ error: "not_found" }, 404);
 
   c.header("Content-Type", "application/pdf");

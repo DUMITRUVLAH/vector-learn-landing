@@ -152,4 +152,40 @@ describe("verifyUrl", () => {
       "https://www.finflow.best/#/verificare/par/K7M29QD43F8BX2NV/3F9K2D7B"
     );
   });
+
+  // `vercel env pull` maschează valorile criptate, deci nimeni nu poate CITI ce conține `APP_URL`
+  // în producție. Dacă ar fi goală, fără plasa de mai jos fiecare formular tipărit ar purta un cod
+  // care duce în gol — descoperit abia de omul care scanează, cu hârtia deja arhivată.
+  it("cade pe originea cererii când APP_URL lipsește", () => {
+    process.env.APP_URL = "";
+    expect(verifyUrl("K7M29QD43F8BX2NV", "3F9K2D7B", "https://www.finflow.best")).toBe(
+      "https://www.finflow.best/#/verificare/par/K7M29QD43F8BX2NV/3F9K2D7B"
+    );
+  });
+
+  it("configurarea explicită bate originea observată", () => {
+    process.env.APP_URL = "https://www.finflow.best";
+    expect(verifyUrl("K7M29QD43F8BX2NV", "3F9K2D7B", "https://preview-xyz.vercel.app")).toContain(
+      "https://www.finflow.best/"
+    );
+  });
+
+  it("nu tipărește pe un act financiar o adresă `http://` venită din antetul cererii", () => {
+    process.env.APP_URL = "";
+    const url = verifyUrl("K7M29QD43F8BX2NV", "3F9K2D7B", "http://atacator.example");
+    expect(url).not.toContain("atacator");
+    expect(url).toContain("localhost");
+  });
+
+  it("acceptă totuși http pe localhost — altfel dezvoltarea n-ar avea cod scanabil", () => {
+    process.env.APP_URL = "";
+    expect(verifyUrl("K7M29QD43F8BX2NV", "3F9K2D7B", "http://localhost:3131")).toContain(
+      "http://localhost:3131/#/"
+    );
+  });
+
+  it("nu se îneacă într-o origine care nu e o adresă", () => {
+    process.env.APP_URL = "";
+    expect(() => verifyUrl("K7M29QD43F8BX2NV", "3F9K2D7B", "nu-i-un-url")).not.toThrow();
+  });
 });

@@ -132,7 +132,8 @@ describe("GET /api/par/:id/verify-code", () => {
     const body = await (await app.request(`/api/par/${parId}/verify-code`)).json();
     expect(body.issued).toBe(true);
     expect(body.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
-    expect(body.url).toContain("/#/verificare/par/");
+    // Absolut, nu relativ: un QR cu adresă relativă nu duce nicăieri când e scanat de pe hârtie.
+    expect(body.url).toMatch(/^https?:\/\/[^/]+\/#\/verificare\/par\//);
     expect(body.scanCount).toBe(0);
   });
 

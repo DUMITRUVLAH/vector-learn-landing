@@ -180,16 +180,45 @@ export function normalizeToken(raw: string): string | null {
  * URL-ul din QR. Aplicația rutează pe hash, deci tokenul stă în fragment — partea pe care
  * browserul NU o trimite serverului. Un link scanat nu ajunge astfel în jurnalele de acces ale
  * proxy-ului și nici în antetul `Referer` al paginilor externe.
+ *
+ * De unde vine adresa, în ordine, și de ce tocmai asta:
+ *
+ *   1. `APP_URL` — configurarea explicită, aceeași pe care o folosește redirectul OAuth;
+ *   2. `requestOrigin` — originea cererii care a cerut PDF-ul, când e dată de rută;
+ *   3. localhost — dezvoltare.
+ *
+ * Pasul 2 există fiindcă pasul 1 nu se poate VERIFICA: `vercel env pull` maschează valorile
+ * criptate, deci nimeni nu poate citi ce conține `APP_URL` în producție fără să o rescrie. O
+ * variabilă goală ar fi tipărit sute de formulare cu un cod care duce în gol — greșeală tăcută,
+ * descoperită abia de omul care scanează, cu hârtia deja semnată și arhivată. Cu originea cererii
+ * ca plasă, codul tipărit duce la gazda de pe care tocmai s-a descărcat formularul, prin
+ * construcție.
+ *
+ * Originea e acceptată doar dacă e `https` (ori localhost): antetul `Host` vine, în principiu, de
+ * la client. Aici e inofensiv — cel care descarcă formularul e un utilizator autentificat care
+ * și-ar strica propria hârtie — dar o adresă `http://` pe un act financiar n-are ce căuta.
  */
-export function verifyUrl(token: string, fingerprint: string): string {
-  // Un `APP_URL` lipsă în producție ar tipări sute de formulare cu un cod care duce la
-  // `localhost` — greșeală tăcută, descoperită abia de omul care scanează, cu hârtia deja
-  // semnată și arhivată. Strigătul e aici, la generare, nu la scanare.
-  if (!process.env.APP_URL && process.env.NODE_ENV === "production") {
+export function verifyUrl(token: string, fingerprint: string, requestOrigin?: string | null): string {
+  const configured = (process.env.APP_URL ?? "").trim();
+  const fallback = usableOrigin(requestOrigin);
+  if (!configured && !fallback && process.env.NODE_ENV === "production") {
     console.error(
-      "[par-verify] APP_URL nu e setată: codurile QR tipărite acum vor trimite la localhost."
+      "[par-verify] Nici APP_URL, nici originea cererii — codurile QR tipărite acum duc la localhost."
     );
   }
-  const base = (process.env.APP_URL ?? "http://localhost:5173").replace(/\/+$/, "");
+  const base = (configured || fallback || "http://localhost:5173").replace(/\/+$/, "");
   return `${base}/#/verificare/par/${token}/${fingerprint}`;
+}
+
+/** Originea cererii, dacă e una pe care merită s-o tipărim pe hârtie. */
+function usableOrigin(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol === "https:") return url.origin;
+    if (url.protocol === "http:" && /^(localhost|127\.0\.0\.1)$/.test(url.hostname)) return url.origin;
+    return null;
+  } catch {
+    return null;
+  }
 }

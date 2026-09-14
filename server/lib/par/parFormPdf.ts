@@ -192,10 +192,10 @@ function signatureCell(title: PdfNode[], sig: ParFormSignature | null, parId: st
  * Tokenul se tipărește ȘI cu litere: fotocopiatoarele mănâncă coduri QR, iar alfabetul lui e ales
  * ca să poată fi tastat de mână (fără I, L, O, U — literele confundate cu 1, 0 și V).
  */
-function verifyBlock(token: string, fingerprint: string): PdfNode {
+function verifyBlock(token: string, fingerprint: string, requestOrigin?: string | null): PdfNode {
   return {
     columns: [
-      { width: "auto", qr: verifyUrl(token, fingerprint), fit: 54, margin: [0, 0, 6, 0] },
+      { width: "auto", qr: verifyUrl(token, fingerprint, requestOrigin), fit: 54, margin: [0, 0, 6, 0] },
       {
         width: "*",
         stack: [
@@ -226,6 +226,8 @@ function verifyBlock(token: string, fingerprint: string): PdfNode {
  */
 export interface ParFormVerifyOptions {
   token: string;
+  /** Originea cererii care a cerut PDF-ul; plasa de siguranță când `APP_URL` lipsește. */
+  requestOrigin?: string | null;
 }
 
 /** Documentul pdfmake al formularului. */
@@ -441,7 +443,7 @@ export function buildParFormDefinition(d: ParFormData, verify?: ParFormVerifyOpt
           {
             stack: [
               signatureCell([num(14), { text: " Requestor Signature:", bold: true, fontSize: 8.5 }], sig14, d.parId),
-              ...(verify ? [verifyBlock(verify.token, fingerprint)] : []),
+              ...(verify ? [verifyBlock(verify.token, fingerprint, verify.requestOrigin)] : []),
             ],
           },
           {
