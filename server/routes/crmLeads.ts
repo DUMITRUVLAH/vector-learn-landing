@@ -144,22 +144,29 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
   const tenantId = user.tenantId;
   try {
 
-    // Cardurile afișate: max 50 pe etapă, cele mai recente primele.
-    const cappedByStage = await Promise.all(
-      LEAD_STAGES.map((stage) =>
-        db
-          .select(LEAD_COLS)
-          .from(leads)
-          .where(and(eq(leads.tenantId, tenantId), eq(leads.stage, stage)))
-          .orderBy(desc(leads.createdAt))
-          .limit(50)
-      )
-    );
+    // O SINGURĂ interogare pentru carduri, nu una pe etapă.
+    // De ce contează: pe Vercel pool-ul e `max: 3` cu `connect_timeout: 10`
+    // (server/db/client.ts). Varianta cu `Promise.all` peste cele 5 etape cerea
+    // 5 conexiuni simultan dintr-un pool de 3, plus agregatul — pe un cold start
+    // asta înseamnă cereri care așteaptă o conexiune și pot depăși timeout-ul.
+    // Aducem lead-urile o dată, grupate în JS; plafonul de 50/coloană e o
+    // preocupare de afișare, nu un motiv să lovim baza de cinci ori.
+    const recent = await db
+      .select(LEAD_COLS)
+      .from(leads)
+      .where(eq(leads.tenantId, tenantId))
+      .orderBy(desc(leads.createdAt))
+      .limit(500);
 
-    const grouped = {} as Record<LeadStage, (typeof cappedByStage)[number]>;
-    LEAD_STAGES.forEach((stage, i) => {
-      grouped[stage] = cappedByStage[i];
+    const grouped = {} as Record<LeadStage, typeof recent>;
+    LEAD_STAGES.forEach((stage) => {
+      grouped[stage] = [];
     });
+    for (const lead of recent) {
+      const stage = lead.stage as LeadStage;
+      const column = grouped[stage];
+      if (column && column.length < 50) column.push(lead);
+    }
 
     // IMPORTANT: numărătorile/sumele NU se calculează din `grouped` (plafonat la 50) — trebuie să
     // reflecte TOATE lead-urile tenantului, altfel o coloană cu >50 lead-uri ar minți pe dashboard.
@@ -199,7 +206,14 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       const zeros = Object.fromEntries(LEAD_STAGES.map((st) => [st, 0]));
       return c.json({ grouped: empty, counts: zeros, valueSums: zeros, totalValueCents: 0, schemaLag: true });
     }
-    throw e;
+    // TEMPORAR (bug „internal_error" pe prod): întoarcem și motivul, altfel
+    // clientul vede doar codul generic din `app.onError`, iar mesajul real
+    // rămâne în Consola Platformă. De scos după ce cauza e închisă.
+    console.error("[crm/pipeline] eșec:", e instanceof Error ? e.stack ?? e.message : e);
+    return c.json(
+      { error: "crm_pipeline_failed", reason: (e instanceof Error ? e.message : String(e)).slice(0, 300) },
+      500
+    );
   }
 });
 
