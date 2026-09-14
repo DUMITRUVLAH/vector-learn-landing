@@ -166,6 +166,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare, tone: "sky" },
       { label: "Produse", href: "/business/crm/produse", icon: Package, tone: "emerald" },
+      { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3, tone: "violet" },
     ],
   },
   {

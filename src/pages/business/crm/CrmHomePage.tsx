@@ -81,10 +81,10 @@ const CRM_MODULES: CrmModuleTile[] = [
   {
     id: "rapoarte",
     label: "Rapoarte",
-    description: "Conversie, surse și performanță pe vânzător, la zi.",
+    description: "Conversie, motive de pierdere și rezultate pe agent, pentru perioada aleasă.",
     href: "/business/crm/rapoarte",
     icon: BarChart3,
-    available: false,
+    available: true,
   },
   {
     id: "documente",

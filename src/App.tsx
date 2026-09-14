@@ -62,6 +62,7 @@ const DocsPage = lazyWithTimeout(() => import("./pages/business/docs/DocsPage").
 const CrmHomePage = lazyWithTimeout(() => import("./pages/business/crm/CrmHomePage").then((m) => ({ default: m.CrmHomePage })));
 const CrmPipelinePage = lazyWithTimeout(() => import("./pages/business/crm/CrmPipelinePage").then((m) => ({ default: m.CrmPipelinePage })));
 const CrmProductsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmProductsPage").then((m) => ({ default: m.CrmProductsPage })));
+const CrmReportsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmReportsPage").then((m) => ({ default: m.CrmReportsPage })));
 const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
 const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
 const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
@@ -314,6 +315,7 @@ function Routes() {
   // CRM Faza 1 — de la specific la general, ca restul dispecerului.
   if (path.startsWith("/business/crm/pipeline")) return <BusinessGuardPage><CrmPipelinePage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/produse")) return <BusinessGuardPage><CrmProductsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/rapoarte")) return <BusinessGuardPage><CrmReportsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm")) return <BusinessGuardPage><CrmHomePage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
