@@ -14,8 +14,9 @@
  * Montată la /api/crm/health.
  */
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
+import { leads } from "../db/schema/leads";
 
 export const crmHealthRoutes = new Hono();
 
@@ -62,6 +63,62 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
   },
 ];
 
+/**
+ * Tenant inexistent: interogările de mai jos rulează pe calea REALĂ de cod, dar
+ * nu pot întoarce niciun rând al vreunui client.
+ */
+const NIL_TENANT = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Probele de mai sus verifică schema prin SQL brut. Asta e diferit: rulează
+ * EXACT interogările drizzle din `/pipeline`, fiindcă un SELECT brut poate trece
+ * în timp ce constructorul de interogări pică (tipuri de enum, coloane generate,
+ * un import de schemă lipsă). Aici întoarcem și mesajul, pentru că interogarea
+ * nu atinge datele niciunui client — e singura cale de a diagnostica producția
+ * fără cont. De scos după ce bug-ul e închis.
+ */
+async function probePipelineQuery(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await db
+      .select({
+        id: leads.id,
+        fullName: leads.fullName,
+        dealName: leads.dealName,
+        phone: leads.phone,
+        email: leads.email,
+        company: leads.company,
+        interestCourse: leads.interestCourse,
+        source: leads.source,
+        stage: leads.stage,
+        valueCents: leads.valueCents,
+        assignedTo: leads.assignedTo,
+        lostReason: leads.lostReason,
+        createdAt: leads.createdAt,
+        updatedAt: leads.updatedAt,
+      })
+      .from(leads)
+      .where(and(eq(leads.tenantId, NIL_TENANT), eq(leads.stage, "new")))
+      .orderBy(desc(leads.createdAt))
+      .limit(1);
+
+    await db
+      .select({
+        stage: leads.stage,
+        cnt: sql<number>`count(*)::int`,
+        sumValue: sql<number>`coalesce(sum(${leads.valueCents}), 0)::int`,
+      })
+      .from(leads)
+      .where(eq(leads.tenantId, NIL_TENANT))
+      .groupBy(leads.stage);
+
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[crm/health] interogarea de pipeline:", msg);
+    return { ok: false, error: msg.slice(0, 300) };
+  }
+}
+
 crmHealthRoutes.get("/", async (c) => {
   const tables: Record<string, { ok: boolean; problem?: string }> = {};
   for (const probe of PROBES) {
@@ -74,6 +131,7 @@ crmHealthRoutes.get("/", async (c) => {
       console.error(`[crm/health] ${probe.name}:`, e instanceof Error ? e.message : e);
     }
   }
-  const ok = Object.values(tables).every((t) => t.ok);
-  return c.json({ ok, tables }, ok ? 200 : 503);
+  const pipelineQuery = await probePipelineQuery();
+  const ok = Object.values(tables).every((t) => t.ok) && pipelineQuery.ok;
+  return c.json({ ok, tables, pipelineQuery }, ok ? 200 : 503);
 });
