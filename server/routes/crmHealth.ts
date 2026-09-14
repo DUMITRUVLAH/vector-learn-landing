@@ -119,6 +119,10 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
   // formularul lor dă 500, iar noi aflăm de la ei. Proba asta e singura care ne-o spune înainte.
   { name: "crm_capture_sources", run: () => db.execute(sql`SELECT id, tenant_id, name, token, default_source, active FROM crm_capture_sources LIMIT 0`) },
   { name: "leads_au_product_id", run: () => db.execute(sql`SELECT id, product_id, probability_pct FROM leads LIMIT 0`) },
+  // Excepțiile de drepturi sunt citite la FIECARE verificare de permisiune: o tabelă lipsă ar
+  // însemna „fără excepții" pe tot workspace-ul, în tăcere.
+  { name: "crm_user_permissions", run: () => db.execute(sql`SELECT id, tenant_id, user_id, permission, granted FROM crm_user_permissions LIMIT 0`) },
+  { name: "doc_documents_au_ciclu_de_viata", run: () => db.execute(sql`SELECT id, sent_at, outcome_at, outcome_reason FROM doc_documents LIMIT 0`) },
 ];
 
 /**
