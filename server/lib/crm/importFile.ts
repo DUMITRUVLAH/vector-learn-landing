@@ -4,10 +4,9 @@
 //   · rulează pe SERVER, nu în browser — parsarea unui fișier de 800 de rânduri
 //     nu are ce căuta în tabul utilizatorului, iar scrierea trebuie oricum
 //     filtrată pe workspace;
-//   · `parseWorkbook` (.xlsx, prin SheetJS) a fost SCOS: `xlsx` nu e dependință
-//     în acest repo și nu adăugăm una pentru o funcție. Rămâne CSV/TSV, care
-//     acoperă exportul oricărui Excel. Dacă ownerul cere .xlsx, se adaugă
-//     dependința și se readuce funcția din sursă — e 15 linii.
+//   · `.xlsx` NU se citește prin SheetJS (cum făcea sursa), ci prin `exceljs` —
+//     dependință care exista deja în repo, la DocMerge. Zero dependințe noi, și
+//     una mai puțin cu istoric de CVE-uri. Vezi `parseWorkbookTable` mai jos.
 //
 // Ce NU s-a schimbat, fiindcă sursa avea dreptate:
 //   · parserul respectă RFC 4180 (ghilimele, `""` escapat, rânduri noi în
@@ -64,6 +63,63 @@ export function detectDelimiter(sample: string): Delimiter {
 export interface ParsedTable {
   headers: string[];
   rows: string[][];
+}
+
+/** Câte rânduri acceptăm dintr-un registru — aceeași limită ca la DocMerge. */
+const MAX_WORKBOOK_ROWS = 5000;
+
+/**
+ * Citește prima foaie a unui `.xlsx`/`.xls` în ACEEAȘI formă ca un CSV (cerința 1 din caietul de
+ * sarcini: „Import masiv de companii din fișiere Excel/CSV").
+ *
+ * De ce prin `exceljs` și nu prin SheetJS, cum făcea crm-vector: `exceljs` e deja în repo
+ * (DocMerge îl folosește), deci nu adăugăm o dependință — și încă una cu istoric de vulnerabilități.
+ *
+ * IMPORTANT — importul e LAZY, înadins. Un `import` la nivel de fișier al lui `exceljs` a dărâmat
+ * o dată tot API-ul în producție (vezi docs/solutions/par-port-and-exceljs-lazy.md). Biblioteca se
+ * încarcă doar când cineva chiar urcă un registru.
+ *
+ * Valorile se aduc la text: importul lucrează cu șiruri, iar conversiile (bani, date) se fac mai
+ * jos, o singură dată, indiferent dacă rândul a venit din CSV sau din Excel.
+ */
+export async function parseWorkbookTable(buffer: Buffer): Promise<ParsedTable> {
+  const { default: ExcelJS } = (await import("exceljs")) as { default: typeof import("exceljs") };
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+
+  const sheet = wb.worksheets[0];
+  if (!sheet) return { headers: [], rows: [] };
+  if (sheet.rowCount > MAX_WORKBOOK_ROWS + 1) {
+    throw new Error(`Registrul are ${sheet.rowCount} rânduri; limita e ${MAX_WORKBOOK_ROWS}. Împarte-l în fișiere mai mici.`);
+  }
+
+  /** Celula, ca text: formulele dau rezultatul, nu formula; datele ies ISO, nu „Mon Sep 14 2026". */
+  const cellText = (value: unknown): string => {
+    if (value === null || value === undefined) return "";
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (typeof value === "object") {
+      const v = value as { text?: unknown; result?: unknown; richText?: Array<{ text?: string }>; hyperlink?: string };
+      if (Array.isArray(v.richText)) return v.richText.map((r) => r.text ?? "").join("");
+      if (v.result !== undefined) return String(v.result);
+      if (v.text !== undefined) return String(v.text);
+      if (v.hyperlink) return String(v.hyperlink);
+      return "";
+    }
+    return String(value);
+  };
+
+  const rows: string[][] = [];
+  let headers: string[] = [];
+  sheet.eachRow((row, rowNumber) => {
+    const values: string[] = [];
+    // `row.values` are un element gol la index 0 (exceljs numără coloanele de la 1).
+    const raw = row.values as unknown[];
+    for (let i = 1; i < raw.length; i++) values.push(cellText(raw[i]).trim());
+    if (rowNumber === 1) headers = values;
+    else if (values.some((v) => v !== "")) rows.push(values);
+  });
+
+  return { headers, rows };
 }
 
 /** Scoate rândurile complet goale de la finalul unui tabel brut (linii goale

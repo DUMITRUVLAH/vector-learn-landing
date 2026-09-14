@@ -42,6 +42,7 @@ import { crmCompanies, crmImportJobs, crmImportMappings } from "../db/schema/crm
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import {
   parseDelimited,
+  parseWorkbookTable,
   detectDelimiter,
   suggestMapping,
   applyMapping,
@@ -87,7 +88,14 @@ const SOURCE_VALUES = new Set([
 const mappingSchema = z.record(z.string(), z.enum(IMPORT_TARGET_FIELDS));
 
 const planInput = z.object({
+  /**
+   * Conținutul fișierului. Pentru CSV/text lipit e chiar textul; pentru `.xlsx` e registrul
+   * codificat base64, iar `format: "xlsx"` spune serverului cum să-l citească. Browserul NU
+   * parsează Excel: ar însemna o bibliotecă de ~800 KB în bundle, pentru o funcție folosită o
+   * dată pe lună.
+   */
   text: z.string().min(1, "Nu am primit niciun conținut de importat."),
+  format: z.enum(["text", "xlsx"]).default("text"),
   delimiter: z.enum([",", ";", "\t"]).nullish(),
   /** Maparea aleasă de om. Lipsă → o propunem noi din antetul fișierului. */
   mapping: mappingSchema.nullish(),
@@ -169,10 +177,17 @@ export interface ImportPlan {
  */
 async function buildImportPlan(
   tenantId: string,
-  input: { text: string; delimiter?: Delimiter | null; mapping?: FieldMapping | null }
+  input: { text: string; format?: "text" | "xlsx"; delimiter?: Delimiter | null; mapping?: FieldMapping | null }
 ): Promise<ImportPlan> {
-  const delimiter = (input.delimiter ?? detectDelimiter(input.text)) as Delimiter;
-  const table = parseDelimited(input.text, delimiter);
+  // Un registru Excel ajunge la aceeași formă (antet + rânduri) ca un CSV; de aici încolo,
+  // restul importului nu știe și nu-l interesează de unde a venit fișierul.
+  // Un registru Excel n-are separator; păstrăm unul doar ca răspunsul să aibă aceeași formă
+  // pentru ambele căi (interfața îl afișează la pasul de confirmare).
+  const delimiter: Delimiter = input.format === "xlsx" ? ";" : ((input.delimiter ?? detectDelimiter(input.text)) as Delimiter);
+  const table =
+    input.format === "xlsx"
+      ? await parseWorkbookTable(Buffer.from(input.text, "base64"))
+      : parseDelimited(input.text, delimiter);
   const mapping = input.mapping && Object.keys(input.mapping).length > 0 ? input.mapping : suggestMapping(table.headers);
 
   const drafts = applyMapping(table.rows, mapping);

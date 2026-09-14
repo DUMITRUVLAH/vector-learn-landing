@@ -124,7 +124,9 @@ export interface ImportRunResponse {
 }
 
 export function previewCrmImport(body: {
+  /** CSV/text lipit, sau registrul `.xlsx` codificat base64 (vezi `format`). */
   text: string;
+  format?: "text" | "xlsx";
   delimiter?: string | null;
   mapping?: FieldMapping | null;
 }): Promise<ImportPreviewResponse> {
@@ -133,6 +135,7 @@ export function previewCrmImport(body: {
 
 export function runCrmImport(body: {
   text: string;
+  format?: "text" | "xlsx";
   delimiter?: string | null;
   mapping?: FieldMapping | null;
   fileName?: string | null;

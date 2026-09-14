@@ -1,7 +1,8 @@
 /**
  * CRM Faza 9 — cronul zilnic: aprinde cadențele scadente și rulează reactivarea.
  *
- *   GET /api/crm/cron/daily  → intrarea Vercel Cron (protejată cu CRON_SECRET)
+ *   GET  /api/crm/cron/daily   → intrarea Vercel Cron (protejată cu CRON_SECRET)
+ *   POST /api/crm/cron/digest-now → digestul meu de taskuri restante, acum (buton de test)
  *
  * Fără el, cadențele n-ar face nimic: o secvență cu trei pași ar rămâne la pasul 0 pentru
  * totdeauna, iar clienții pierduți de un an n-ar fi treziți niciodată.
@@ -17,8 +18,10 @@ import { db } from "../db/client";
 import { crmReengagementRules } from "../db/schema/crmCadences";
 import { processDueEnrollments } from "../lib/crm/cadences";
 import { runReengagement } from "../lib/crm/reengagement";
+import { runCrmTaskDigest, runCrmTaskDigestForTenant } from "../services/crm/taskDigest";
+import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
-export const crmCronRoutes = new Hono();
+export const crmCronRoutes = new Hono<{ Variables: AuthVariables }>();
 
 crmCronRoutes.get("/daily", async (c) => {
   const secret = process.env.CRON_SECRET;
@@ -57,5 +60,30 @@ crmCronRoutes.get("/daily", async (c) => {
     }
   }
 
-  return c.json({ ok: true, cadences, reengagement: { tenants: tenantsWithRules.length, due, applied, failed } });
+  // Pasul 3: digestul de taskuri restante (cerința 18). Decide singur dacă e ora potrivită
+  // local — cronul lovește în UTC, iar ora de iarnă n-are voie să mute digestul în tăcere.
+  let digest;
+  try {
+    digest = await runCrmTaskDigest();
+  } catch (e) {
+    console.error("[crm/cron] digestul de taskuri a eșuat:", e instanceof Error ? e.message : e);
+    digest = { tenants: 0, recipients: 0, emails: 0, skipped: 0 };
+  }
+
+  return c.json({
+    ok: true,
+    cadences,
+    reengagement: { tenants: tenantsWithRules.length, due, applied, failed },
+    digest,
+  });
+});
+
+/**
+ * Butonul „trimite-mi acum digestul", pentru cine vrea să vadă cum arată. Sare peste fereastra
+ * orară, dar NU peste anti-dublură: un test nu are voie să dubleze emailul real al unui coleg.
+ */
+crmCronRoutes.post("/digest-now", requireAuth, async (c) => {
+  const user = c.get("user");
+  const summary = await runCrmTaskDigestForTenant(user.tenantId, { force: true, onlyUserId: user.id });
+  return c.json({ ok: true, ...summary });
 });

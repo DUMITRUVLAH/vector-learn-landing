@@ -79,6 +79,8 @@ export function CrmImportPage() {
   }, []);
   const [step, setStep] = useState<Step>("sursa");
   const [text, setText] = useState("");
+  /** „text" = CSV sau text lipit; „xlsx" = registru Excel trimis ca base64. */
+  const [format, setFormat] = useState<"text" | "xlsx">("text");
   const [fileName, setFileName] = useState<string | null>(null);
   const [mapping, setMapping] = useState<FieldMapping | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
@@ -113,7 +115,7 @@ export function CrmImportPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await previewCrmImport({ text, mapping: nextMapping });
+        const res = await previewCrmImport({ text, format, mapping: nextMapping });
         setPreview(res);
         setMapping(res.mapping);
       } catch (err) {
@@ -122,7 +124,7 @@ export function CrmImportPage() {
         setLoading(false);
       }
     },
-    [text]
+    [text, format]
   );
 
   async function onPickFile(file: File | undefined) {
@@ -131,9 +133,26 @@ export function CrmImportPage() {
       setError("Fișierul e prea mare pentru un singur import. Împarte-l în bucăți mai mici.");
       return;
     }
-    const content = await file.text();
+
+    const isWorkbook = /\.xlsx?$/i.test(file.name);
+    if (isWorkbook) {
+      // Registrul pleacă la server ca base64: browserul NU parsează Excel. O bibliotecă de
+      // ~800 KB în bundle, pentru o funcție folosită o dată pe lună, s-ar plăti la fiecare
+      // încărcare a aplicației, de toată lumea.
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      // Pe bucăți: `String.fromCharCode(...bytes)` cu un fișier de 1 MB depășește limita de
+      // argumente a funcției și aruncă „Maximum call stack size exceeded".
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      }
+      setFormat("xlsx");
+      setText(btoa(binary));
+    } else {
+      setFormat("text");
+      setText(await file.text());
+    }
     setFileName(file.name);
-    setText(content);
     setError(null);
   }
 
@@ -152,7 +171,7 @@ export function CrmImportPage() {
     setRunning(true);
     setError(null);
     try {
-      const res = await runCrmImport({ text, mapping, fileName, skipDuplicates });
+      const res = await runCrmImport({ text, format, mapping, fileName, skipDuplicates });
       setResult(res);
       await reloadSideData();
     } catch (err) {
@@ -235,7 +254,7 @@ export function CrmImportPage() {
                 id="imp-fisier"
                 ref={fileInput}
                 type="file"
-                accept=".csv,text/csv,text/plain"
+                accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm file:font-medium"
                 onChange={(e) => void onPickFile(e.target.files?.[0])}
               />
