@@ -4,7 +4,7 @@
  *
  * Routes:
  *   POST   /api/par/templates                    → save template (from existing PAR or inline payload)
- *   GET    /api/par/templates                    → list tenant templates
+ *   GET    /api/par/templates                    → list the caller's own templates
  *   DELETE /api/par/templates/:id               → delete template
  *   POST   /api/par/templates/:id/instantiate   → create a new draft PAR from template
  */
@@ -28,7 +28,7 @@ import { generateRequestNo } from "../lib/par/requestNo";
 import { recalcParTotal } from "../lib/par/totals";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 import { canViewPar } from "../lib/par/visibility";
-import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessProject } from "../lib/par/projectScope";
+import { mayAccessProject } from "../lib/par/projectScope";
 
 export const parTemplatesRoutes = new Hono<{ Variables: AuthVariables }>();
 parTemplatesRoutes.use("*", requireAuth);
@@ -212,34 +212,23 @@ parTemplatesRoutes.post(
   }
 );
 
-/** GET /api/par/templates — list all templates for tenant */
+/** GET /api/par/templates — șabloanele PROPRII ale utilizatorului */
 parTemplatesRoutes.get("/", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
+
+  // Un șablon e o notiță personală, nu un registru de echipă: poartă în snapshot beneficiarul cu
+  // IBAN/IDNP și suma pe care ACEL om o repetă. Aria de proiect (varianta de dinainte) nu e o
+  // limită suficientă — colegii de pe același proiect își vedeau șabloanele între ei, iar rolurile
+  // fără arie (par_admin, finance) le vedeau pe toate. Fiecare își vede doar propriile șabloane;
+  // dacă apare vreodată nevoia de șabloane comune, ele se marchează explicit ca partajate.
   const rows = await db
     .select()
     .from(parTemplates)
-    .where(eq(parTemplates.tenantId, tenantId))
+    .where(and(eq(parTemplates.tenantId, tenantId), eq(parTemplates.createdByUserId, user.id)))
     .orderBy(asc(parTemplates.name));
 
-  // SECURITY (audit 2026-08-29): listarea întorcea TOATE șabloanele tenantului, cu IBAN/IDNP-ul
-  // din snapshot, fără nicio verificare de arie. Un șablon poartă rechizitele bancare ale unui
-  // beneficiar, deci se vede doar dacă e al tău sau dacă proiectul/plătitorul lui e în aria ta.
-  const { projects: scopedProjects, payers: scopedPayers } = await accessibleScopes(user.id, tenantId, user.role ?? undefined);
-  const unrestricted = scopedProjects === null && scopedPayers === null;
-  const visible = unrestricted
-    ? rows
-    : rows.filter((r) => {
-        if (r.createdByUserId === user.id) return true;
-        let snap: TemplateSnapshot | null = null;
-        try { snap = JSON.parse(r.snapshot) as TemplateSnapshot; } catch { return false; }
-        if (snap?.projectId) return scopedProjects?.includes(snap.projectId) ?? false;
-        // Snapshot-ul nu poartă plătitorul, deci fără proiect nu există arie de verificat →
-        // îl vede doar autorul lui.
-        return false;
-      });
-
-  const templates = visible.map((r) => {
+  const templates = rows.map((r) => {
     let snapshot: TemplateSnapshot | null = null;
     try {
       snapshot = JSON.parse(r.snapshot) as TemplateSnapshot;
@@ -302,6 +291,10 @@ parTemplatesRoutes.post("/:id/instantiate", async (c) => {
     .from(parTemplates)
     .where(and(eq(parTemplates.id, id), eq(parTemplates.tenantId, tenantId)));
   if (!tmpl) return c.json({ error: "not_found" }, 404);
+  // Listarea întoarce doar șabloanele proprii, deci și instanțierea trebuie să se oprească aici:
+  // altfel un id ghicit sau rămas dintr-un link vechi ar scoate beneficiarul altcuiva, cu IBAN cu
+  // tot, într-o ciornă nouă. 404, nu 403 — nu confirmăm existența șablonului altui om.
+  if (tmpl.createdByUserId !== userId) return c.json({ error: "not_found" }, 404);
 
   let snapshot: TemplateSnapshot;
   try {
