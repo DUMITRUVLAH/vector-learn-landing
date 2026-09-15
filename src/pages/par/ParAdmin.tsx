@@ -124,6 +124,12 @@ import {
   type ParConfigImportMapping,
   type ParConfigImportPreview,
   type ParDoaRow,
+  listParTeams,
+  createParTeam,
+  deleteParTeam,
+  addParTeamMember,
+  removeParTeamMember,
+  type ParTeam,
   type ParMember,
   type ParSettings,
   type ParDepartment,
@@ -1115,6 +1121,135 @@ function DelegationSection({ members }: { members: ParMember[] }) {
   );
 }
 
+/**
+ * VM5-22: echipele — cine își vede cererile cu cine.
+ *
+ * Stă în „Membri", lângă roluri și delegări, pentru că e tot o întrebare despre oameni. Textul
+ * spune explicit ce dă apartenența (vezi și `server/lib/par/teamScope.ts`), ca administratorul să
+ * nu creadă că a dat drept de aprobare sau de editare.
+ */
+function ParTeamsSection({ members }: { members: ParMember[] }) {
+  const [teams, setTeams] = useState<ParTeam[]>([]);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Un om fără rol PAR n-ar vedea nimic nici în echipă, deci nu-l propunem.
+  const candidates = Array.from(new Map(members.map((m) => [m.userId, m])).values());
+
+  const load = async () => {
+    try { const { teams: t } = await listParTeams(); setTeams(t); } catch { setError("Nu am putut încărca echipele."); }
+  };
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await createParTeam({ name: newName.trim() });
+      setNewName("");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError && err.code === "duplicate_name"
+        ? "Există deja o echipă cu numele ăsta."
+        : "Nu am putut crea echipa.");
+    } finally { setBusy(false); }
+  };
+
+  const addMember = async (teamId: string, userId: string) => {
+    if (!userId) return;
+    setError(null);
+    try { await addParTeamMember(teamId, userId); await load(); } catch { setError("Nu am putut adăuga persoana."); }
+  };
+
+  const removeMember = async (teamId: string, userId: string, name: string) => {
+    if (!confirm(`Scoți ${name} din echipă? Nu va mai vedea cererile celorlalți.`)) return;
+    try { await removeParTeamMember(teamId, userId); await load(); } catch { setError("Nu am putut scoate persoana."); }
+  };
+
+  const removeTeam = async (teamId: string, name: string) => {
+    if (!confirm(`Ștergi echipa „${name}"? Membrii ei nu-și vor mai vedea cererile între ei.`)) return;
+    try { await deleteParTeam(teamId); await load(); } catch { setError("Nu am putut șterge echipa."); }
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Echipe</h3>
+        <p className="text-sm text-muted-foreground">
+          Oamenii dintr-o echipă își văd cererile între ei — statutul, documentele și ciornele nedepuse —
+          în fila „Ale echipei". Echipa NU dă drept de aprobare și nici de editare a cererii altuia.
+        </p>
+      </div>
+
+      <form onSubmit={create} className="flex flex-wrap items-end gap-2">
+        <div className="flex-1 min-w-[200px]">
+          <label htmlFor="team-name" className="text-xs font-medium text-muted-foreground block mb-1">Nume echipă</label>
+          <Input id="team-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="ex. Granturi" />
+        </div>
+        <button type="submit" disabled={busy || newName.trim().length < 2}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-[44px]">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}Creează echipă
+        </button>
+      </form>
+
+      {error && (
+        <div role="alert" className="flex items-center gap-2 p-2.5 rounded-md bg-destructive/10 text-destructive text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />{error}
+        </div>
+      )}
+
+      {teams.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nicio echipă încă.</p>
+      ) : (
+        <div className="space-y-3">
+          {teams.map((team) => (
+            <div key={team.id} className="rounded-md border border-border px-3 py-2.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-foreground">
+                  {team.name}
+                  <span className="text-muted-foreground font-normal"> · {team.members.length} membr{team.members.length === 1 ? "u" : "i"}</span>
+                </p>
+                <button type="button" onClick={() => removeTeam(team.id, team.name)} aria-label={`Șterge echipa ${team.name}`}
+                  className="text-muted-foreground hover:text-destructive flex-shrink-0">
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {team.members.map((m) => (
+                  <span key={m.userId} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs">
+                    {m.name ?? m.email ?? m.userId.slice(0, 8)}
+                    <button type="button" aria-label={`Scoate ${m.name ?? m.email ?? "membrul"} din echipa ${team.name}`}
+                      onClick={() => removeMember(team.id, m.userId, m.name ?? m.email ?? "persoana")}
+                      className="text-muted-foreground hover:text-destructive">
+                      <X className="h-3 w-3" aria-hidden />
+                    </button>
+                  </span>
+                ))}
+                {team.members.length === 0 && <span className="text-xs text-muted-foreground">Fără membri.</span>}
+              </div>
+              <Select
+                value=""
+                aria-label={`Adaugă persoană în echipa ${team.name}`}
+                onChange={(e) => addMember(team.id, e.target.value)}
+                className="max-w-xs"
+              >
+                <option value="">+ Adaugă persoană…</option>
+                {candidates
+                  .filter((m) => !team.members.some((tm) => tm.userId === m.userId))
+                  .map((m) => (
+                    <option key={m.userId} value={m.userId}>{m.userName ?? m.userEmail ?? m.userId}</option>
+                  ))}
+              </Select>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── VF-301: Audit log viewer ─────────────────────────────────────────────────
 
 const AUDIT_EVENT_OPTIONS = [
@@ -1965,6 +2100,9 @@ function ParMembersTab() {
 
       {/* VF-302: approver delegation */}
       <DelegationSection members={members} />
+
+      {/* VM5-22: echipe — cine își vede cererile cu cine */}
+      <ParTeamsSection members={members} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">

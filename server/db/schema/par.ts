@@ -1000,6 +1000,58 @@ export const parReceiptLines = pgTable(
   })
 );
 
+/**
+ * VM5-22: echipa — oamenii care lucrează împreună și își văd cererile între ei.
+ *
+ * Aria de vizibilitate din PAR e PROIECTUL (par_project_members) și PLĂTITORUL (par_payer_members),
+ * ambele despre CE poți atinge. Echipa răspunde la altă întrebare: CU CINE lucrezi. Doi colegi care
+ * pregătesc aceleași plăți vor să vadă unul cererile celuilalt — inclusiv CIORNELE, ca să poată
+ * prelua când unul e în concediu — fără ca asta să deschidă cererile întregii organizații.
+ *
+ * Echipa NU dă drepturi noi: nu extinde aria (proiect/plătitor), nu dă dreptul de a aproba și nu
+ * dă dreptul de a EDITA cererea altcuiva. Vezi `server/lib/par/teamScope.ts`.
+ */
+export const parTeams = pgTable(
+  "par_teams",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 200 }).notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_teams_tenant_idx").on(t.tenantId),
+    uniqName: uniqueIndex("par_teams_tenant_name_uniq").on(t.tenantId, t.name),
+  })
+);
+
+/** Cine e în echipă. Un om poate fi în mai multe echipe; coechipierii se cumulează. */
+export const parTeamMembers = pgTable(
+  "par_team_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => parTeams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    teamIdx: index("par_team_members_team_idx").on(t.teamId),
+    userIdx: index("par_team_members_user_idx").on(t.tenantId, t.userId),
+    uniq: uniqueIndex("par_team_members_team_user_uniq").on(t.teamId, t.userId),
+  })
+);
+
 // VF-302: approver delegation. While active, `toUser` can decide steps assigned to `fromUser`.
 export const parDelegations = pgTable(
   "par_delegations",

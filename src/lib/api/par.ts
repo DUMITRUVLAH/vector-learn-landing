@@ -524,8 +524,9 @@ export interface ListParFilters {
   /**
    * VM5-02: „mine" (implicit) = doar cererile mele · „project" = și cele TRIMISE ale colegilor de pe
    * aceleași proiecte, fără rechizitele beneficiarilor lor.
+   * VM5-22: „team" = cererile coechipierilor din echipele mele, în ORICE stare (ciornele incluse).
    */
-  scope?: "mine" | "project";
+  scope?: "mine" | "project" | "team";
 }
 
 /**
@@ -1559,6 +1560,50 @@ export async function createParDelegation(payload: {
 
 export async function cancelParDelegation(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/delegations/${id}`, { method: "DELETE" });
+}
+
+// VM5-22: echipe — cine își vede cererile cu cine.
+export interface ParTeamMember {
+  userId: string;
+  name: string | null;
+  email: string | null;
+}
+
+export interface ParTeam {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+  members: ParTeamMember[];
+}
+
+/** Echipele MELE + coechipierii — orice membru PAR o poate chema (nu doar administratorul). */
+export async function getMyParTeams(): Promise<{ teams: ParTeam[]; teammateIds: string[] }> {
+  return api("/api/par/teams/my");
+}
+
+export async function listParTeams(): Promise<{ teams: ParTeam[] }> {
+  return api("/api/par/teams");
+}
+
+export async function createParTeam(payload: { name: string; user_ids?: string[] }): Promise<{ team: ParTeam }> {
+  return api("/api/par/teams", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function updateParTeam(id: string, payload: { name?: string; active?: boolean }): Promise<{ team: ParTeam }> {
+  return api(`/api/par/teams/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export async function deleteParTeam(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/teams/${id}`, { method: "DELETE" });
+}
+
+export async function addParTeamMember(teamId: string, userId: string): Promise<{ ok: boolean; added: boolean }> {
+  return api(`/api/par/teams/${teamId}/members`, { method: "POST", body: JSON.stringify({ user_id: userId }) });
+}
+
+export async function removeParTeamMember(teamId: string, userId: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/teams/${teamId}/members/${userId}`, { method: "DELETE" });
 }
 
 // VF-301: audit log

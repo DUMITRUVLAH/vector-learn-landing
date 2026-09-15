@@ -80,6 +80,37 @@ cerere (rutare cu `#`, cum e deja în `parDeepLink`).
 
 ---
 
+## VM5-22 — Echipe: coechipierii își văd cererile, ciornele incluse — 🟢 decis (15.09.2026)
+
+**Cerința owner-ului:** „Cristina Onicov și Iulian Lungu să fie în aceeași echipă la ATIC și să vadă
+PAR-urile, statutele și ce trimite celălalt, la fel și ciornele."
+
+**De ce nu era destul VM5-02:** aria acolo e proiectul, și în ATIC toată lumea e pe aceleași
+proiecte — deci „ale proiectului" arată prea mult ca să însemne ceva, iar ciornele (exact ce preiei
+când colegul lipsește) rămâneau invizibile prin definiție.
+
+**Decizia: echipa e un grup EXPLICIT**, făcut de administrator în Admin › Membri › Echipe
+(`par_teams` + `par_team_members`). Ce aduce apartenența:
+- vezi cererile coechipierilor în **orice stare, ciorna inclusă**, plus documentele lor;
+- în lista de cereri apare fila **„Ale echipei"**, cu coloana „Cine a făcut-o". Când ai o echipă, ea
+  e aria implicită la intrarea în ecran (poți comuta oricând pe „Ale mele").
+
+Ce NU aduce, deliberat:
+- **nu extinde aria**: rămâi la plătitorii/proiectele alocate ție, deci un coechipier care lucrează
+  și pe alt plătitor îți rămâne invizibil acolo;
+- **nu dă drept de aprobare, de plată sau de editare** — scrierea rămâne la autor;
+- **nu descoperă rechizitele beneficiarului** (IBAN/IDNP rămân mascate, ca la VM5-02).
+
+Fiecare schimbare de compoziție se scrie în jurnalul de audit (`par_team_*`): echipa lărgește cine
+vede cererile cuiva, deci „cine a băgat pe cine, și când" trebuie să aibă răspuns.
+
+**AC:** (1) coechipierul deschide ciorna colegului, un neechipier primește 404 pe aceeași ciornă;
+(2) `?scope=team` întoarce cererile ambilor, fără cele dintr-un plătitor nealocat; (3) fără `scope`
+lista rămâne „ale mele", ca înainte; (4) scoaterea din echipă taie vizibilitatea imediat;
+(5) doar par_admin administrează echipele. Testate în `server/__tests__/par-teams.routes.test.ts`.
+
+---
+
 ## VM5-02 — Cererile colegilor de proiect — 🟢 decis: aria = PROIECTUL
 
 **Cerința:** „Persoanele să poată vedea inclusiv lista de PAR-uri elaborate de co-echiperi — ex.

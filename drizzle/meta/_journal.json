@@ -1219,6 +1219,13 @@
       "when": 1787000203028,
       "tag": "0174_crm_user_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 175,
+      "version": "7",
+      "when": 1787000203029,
+      "tag": "0175_par_teams",
+      "breakpoints": true
     }
   ]
 }

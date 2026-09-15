@@ -22,6 +22,7 @@ import { parRequests, parAttachments, parAudit, parPayers } from "../db/schema/p
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { isWorkspaceAdminRole } from "../lib/par/visibility";
+import { sharesTeamWith } from "../lib/par/teamScope";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
 import { extractParParties } from "../lib/ai/parExtractor";
@@ -268,13 +269,19 @@ async function hasScopedDossierAccess(
 ): Promise<boolean> {
   if (par.requestedByUserId === user.id) return true;
   const roles = await getUserPARRoles(user.id, user.tenantId, user.role);
+  const inAria = () => (par.projectId
+    ? mayAccessProject(user.id, user.tenantId, par.projectId, user.role)
+    : mayAccessPayer(user.id, user.tenantId, par.payerId, user.role));
+  // VM5-22: coechipierul preia dosarul colegului plecat — deci vede și documentele, și pe cele ale
+  // unei ciorne. Aria (proiect/plătitor) rămâne verificată: echipa nu deschide alt plătitor.
+  if (roles.length > 0 && await sharesTeamWith(user.id, par.requestedByUserId, user.tenantId)) {
+    return inAria();
+  }
   if (!roles.some((role) => ["approver", "finance", "par_admin"].includes(role))) return false;
   // The attachments ARE the sensitive documents (contracts, bank papers). An unsubmitted draft has
   // not been routed to anybody, so it stays with its author — server/lib/par/visibility.ts.
   if (par.status === "draft" && !isWorkspaceAdminRole(user.role)) return false;
-  return par.projectId
-    ? mayAccessProject(user.id, user.tenantId, par.projectId, user.role)
-    : mayAccessPayer(user.id, user.tenantId, par.payerId, user.role);
+  return inAria();
 }
 
 // ─── GET /:parId/attachments ──────────────────────────────────────────────────

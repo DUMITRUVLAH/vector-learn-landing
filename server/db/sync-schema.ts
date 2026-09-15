@@ -143,6 +143,28 @@ async function main() {
   console.log(`[sync-schema] ensured linked_fin_invoice_id on fin_capture_lines`);
 
   const ENSURE_STATEMENTS: string[] = [
+    // VM5-22 (migrarea 0175): echipele PAR. `GET /api/par` citește par_team_members la FIECARE
+    // listare, deci fără tabelă lista de cereri 500-ește peste tot, nu doar în ecranul de echipe.
+    `CREATE TABLE IF NOT EXISTS "par_teams" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "name" varchar(200) NOT NULL,
+      "active" boolean NOT NULL DEFAULT true,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_teams_tenant_idx" ON "par_teams" ("tenant_id")`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "par_teams_tenant_name_uniq" ON "par_teams" ("tenant_id","name")`,
+    `CREATE TABLE IF NOT EXISTS "par_team_members" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "team_id" uuid NOT NULL REFERENCES "par_teams"("id") ON DELETE cascade,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_team_members_team_idx" ON "par_team_members" ("team_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_team_members_user_idx" ON "par_team_members" ("tenant_id","user_id")`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "par_team_members_team_user_uniq" ON "par_team_members" ("team_id","user_id")`,
     `CREATE TABLE IF NOT EXISTS "par_project_approvers" (
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
       "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,

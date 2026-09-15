@@ -42,6 +42,7 @@ import {
   duplicatePar,
   getParInbox,
   getParMe,
+  getMyParTeams,
   getParSettings,
   getBudgetCodesUsage,
   listEvents,
@@ -54,10 +55,14 @@ import {
   type ParStatus,
   type ParPurpose,
   type ParEvent,
+  type ParTeam,
   type BudgetCodeUsage,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
 import { PendingRatingPrompt } from "@/components/par/PendingRatingPrompt";
+
+/** Aria listei: ale mele · ale proiectului (VM5-02) · ale echipei (VM5-22). */
+type ParListScope = "mine" | "project" | "team";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -148,7 +153,14 @@ export function ParDashboard() {
    * aceleași proiecte. Transparența cerută în ședință („dacă pleacă în concediu"), fără să schimbe
    * ce vede omul când intră: implicit rămâne lista lui.
    */
-  const [scope, setScope] = useState<"mine" | "project">("mine");
+  const [scope, setScope] = useState<ParListScope>("mine");
+  /**
+   * VM5-22: echipele mele. Fila „Ale echipei" apare doar dacă am una, iar când am, ea e aria
+   * IMPLICITĂ: oamenii puși într-o echipă au cerut explicit să lucreze împreună, deci lista care
+   * îi interesează e a echipei, nu a lor. O alegere manuală a ariei bate implicitul (`scopeTouched`).
+   */
+  const [teams, setTeams] = useState<ParTeam[]>([]);
+  const scopeTouched = useRef(false);
   const [projectFilter, setProjectFilter] = useState<string>(urlFilters.projectId || "");
   const [projectsMap, setProjectsMap] = useKeepAliveState<Record<string, string>>("par.projectsMap", {});
   const [purposeFilter, setPurposeFilter] = useState<ParPurpose | "">(saved.purpose ?? "");
@@ -167,7 +179,9 @@ export function ParDashboard() {
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   // Lista se ține minte între navigări, dar CHEIA include filtrele: altfel, venind dintr-un
   // folder cu alt filtru, ai vedea o clipă rândurile filtrului anterior.
-  const listKey = `par.list:${JSON.stringify({ statusFilter, purposeFilter, searchQ: debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal })}`;
+  // `scope` face parte din cheie ȘI din dependențele efectului de încărcare: fără el, comutarea
+  // ariei schimba doar eticheta filei, iar lista rămânea cea veche până se atingea alt filtru.
+  const listKey = `par.list:${JSON.stringify({ statusFilter, purposeFilter, searchQ: debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, scope })}`;
   const [requests, setRequests] = useKeepAliveState<(ParRequest & { above_micro_threshold: boolean })[]>(listKey, []);
   // Dacă avem deja lista în memorie, nu mai pornim de la „se încarcă": ecranul e gata desenat.
   const [loading, setLoading] = useState(() => !hasKeepAlive(listKey));
@@ -209,6 +223,13 @@ export function ParDashboard() {
     // VM1-04: load events for filter dropdown
     // La eșec PĂSTRĂM ce e pe ecran: o împrospătare picată nu are voie să golească o listă bună.
     listEvents().then((r) => setEvents(r.events)).catch(() => {});
+    // VM5-22: coechipierii — pentru fila „Ale echipei" și pentru numele autorului din listă.
+    getMyParTeams()
+      .then((r) => {
+        setTeams(r.teams);
+        if (r.teams.length > 0 && !scopeTouched.current) setScope("team");
+      })
+      .catch(() => { /* fără echipe, ecranul rămâne exact cum era */ });
     // VM1-10: project id→name map (for the active-project filter chip from a Folder click)
     listProjects().then((r) => setProjectsMap(Object.fromEntries(r.items.map((p) => [p.id, p.name])))).catch(() => {});
     // Non-approvers get an empty inbox (no 403), so this is safe for everyone.
@@ -284,7 +305,7 @@ export function ParDashboard() {
             date_to: dateTo || undefined,
             min_total: Number.isFinite(minN) ? Math.round(minN * 100) : undefined,
             max_total: Number.isFinite(maxN) ? Math.round(maxN * 100) : undefined,
-            scope: scope === "project" ? "project" : undefined,
+            scope: scope === "mine" ? undefined : scope,
           },
           { signal: controller.signal }
         );
@@ -303,7 +324,7 @@ export function ParDashboard() {
     load();
     return () => controller.abort();
     // `listKey` conține deja toate filtrele; îl adăugăm ca dependență explicită.
-  }, [statusFilter, purposeFilter, debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, listKey, setRequests]);
+  }, [statusFilter, purposeFilter, debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, scope, listKey, setRequests]);
 
   // Derived sections — apply event + project filters client-side (VM1-04 / VM1-10).
   const filteredByEvent = (eventFilter
@@ -311,6 +332,23 @@ export function ParDashboard() {
     : requests
   ).filter((r) => !projectFilter || r.projectId === projectFilter);
   const myRequests = filteredByEvent;
+  /**
+   * VM5-22: pe aria „echipă", lista amestecă cererile mele cu ale coechipierilor — deci trebuie să
+   * scrie A CUI e fiecare. Numele vin din echipele deja încărcate, fără alt apel către server.
+   */
+  const teamAuthors: Record<string, string> = {};
+  for (const team of teams) {
+    for (const m of team.members) teamAuthors[m.userId] = m.name ?? m.email ?? "Coleg";
+  }
+  const sectionTitle = statusFilter === "draft"
+    ? (scope === "team" ? "Ciornele echipei" : "Ciornele mele")
+    : statusFilter === "changes_requested"
+      ? "Cereri întoarse pentru modificări"
+      : scope === "team"
+        ? "Cererile echipei"
+        : scope === "project"
+          ? "Cererile proiectelor mele"
+          : "Cererile mele";
   // The list grows with every request the org ever files; render a page of it and
   // let the reader ask for the rest. Filters and tabs narrow it first.
   const [showAll, setShowAll] = useState(false);
@@ -581,9 +619,10 @@ export function ParDashboard() {
             <Tabs
               aria-label="Aria cererilor"
               value={scope}
-              onChange={(v) => setScope(v as "mine" | "project")}
+              onChange={(v) => { scopeTouched.current = true; setScope(v as ParListScope); }}
               tabs={[
                 { value: "mine", label: "Ale mele" },
+                ...(teams.length > 0 ? [{ value: "team", label: "Ale echipei" }] : []),
                 { value: "project", label: "Ale proiectului" },
               ]}
             />
@@ -598,14 +637,15 @@ export function ParDashboard() {
               ]}
             />
             <Section
-              title={statusFilter === "draft" ? "Ciornele mele" : statusFilter === "changes_requested" ? "Cereri întoarse pentru modificări" : "Cererile mele"}
+              title={sectionTitle}
               count={myRequests.length}
               requests={showAll ? myRequests : myRequests.slice(0, ROW_CAP)}
               onShowAll={!showAll && myRequests.length > ROW_CAP ? () => setShowAll(true) : undefined}
               onRowClick={(id) => navigate(`/business/par/${id}`)}
               onRepeat={repeatRequest}
-              emptyMessage="Nu ai cereri de plată încă."
+              emptyMessage={scope === "team" ? "Echipa nu are cereri încă." : scope === "project" ? "Nicio cerere pe proiectele tale." : "Nu ai cereri de plată încă."}
               projectsMap={projectsMap}
+              authorsMap={scope === "team" ? teamAuthors : undefined}
             />
 
             {/*
@@ -641,9 +681,14 @@ interface SectionProps {
   onShowAll?: () => void;
   /** projectId → name, to render the project column as a name (not a UUID/placeholder). */
   projectsMap: Record<string, string>;
+  /**
+   * VM5-22: userId → nume. Dat DOAR pe aria „echipă", unde lista amestecă mai mulți autori; pe
+   * „ale mele" coloana ar repeta numele meu pe fiecare rând.
+   */
+  authorsMap?: Record<string, string>;
 }
 
-function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, highlight, projectsMap, onShowAll }: SectionProps) {
+function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, highlight, projectsMap, authorsMap, onShowAll }: SectionProps) {
   return (
     <section aria-labelledby={`section-${title}`}>
       <div className="flex items-center gap-2 mb-3">
@@ -667,6 +712,7 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
           <TableHeader>
             <TableRow>
               <TableHead scope="col">Nr. cerere</TableHead>
+              {authorsMap && <TableHead scope="col">Cine a făcut-o</TableHead>}
               <TableHead scope="col" className="hidden sm:table-cell">Proiect</TableHead>
               <TableHead scope="col" className="text-right">Total (MDL)</TableHead>
               <TableHead scope="col">Status</TableHead>
@@ -685,6 +731,11 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
                 aria-label={`PAR ${r.requestNo}, ${PAR_STATUS_LABELS[r.status]}, ${formatCurrency(r.totalEstimatedCents, r.currency)}`}
               >
                 <TableCell className="font-medium text-foreground">{r.requestNo}</TableCell>
+                {authorsMap && (
+                  <TableCell className="text-muted-foreground">
+                    {authorsMap[r.requestedByUserId] ?? "—"}
+                  </TableCell>
+                )}
                 <TableCell className="hidden text-muted-foreground sm:table-cell">
                   {(() => {
                     const pid = (r as ParRequest & { projectId: string | null }).projectId;

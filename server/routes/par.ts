@@ -69,6 +69,7 @@ import { resolveViewerDecision } from "../lib/par/decisionAuthority";
 import { slotRoleLabel } from "../lib/par/doa";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 import { canViewPar, isWorkspaceAdminRole } from "../lib/par/visibility";
+import { sharesTeamWith, teammateUserIds } from "../lib/par/teamScope";
 import { archiveApprovalsBeforeReset } from "../lib/par/approvalArchive";
 import { isUrgentReasonCode } from "../../src/lib/par/urgentReasons";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
@@ -759,7 +760,20 @@ parRoutes.get("/", async (c) => {
   // rămâne „ale mele" pentru cine nu-l apasă. Regula de fond e aceeași ca la `GET /:id`
   // (`lib/par/visibility.ts`), ca lista și fișa să nu spună lucruri diferite despre aceeași cerere.
   const wantsProjectScope = c.req.query("scope") === "project";
-  if (!hasElevatedRole && wantsProjectScope) {
+  /**
+   * VM5-22: „Ale echipei" — cererile coechipierilor, în ORICE stare (ciorna inclusă), pentru că
+   * exact ciorna o preiei când colegul lipsește. Lista nu se lărgește dincolo de echipă: filtrul
+   * fixează autorul la mine + coechipieri, iar aria de plătitor/proiect de mai jos rămâne aplicată.
+   */
+  const teammates = await teammateUserIds(user.id, tenantId);
+  const wantsTeamScope = c.req.query("scope") === "team" && teammates.length > 0;
+  if (wantsTeamScope) {
+    const mineOrTeam = or(
+      eq(parRequests.requestedByUserId, user.id),
+      inArray(parRequests.requestedByUserId, teammates),
+    );
+    if (mineOrTeam) conditions.push(mineOrTeam);
+  } else if (!hasElevatedRole && wantsProjectScope) {
     const myProjects = await accessibleProjectIds(user.id, tenantId, user.role);
     const projectClause = myProjects === null
       ? ne(parRequests.status, "draft")
@@ -773,10 +787,13 @@ parRoutes.get("/", async (c) => {
   } else if (!hasElevatedRole) {
     conditions.push(eq(parRequests.requestedByUserId, user.id));
   } else if (!isWorkspaceAdminRole(user.role)) {
-    // Others' unsubmitted drafts stay private (same rule as GET /:id above).
+    // Others' unsubmitted drafts stay private (same rule as GET /:id above) — cu excepția
+    // coechipierilor, ale căror ciorne se văd prin definiția echipei (VM5-22). Fără excepția asta,
+    // lista ar ascunde o ciornă pe care fișa `GET /:id` o deschide.
     const draftsOfOthers = or(
       ne(parRequests.status, "draft"),
-      eq(parRequests.requestedByUserId, user.id)
+      eq(parRequests.requestedByUserId, user.id),
+      ...(teammates.length ? [inArray(parRequests.requestedByUserId, teammates)] : []),
     );
     if (draftsOfOthers) conditions.push(draftsOfOthers);
   }
@@ -997,6 +1014,9 @@ parRoutes.get("/:id", async (c) => {
   const hasElevatedRole = roles.some((r) =>
     ["approver", "finance", "par_admin"].includes(r)
   );
+  // VM5-22: coechipier? Calculat o dată și folosit de AMBELE porți de mai jos — și de cea de ciornă,
+  // care are propria copie a regulii și, fără asta, ar închide exact ce echipa tocmai a deschis.
+  const isTeammate = roles.length > 0 && await sharesTeamWith(user.id, par.requestedByUserId, tenantId);
 
   // Requestors can only see their own PARs (unless elevated role) — cu o singură excepție, VM5-02:
   // colegii de pe ACELAȘI PROIECT văd cererile TRIMISE ale celorlalți („dacă pleacă în concediu").
@@ -1011,10 +1031,12 @@ parRoutes.get("/:id", async (c) => {
   // "the routed approver" — yet an elevated role could open it and read the payee block (name,
   // IDNP, IBAN) of a request its author had not even submitted. A draft is private to its author;
   // only a workspace admin/manager keeps the support-level view.
+  // VM5-22 e excepția: coechipierii au cerut explicit să-și vadă ciornele, ca să le poată prelua.
   if (
     par.status === "draft" &&
     par.requestedByUserId !== user.id &&
-    !isWorkspaceAdminRole(user.role)
+    !isWorkspaceAdminRole(user.role) &&
+    !isTeammate
   ) {
     return c.json(await parDenial(user, "draft_private"), 404);
   }

@@ -18,6 +18,7 @@
 import { getUserPARRoles } from "../../middleware/requirePARRole";
 import { isWorkspaceAdminRole } from "./roles";
 import { accessiblePayerIds, mayAccessPayer, mayAccessProject } from "./projectScope";
+import { sharesTeamWith } from "./teamScope";
 
 const ELEVATED_PAR_ROLES = ["approver", "finance", "par_admin"] as const;
 
@@ -36,6 +37,13 @@ export async function canViewPar(
 ): Promise<boolean> {
   if (par.requestedByUserId === user.id) return true;
   const roles = await getUserPARRoles(user.id, tenantId);
+  // Cine n-are NICIUN rol PAR n-are ce căuta în cereri — nici prin echipă, nici prin proiect.
+  if (roles.length === 0) return false;
+  // VM5-22: coechipierul vede cererea în orice stare, ciorna inclusă (`lib/par/teamScope.ts`).
+  // Aria rămâne a lui: echipa spune CU CINE lucrezi, nu îți deschide alt plătitor sau proiect.
+  if (await sharesTeamWith(user.id, par.requestedByUserId, tenantId)) {
+    return parInUserScope(user, tenantId, par);
+  }
   if (!roles.some((r) => (ELEVATED_PAR_ROLES as readonly string[]).includes(r))) {
     return canViewAsProjectColleague(user, tenantId, par, roles);
   }

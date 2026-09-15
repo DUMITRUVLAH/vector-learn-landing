@@ -532,6 +532,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM5-19 | high | Prag anual **per prestator** + bifa de tender a finanțelor | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-20 | high | Buget de eveniment **pe linii** + încărcare + raport planificat vs realizat | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-21 | medium | Șabloanele de documente ale Anei, încărcate în DOCGEN | 🟡 blocat pe fișiere | [catalog](specs/VM5-catalog.md) |
+| VM5-22 | high | Echipe: coechipierii își văd cererile și **ciornele** între ei | ✅ done | [catalog](specs/VM5-catalog.md) |
 
 ---
 
