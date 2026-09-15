@@ -269,3 +269,33 @@ describe("Opțiunile de segmentare (GET /segments)", () => {
     session = userA;
   });
 });
+
+describe("Căutarea și filtrele tablei se aplică PE SERVER", () => {
+  it("[blocant] kanbanul cerne după căutare, nu doar după segment", async () => {
+    const body = await (await app.request("/api/crm/leads/pipeline?search=Fabrica")).json();
+    const carduri = (body.grouped.new as { fullName: string }[]).map((l) => l.fullName);
+    expect(carduri).toEqual(["Lead Fabrica"]);
+    expect(body.counts.new).toBe(1);
+    // Interfața trebuie să știe că cifrele descriu un subset, nu pâlnia întreagă.
+    expect(body.segmented).toBe(true);
+  });
+
+  it("[blocant] căutarea prinde și un lead care N-AR FI printre primele carduri", async () => {
+    // Exact bug-ul de dinainte: cernerea locală vedea doar cardurile aduse. Serverul le vede
+    // pe toate, deci un nume care există se găsește indiferent de câte leaduri are baza.
+    const body = await (await app.request("/api/crm/leads/pipeline?search=Pensiune")).json();
+    expect((body.grouped.new as { fullName: string }[]).map((l) => l.fullName)).toEqual(["Lead Pensiune"]);
+  });
+
+  it("[blocant] filtrul pe sursă ajunge la aceleași cifre în tablă și în listă", async () => {
+    const tabla = await (await app.request("/api/crm/leads/pipeline?source=manual")).json();
+    const lista = await (await app.request("/api/crm/leads?source=manual")).json();
+    expect(tabla.counts.new).toBe(lista.total);
+  });
+
+  it("[normal] filtrul pe etapă nu se aplică pe tablă — tabla E grupată pe etape", async () => {
+    const body = await (await app.request("/api/crm/leads/pipeline?stage=castigat")).json();
+    // Dacă s-ar aplica, toate coloanele ar fi goale în afară de una.
+    expect(body.counts.new).toBe(4);
+  });
+});

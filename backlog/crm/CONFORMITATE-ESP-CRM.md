@@ -34,7 +34,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | Nr. | Cerință | Conform | Observații |
 |---|---|---|---|
 | 8 | Etape configurabile | **Da** | Etape per pâlnie, redenumibile, cu flaguri „câștigat"/„pierdut" — rapoartele urmăresc flagul, nu numele. |
-| 9 | Kanban cu drag-and-drop | **Da** | Plus vedere listă cu sortare și paginare pe server, pentru volume mari. |
+| 9 | Kanban cu drag-and-drop | **Da** | Plus vedere listă cu sortare și paginare pe server, pentru volume mari. Filtrele (căutare, sursă, responsabil, segment) se aplică pe server în AMBELE vederi: tabla arăta înainte doar ce se cernea din cele 50 de carduri încărcate pe coloană, deci pe o bază mare o căutare după un client real putea întoarce „niciun rezultat", iar cifrele de pe coloane nu se potriveau cu lista. Acum contoarele și sumele descriu exact ce trece de filtre. |
 | 10 | Câmpuri per oportunitate: responsabil, produs, valoare, probabilitate, next action, termen | **Parțial** | Toate există: responsabil, produs (catalog), valoare, probabilitate proprie (implicit moștenită de la etapă), pas următor și termen (taskul deschis). NU sunt blocante la creare — sistemul le CERE vizibil după fiecare activitate, dar nu refuză salvarea. Obligativitatea dură se configurează la cerere. |
 | 11 | Istoric al tranzițiilor, cu dată și utilizator | **Da** | Fiecare mutare scrie în cronologia leadului; jurnalul CRM reține și cine. |
 | 12 | Motiv de pierdere obligatoriu | **Da** | Regula urmărește flagul `is_lost` al etapei, nu litera „pierdut" — merge și pe etape redenumite. |

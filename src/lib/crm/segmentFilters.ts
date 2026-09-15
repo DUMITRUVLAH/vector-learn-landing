@@ -24,11 +24,26 @@ export interface CrmSegmentFilters {
   maxConsumptionKwh?: number;
 }
 
-/** Scoate cheile goale — un `?industry=` gol ar fi însemnat pe server „filtrează pe nimic". */
+/** Cheile care SUNT segmentare. Orice altceva (căutare, sortare, vedere) nu intră aici. */
+export const CRM_SEGMENT_KEYS = [
+  "productId",
+  "industry",
+  "region",
+  "companySize",
+  "minConsumptionKwh",
+  "maxConsumptionKwh",
+] as const satisfies readonly (keyof CrmSegmentFilters)[];
+
+/**
+ * Scoate cheile goale ȘI pe cele care nu sunt segmentare — un `?industry=` gol ar fi însemnat pe
+ * server „filtrează pe nimic", iar o vizualizare salvată (care poartă și `view`, `sort`, `dir`)
+ * și-ar fi trimis toată structura în query string-ul de segment.
+ */
 export function cleanCrmSegments(segments: CrmSegmentFilters): CrmSegmentFilters {
   const cleaned: CrmSegmentFilters = {};
-  for (const [key, value] of Object.entries(segments)) {
-    if (value !== undefined && value !== null && value !== "") {
+  for (const key of CRM_SEGMENT_KEYS) {
+    const value = segments[key];
+    if (value !== undefined && value !== null && (value as unknown) !== "") {
       (cleaned as Record<string, unknown>)[key] = value;
     }
   }

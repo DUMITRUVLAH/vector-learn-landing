@@ -29,7 +29,7 @@ const { summarizeBulk } = await import("@/components/crm/LeadBulkBar");
 
 const STAGES: CrmStage[] = [
   { id: "s1", key: "new", label: "Lead nou", color: "sky", orderIndex: 0, isWon: false, isLost: false, isDefault: true, probabilityPct: 10 },
-  { id: "s2", key: "contacted", label: "Contactat", color: "amber", orderIndex: 1, isWon: false, isLost: false, isDefault: false, probabilityPct: 30 },
+  { id: "s2", key: "contacted", label: "Contactat", color: "peach", orderIndex: 1, isWon: false, isLost: false, isDefault: false, probabilityPct: 30 },
   { id: "s3", key: "pierdut", label: "Pierdut", color: "rose", orderIndex: 2, isWon: false, isLost: true, isDefault: false, probabilityPct: 0 },
 ];
 

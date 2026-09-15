@@ -278,13 +278,17 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
     // industria energetică" ar da două răspunsuri diferite în cele două vederi ale aceluiași
     // ecran. Numărătorile și sumele de mai jos folosesc același `leadScope`, deci coloanele
     // arată totalul SEGMENTULUI, nu al pâlniei întregi.
-    const segments = parseSegmentFilters(c.req.query());
+    const query = c.req.query();
+    const segments = parseSegmentFilters(query);
     const scopeConditions = [eq(leads.tenantId, tenantId)];
     if (active) {
       const pipelineCond = leadsInPipeline(active.id, active.isDefault);
       if (pipelineCond) scopeConditions.push(pipelineCond);
     }
-    scopeConditions.push(...segmentConditions(tenantId, segments));
+    // Căutarea, sursa, responsabilul și segmentul se aplică AICI, nu în browser. Numărătorile și
+    // sumele de mai jos folosesc același `leadScope`, deci coloanele arată totalul a ceea ce s-a
+    // cerut — nu al pâlniei întregi, și nici al celor 50 de carduri încărcate.
+    scopeConditions.push(...leadMatchConditions(tenantId, query, { includeStage: false }));
     const leadScope = and(...scopeConditions);
 
     // O SINGURĂ interogare pentru carduri, nu una pe etapă.
@@ -353,7 +357,7 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       pipelineId: active?.id ?? null,
       // Interfața scrie „N leaduri în segment" în loc de „N leaduri" când numerele de mai sus
       // descriu un subset filtrat — altfel un total mai mic pare o pierdere de date.
-      segmented: hasSegmentFilters(segments),
+      segmented: hasSegmentFilters(segments) || !!query.search || !!query.source || !!query.assignedTo,
     });
   } catch (e) {
     if (isMissingSchemaError(e)) {
@@ -827,12 +831,22 @@ function isSortKey(value: string): value is keyof typeof SORTABLE_COLUMNS {
  * `pipeline_not_found` = un `pipelineId` care nu e al workspace-ului: apelantul răspunde 404,
  * nu cade tăcut pe pâlnia implicită (ar arăta alte date decât cele cerute).
  */
-async function buildLeadFilters(
+/**
+ * Condițiile de CĂUTARE ȘI FILTRARE (fără tenant, fără pâlnie): căutarea liberă, etapa, sursa,
+ * responsabilul și segmentarea firmografică.
+ *
+ * Separate de `buildLeadFilters` fiindcă tabla kanban are altă rădăcină (pâlnia ei, rezolvată
+ * cu 404 propriu) dar EXACT aceleași filtre — iar înainte le avea doar în browser, peste cele
+ * 50 de carduri încărcate pe coloană. Pe 3.200 de leaduri asta însemna că o căutare după un
+ * client REAL întorcea „niciun rezultat": clientul exista, dar nu era printre cardurile aduse.
+ */
+function leadMatchConditions(
   tenantId: string,
-  query: Record<string, string | undefined>
-): Promise<{ where: SQL | undefined } | { error: "pipeline_not_found" }> {
-  const { search, stage, source, assignedTo, pipelineId } = query;
-  const conditions = [eq(leads.tenantId, tenantId)];
+  query: Record<string, string | undefined>,
+  opts: { includeStage?: boolean } = {}
+): SQL[] {
+  const { search, stage, source, assignedTo } = query;
+  const conditions: SQL[] = [];
 
   if (search) {
     const like = `%${search}%`;
@@ -847,8 +861,9 @@ async function buildLeadFilters(
 
   // Etapele sunt per-tenant și dinamice — nu mai există un set static contra căruia să validăm
   // aici. Un filtru pe o cheie inexistentă e inofensiv: `eq` pe un varchar nu poate face SQL
-  // injection, doar întoarce o listă goală.
-  if (stage) conditions.push(eq(leads.stage, stage));
+  // injection, doar întoarce o listă goală. Pe kanban filtrul n-are sens (tabla E grupată pe
+  // etape), deci apelantul îl poate lăsa afară.
+  if (stage && opts.includeStage !== false) conditions.push(eq(leads.stage, stage));
   if (source && isLeadSource(source)) conditions.push(eq(leads.source, source));
   if (assignedTo) conditions.push(eq(leads.assignedTo, assignedTo));
 
@@ -856,6 +871,16 @@ async function buildLeadFilters(
   // leadului — plus produsul din catalog. Când niciun filtru nu e activ, interogarea rămâne
   // exact cea de dinainte: nu atingem `crm_companies` degeaba.
   conditions.push(...segmentConditions(tenantId, parseSegmentFilters(query)));
+
+  return conditions;
+}
+
+async function buildLeadFilters(
+  tenantId: string,
+  query: Record<string, string | undefined>
+): Promise<{ where: SQL | undefined } | { error: "pipeline_not_found" }> {
+  const { pipelineId } = query;
+  const conditions = [eq(leads.tenantId, tenantId), ...leadMatchConditions(tenantId, query)];
 
   // Filtrul pe pâlnie e citit prin aceeași regulă ca pe kanban: pentru implicită intră și
   // leadurile fără `pipeline_id` (cele dinainte de migrarea 0166).

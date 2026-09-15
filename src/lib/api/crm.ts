@@ -107,12 +107,28 @@ export function getCrmSegmentOptions(): Promise<CrmSegmentOptions> {
   return api<CrmSegmentOptions>("/api/crm/leads/segments");
 }
 
+/**
+ * Filtrele tablei. Sunt ACELEAȘI cu ale listei, și se aplică în același loc — pe server.
+ *
+ * Până acum kanbanul cernea în browser cele 50 de carduri încărcate pe coloană: pe o bază de
+ * 3.200 de leaduri, o căutare după un client care EXISTĂ întorcea „niciun rezultat", iar
+ * numărătorile de pe coloane arătau altceva decât lista, cu aceleași filtre pe ecran.
+ */
+export interface CrmBoardFilters extends CrmSegmentFilters {
+  search?: string;
+  source?: string;
+  assignedTo?: string;
+}
+
 /** `pipelineId` absent = pâlnia implicită a workspace-ului. Un id străin → 404 (nu tabla proprie). */
 export function getCrmPipeline(
   pipelineId?: string | null,
-  segments?: CrmSegmentFilters
+  filters?: CrmBoardFilters
 ): Promise<CrmPipelineResponse> {
-  const qs = new URLSearchParams(crmSegmentQuery(segments));
+  const qs = new URLSearchParams(crmSegmentQuery(filters));
+  if (filters?.search?.trim()) qs.set("search", filters.search.trim());
+  if (filters?.source && filters.source !== "all") qs.set("source", filters.source);
+  if (filters?.assignedTo) qs.set("assignedTo", filters.assignedTo);
   if (pipelineId) qs.set("pipelineId", pipelineId);
   const suffix = qs.toString();
   return api<CrmPipelineResponse>(`/api/crm/leads/pipeline${suffix ? `?${suffix}` : ""}`);

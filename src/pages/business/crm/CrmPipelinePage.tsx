@@ -35,6 +35,7 @@ import {
   type CrmStage,
   type CrmPipeline,
   type CrmSavedViewFilters,
+  type CrmBoardFilters,
 } from "@/lib/api/crm";
 import { cleanCrmSegments, crmSegmentCount, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
 import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, crmSourceLabel, stageColorClasses } from "@/components/crm/constants";
@@ -48,6 +49,7 @@ import { SavedViewsMenu } from "@/components/crm/SavedViewsMenu";
 import { SegmentFilterBar } from "@/components/crm/SegmentFilterBar";
 import { RemindersBell } from "@/components/crm/RemindersBell";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useCrmPermissions } from "@/hooks/useCrmPermissions";
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
@@ -74,6 +76,8 @@ export function CrmPipelinePage() {
   const activePipelineRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** A apucat tabla să se încarce o dată? Prima cerere are voie la spinner, restul nu. */
+  const loadedOnceRef = useRef(false);
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
@@ -108,9 +112,11 @@ export function CrmPipelinePage() {
    *  browserul n-are firmele. `segmentsRef` există pentru același motiv ca `activePipelineRef`:
    *  `loadPipeline` are lista de dependențe goală și ar citi altfel o valoare învechită. */
   const [segments, setSegments] = useState<CrmSegmentFilters>({});
-  const segmentsRef = useRef<CrmSegmentFilters>({});
+  /** Filtrele CU CARE s-a cerut ultima dată tabla — citite de `loadPipeline`, care are lista de
+   *  dependențe goală și ar vedea altfel valori învechite (aceeași capcană ca la pâlnie). */
+  const boardFiltersRef = useRef<CrmBoardFilters>({});
 
-  const loadPipeline = useCallback(async (opts?: { silent?: boolean; pipelineId?: string | null; segments?: CrmSegmentFilters }) => {
+  const loadPipeline = useCallback(async (opts?: { silent?: boolean; pipelineId?: string | null; filters?: CrmBoardFilters }) => {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     setError(null);
@@ -118,7 +124,7 @@ export function CrmPipelinePage() {
       // `pipelineId` explicit bate state-ul: la comutarea din selector, `activePipelineId` încă
       // n-a apucat să se propage prin render (stale closure) — exact capcana de la drag & drop.
       const requested = opts && "pipelineId" in opts ? opts.pipelineId : activePipelineRef.current;
-      const res = await getCrmPipeline(requested, opts?.segments ?? segmentsRef.current);
+      const res = await getCrmPipeline(requested, opts?.filters ?? boardFiltersRef.current);
       // Lista își cere singură datele de la server; semnalul ăsta o face să se resincronizeze
       // după orice schimbare venită din altă parte (fișa leadului, mutare, lead nou).
       setListRefreshToken((t) => t + 1);
@@ -141,9 +147,28 @@ export function CrmPipelinePage() {
     }
   }, []);
 
+  /** Căutarea nu pleacă la fiecare tastă: 300 ms de liniște, ca în vederea listă (CRM-139). */
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  /** Filtrele trimise SERVERULUI — aceleași pentru tablă și pentru listă. */
+  const boardFilters: CrmBoardFilters = {
+    ...segments,
+    ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+    ...(sourceFilter !== "all" ? { source: sourceFilter } : {}),
+    ...(onlyMine && currentUserId ? { assignedTo: currentUserId } : {}),
+  };
+  // Cheie stabilă: obiectul de mai sus e nou la fiecare render, iar ca dependență ar reîncărca
+  // tabla la nesfârșit.
+  const boardFiltersKey = JSON.stringify(boardFilters);
+
   useEffect(() => {
-    void loadPipeline();
-  }, [loadPipeline]);
+    const filters = JSON.parse(boardFiltersKey) as CrmBoardFilters;
+    boardFiltersRef.current = filters;
+    // Prima încărcare arată spinnerul; filtrările ulterioare o fac în tăcere — un spinner pe
+    // toată pagina la fiecare literă tastată face bara de filtre imposibil de folosit.
+    void loadPipeline({ silent: loadedOnceRef.current, filters });
+    loadedOnceRef.current = true;
+  }, [loadPipeline, boardFiltersKey]);
 
   const { members: teamMembers } = useTeamMembers();
   // Butoanele administrative apar doar pentru cine le poate folosi. Ascunderea e curtoazie:
@@ -197,10 +222,7 @@ export function CrmPipelinePage() {
    *  fiindcă filtrarea e o mișcare de lucru, nu o intrare în ecran — un spinner pe toată pagina
    *  la fiecare bifă ar face bara de segmentare greu de folosit. Lista își cere singură pagina. */
   function applySegments(next: CrmSegmentFilters) {
-    const cleaned = cleanCrmSegments(next);
-    segmentsRef.current = cleaned;
-    setSegments(cleaned);
-    void loadPipeline({ silent: true, segments: cleaned });
+    setSegments(cleanCrmSegments(next));
   }
 
   /** Exportul cere SERVERULUI leadurile care trec de filtrele de pe ecran — nu pagina afișată.
@@ -248,23 +270,12 @@ export function CrmPipelinePage() {
 
   const allLeads = Object.values(grouped).flat();
 
-  function matchesFilters(lead: CrmLead): boolean {
-    if (onlyMine && currentUserId && lead.assignedTo !== currentUserId) return false;
-    if (sourceFilter !== "all" && lead.source !== sourceFilter) return false;
-    const q = search.trim().toLowerCase();
-    if (q) {
-      const haystack = [lead.fullName, lead.dealName, lead.phone, lead.email, lead.company]
-        .filter((v): v is string => Boolean(v))
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  }
-  const hasActiveFilters = search.trim() !== "" || sourceFilter !== "all" || onlyMine;
-  /** Separat de `hasActiveFilters`: segmentul e cernut DE SERVER, deci numărătorile pe coloană
-   *  rămân cele reale ale segmentului (nu se recalculează din cardurile încărcate). Contează
-   *  doar pentru starea goală — „Niciun lead încă" ar fi o minciună când tocmai ai filtrat. */
+  /** Filtrele se aplică PE SERVER (vezi `boardFilters`): cardurile primite sunt deja rezultatul,
+   *  iar numărătorile de pe coloane descriu exact ce s-a cerut. Vechea cernere în browser,
+   *  peste cele 50 de carduri încărcate pe coloană, făcea o căutare după un client REAL să
+   *  întoarcă „niciun rezultat" pe o bază mare — și dădea alte cifre decât vederea listă. */
+  const hasActiveFilters =
+    search.trim() !== "" || sourceFilter !== "all" || onlyMine || crmSegmentCount(segments) > 0;
   const hasSegments = crmSegmentCount(segments) > 0;
 
   /**
@@ -356,9 +367,12 @@ export function CrmPipelinePage() {
     requestStageChange(lead, stageKey);
   }
 
-  const totalLeads = allLeads.length;
+  // Numerele din antet vin din contoarele SERVERULUI, nu din cardurile încărcate: `grouped` e
+  // plafonat la 50/coloană (500 în total), deci un workspace cu 3.200 de leaduri își vedea
+  // pipeline-ul descris ca „500 leaduri". Acum antetul descrie exact ce trece de filtre.
   const wonKeys = new Set(stages.filter((s) => s.isWon).map((s) => s.key));
-  const wonCount = allLeads.filter((l) => wonKeys.has(l.stage)).length;
+  const totalLeads = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  const wonCount = Object.entries(counts).reduce((sum, [key, n]) => (wonKeys.has(key) ? sum + n : sum), 0);
   const conversionRate = totalLeads > 0 ? Math.round((wonCount / totalLeads) * 100) : 0;
 
   return (
@@ -545,15 +559,11 @@ export function CrmPipelinePage() {
             style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(220px, 1fr))` }}
           >
             {stages.map((stage) => {
-              const columnLeads = (grouped[stage.key] ?? []).filter(matchesFilters);
-              // Contorul/suma serverului acoperă TOATE lead-urile tenantului; `grouped` e plafonat
-              // la 50/coloană (vezi `crmLeads.ts`). Fără filtre arătăm contorul real al serverului;
-              // cu filtre active, arătăm ce s-a găsit în cardurile deja încărcate (nu mai cerem
-              // server-ul din nou — regula explicită de mai sus, „fără cereri noi").
-              const columnCount = hasActiveFilters ? columnLeads.length : counts[stage.key] ?? 0;
-              const columnValueSum = hasActiveFilters
-                ? columnLeads.reduce((sum, l) => sum + (l.valueCents ?? 0), 0)
-                : valueSums[stage.key] ?? 0;
+              const columnLeads = grouped[stage.key] ?? [];
+              // Contorul și suma vin de la server și acoperă TOT ce trece de filtre, nu doar
+              // cardurile aduse (`grouped` rămâne plafonat la 50/coloană, pentru afișare).
+              const columnCount = counts[stage.key] ?? 0;
+              const columnValueSum = valueSums[stage.key] ?? 0;
               const isHover = hoverStage === stage.key && draggedId !== null;
               return (
                 <div
@@ -602,11 +612,9 @@ export function CrmPipelinePage() {
           {/* Mobil (<lg): aceleași secțiuni, fără drag — mutarea vine din select. */}
           <div className="flex flex-col gap-4 lg:hidden">
             {stages.map((stage) => {
-              const columnLeads = (grouped[stage.key] ?? []).filter(matchesFilters);
-              const columnCount = hasActiveFilters ? columnLeads.length : counts[stage.key] ?? 0;
-              const columnValueSum = hasActiveFilters
-                ? columnLeads.reduce((sum, l) => sum + (l.valueCents ?? 0), 0)
-                : valueSums[stage.key] ?? 0;
+              const columnLeads = grouped[stage.key] ?? [];
+              const columnCount = counts[stage.key] ?? 0;
+              const columnValueSum = valueSums[stage.key] ?? 0;
               return (
                 <div key={stage.key} className="flex flex-col gap-2 rounded-2xl bg-muted/40 p-3">
                   <StageHeader stage={stage} count={columnCount} valueSum={columnValueSum} />
