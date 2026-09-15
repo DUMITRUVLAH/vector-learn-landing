@@ -32,6 +32,7 @@ const TABS: CrmTab[] = [
   { label: "Automatizări", href: "/business/crm/automatizari" },
   { label: "Cadențe", href: "/business/crm/cadente" },
   { label: "Import", href: "/business/crm/import" },
+  { label: "API", href: "/business/crm/api", requires: "audit.view" },
   { label: "Drepturi", href: "/business/crm/drepturi", requires: "audit.view" },
   { label: "Jurnal", href: "/business/crm/jurnal", requires: "audit.view" },
 ];

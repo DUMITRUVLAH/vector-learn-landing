@@ -139,14 +139,14 @@ onestă spune de la început ce se cumpără și ce se construiește.
 
 | Nr. | Cerință | Conform | Observații |
 |---|---|---|---|
-| 64 | API documentat (REST) | **Parțial** | API REST complet pentru tot ce face interfața, dar fără documentație publică și fără chei de acces pentru terți. ~3 zile pentru chei + OpenAPI. |
+| 64 | API documentat (REST) | **Da** | `/api/public/v1`, doar de citire, cu chei de workspace (`X-API-Key`), administrate din CRM → API: cheia se vede o singură dată, se revocă imediat, iar crearea și revocarea se scriu în jurnal. Documentația e OpenAPI 3.1, servită de aplicație la `/api/public/v1/openapi.json` — nu un PDF care se desincronizează: un test pică dacă există rută nedocumentată sau cale documentată fără rută. Endpoint-uri: leaduri, firme, produse, pâlnii cu etape, oameni, taskuri, acte și un rezumat agregat. Limită 120 cereri/minut per cheie; `updatedSince` pentru citire incrementală. **Scrierea nu e expusă deliberat** — o cheie ajunge în fișiere de configurare și capturi de ecran; una furată care doar citește e un incident, una care scrie e un dezastru. |
 | 65 | Telefonie/Virtual PBX | **Nu** | Vezi 20. |
 | 66 | E-mail | **Parțial** | Vezi 30. |
 | 67 | WhatsApp/Viber | **Parțial** | Vezi 28–29. |
 | 68 | Website și formulare de lead generation | **Da** | Endpoint public `/api/crm/intake/webform`, cu token per formular (nu per workspace: dacă un site e compromis, se stinge doar formularul lui), listă de domenii permise, limitare pe IP și consimțământ care expiră în 5 minute. Duplicatele adaugă o cerere pe leadul existent, nu un al doilea lead. Interfața dă codul gata de lipit în pagină, cu UTM-urile preluate din URL. |
 | 69 | ERP/facturare | **Parțial** | Produsul are facturare proprie și e-Factura (SFS); integrarea cu un ERP terț necesită API-ul acelui ERP. |
 | 70 | Semnătură electronică | **Parțial** | Integrare MSign existentă pe actele PAR; extinderea la contractele CRM e configurare, nu dezvoltare nouă. |
-| 71 | BI/raportare externă | **Parțial** | Export CSV/PDF azi; conectorul direct (ex. Power BI) cere API-ul de la 64. |
+| 71 | BI/raportare externă | **Da** | Power BI/Excel se conectează direct la `/api/public/v1` (Obține date → Web → antet `X-API-Key`); ecranul CRM → API dă adresa, specificația și exemplul de conectare. `/reports/summary` întoarce indicatorii deja agregați (conversie pe afacerile închise, forecast ponderat, valori pe etapă, pe sursă și pe stare de act), iar `updatedSince` face reîmprospătarea incrementală, ca un refresh să nu tragă toată baza. Exportul CSV/PDF rămâne pentru cine vrea fișierul. |
 | 72 | Integrări ulterioare fără reconstrucție | **Da** | |
 
 ## 4.13 Arhitectură și scalabilitate

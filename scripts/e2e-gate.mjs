@@ -140,6 +140,12 @@ const AREAS = {
       // rămânea cu o listă goală, iar responsabilul apărea „—" peste tot. O listă goală arată
       // exact ca o echipă fără oameni, deci nimic nu semnala problema.
       ["GET", "/api/team/members", (j) => Array.isArray(j) && j.every((m) => typeof m?.fullName === "string")],
+      // Cheile de API: tabela și middleware-ul existau din INT-901, dar nicio rută nu le folosea.
+      ["GET", "/api/settings/api-keys", (j) => Array.isArray(j)],
+      // Specificația publică se servește FĂRĂ cheie și descrie exact rutele montate.
+      ["GET", "/api/public/v1/openapi.json", (j) => j?.openapi === "3.1.0" && !!j?.paths?.["/leads"]],
+      // Iar datele NU se servesc fără cheie — testul negativ, fără de care poarta n-ar proba nimic.
+      ["GET", "/api/public/v1/leads", () => true, { status: 401 }],
       // Acțiunile în masă resping o selecție goală — validarea e pe server, nu doar în buton.
       ["POST", "/api/crm/leads/bulk", () => true, { body: { leadIds: [], action: "assign" }, status: 400 }],
       // Exportul chiar întoarce un CSV: antet în română, BOM pentru Excel și contorul de rânduri.

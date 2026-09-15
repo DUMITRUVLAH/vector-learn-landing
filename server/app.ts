@@ -81,6 +81,8 @@ import { parVendorProfileRoutes } from "./routes/parVendorProfile";
 import { parSettingsRoutes } from "./routes/parSettings";
 import { parDriveRoutes, parDriveCronRoutes } from "./routes/parDrive";
 import { parPublicVerifyRoutes } from "./routes/parPublicVerify";
+import { publicApiRoutes } from "./routes/publicApi";
+import { apiKeysRoutes } from "./routes/apiKeys";
 import { parRoutes } from "./routes/par";
 import { parFxRoutes } from "./routes/parFx";
 import { parAttachmentsRoutes } from "./routes/parAttachments";
@@ -309,6 +311,10 @@ app.route("/api/cron/par-drive", parDriveCronRoutes);
 // fix omului pentru care e făcută: contabilul sau auditorul care n-are cont în platformă.
 // Apărarea ei e tokenul de 80 de biți + limitarea de rată + un răspuns fără date de plată.
 app.route("/api/public/par", parPublicVerifyRoutes);
+// API-ul public, doar de citire, cu chei de workspace (cerințele 64 și 71 din caietul de
+// sarcini). Montat sub /api/public ca să fie limpede, din cale, că nu cere sesiune.
+app.route("/api/public/v1", publicApiRoutes);
+app.route("/api/settings/api-keys", apiKeysRoutes);
 
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);
