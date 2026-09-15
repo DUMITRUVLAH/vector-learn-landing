@@ -93,7 +93,10 @@ for (const r of routes) {
       problems.push(`${url} [${role}] → ${res.status()} ${(await res.text()).slice(0, 140)}`);
     } else if (!ct.includes("json") && res.status() < 400) {
       // A 200 that isn't JSON means the SPA fallback answered — route not mounted.
-      if (!/csv|sheet|pdf|octet|xml/.test(ct)) {
+      // `zip` e în listă de când pachetul de audit (`/reports/audit-package.zip`, o rută montată
+      // și funcțională) era raportat ca „nemontat" la fiecare rulare: o poartă care strigă lup
+      // nu mai e citită când chiar se rupe ceva.
+      if (!/csv|sheet|pdf|octet|xml|zip/.test(ct)) {
         problems.push(`${url} [${role}] → 200 dar content-type "${ct}" (ruta nu e montată?)`);
       }
     }
