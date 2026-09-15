@@ -280,19 +280,19 @@ async function httpTransport(
   });
   const text = await res.text();
   if (!res.ok) {
-    // SFS întoarce uneori PAGINA HTML de eroare a portalului în loc de un SOAP fault. Atunci cererea
-    // nici nu ajunge la stratul de autentificare, deci credențialele NU pot fi cauza — verificat pe
-    // 2026-09-15: o cerere cu parolă greșită și una fără niciun header de securitate primesc același
-    // răspuns, octet cu octet (`Server: nginx`, `text/html`, ETag fix = pagină statică de eroare).
-    // Mesajul trebuie să spună asta explicit: formularea veche punea „prea multe cereri" pe primul
-    // loc și trimitea omul să-și reintroducă parola degeaba, în timp ce serviciul lor era pur și
-    // simplu picat.
+    // SFS întoarce uneori PAGINA HTML de eroare a portalului (nginx, `text/html`, ETag fix) în loc de
+    // un SOAP fault. NU putem deduce din ea ce anume a eșuat, iar pe 2026-09-15 am avut ambele
+    // cazuri în aceeași oră: un workspace primea pagina asta la fiecare metodă, în timp ce altul
+    // citea 47 de facturi prin exact același endpoint. Deci nici „serviciul e picat", nici
+    // „credențialele sunt greșite" nu pot fi afirmate de aici — mesajul trebuie să le lase pe
+    // amândouă deschise și să spună ce se verifică. (Formularea și mai veche punea „prea multe
+    // cereri" pe primul loc, ceea ce trimitea omul pe o pistă pentru care n-am găsit nicio dovadă.)
     const fault = xmlText(text, "faultstring");
     const looksHtml = /<!DOCTYPE html|<html/i.test(text.slice(0, 200));
     const message =
       fault ??
       (looksHtml && res.status >= 500
-        ? `HTTP ${res.status} — serviciul SFS nu răspunde: a întors pagina lui de eroare în loc de un răspuns SOAP. Nu ține de credențialele tale (cererea nu ajunge până la autentificare) și nu se rezolvă din aplicație; reîncearcă mai târziu`
+        ? `HTTP ${res.status} — SFS a întors pagina lui de eroare în loc de un răspuns SOAP, fără să spună de ce. Două cauze posibile: serviciul lor e indisponibil, sau contul API al organizației nu e acceptat. Verifică utilizatorul și parola din configurare, apoi reîncearcă peste câteva minute`
         : `HTTP ${res.status}`);
     throw new EfacturaMdError(method, message);
   }
