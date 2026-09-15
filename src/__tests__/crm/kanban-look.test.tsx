@@ -280,17 +280,33 @@ describe("Cardul poartă semnalul de lucru", () => {
   });
 });
 
-describe("Sub-navigarea modulului", () => {
+describe("Navigarea modulului", () => {
+  // Garanția n-a schimbat („toate ecranele la un click, cel curent marcat"), doar locul: bara
+  // orizontală de file a fost înlocuită de meniul lateral, care în interiorul CRM-ului arată
+  // DOAR CRM — la fel ca la PAR. Două rânduri de navigare identice, unul peste altul, nu
+  // aduceau nimic și mâncau înălțime pe tabla de leaduri.
   it("[blocant] toate ecranele CRM sunt la un click, iar cel curent e marcat", async () => {
     getCrmPipeline.mockResolvedValue(makeResponse([VANZARI], VANZARI.id, [makeLead({ fullName: "Maria Popescu" })]));
     render(<CrmPipelinePage />);
     await findLeadCards("Maria Popescu");
 
-    const nav = screen.getByRole("navigation", { name: "Secțiunile modulului CRM" });
+    const nav = screen.getByRole("navigation", { name: "Meniu FinFlow" });
     for (const label of ["Pipeline", "Astăzi", "Clienți", "Produse", "Documente", "Rapoarte"]) {
       expect(nav).toHaveTextContent(label);
     }
-    // Căutarea se face ÎN bară: „Pipeline" apare și în meniul lateral al aplicației.
+    // Căutarea se face ÎN meniu: „Pipeline" apare și în bara de jos, pe telefon.
     expect(within(nav).getByRole("link", { name: "Pipeline" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("[blocant] în CRM meniul e DOAR CRM — fără rândurile de PAR sau FinDesk", async () => {
+    getCrmPipeline.mockResolvedValue(makeResponse([VANZARI], VANZARI.id, [makeLead({ fullName: "Maria Popescu" })]));
+    render(<CrmPipelinePage />);
+    await findLeadCards("Maria Popescu");
+
+    const nav = screen.getByRole("navigation", { name: "Meniu FinFlow" });
+    expect(nav).not.toHaveTextContent("Cereri de plată");
+    expect(nav).not.toHaveTextContent("FinDesk — Finanțe");
+    // …iar întoarcerea la restul aplicației rămâne la un click.
+    expect(screen.getByLabelText("Înapoi la toate modulele")).toBeInTheDocument();
   });
 });

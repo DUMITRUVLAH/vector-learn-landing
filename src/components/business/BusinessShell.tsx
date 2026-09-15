@@ -49,15 +49,16 @@ import {
   X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon} from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
-import { CrmTabs } from "@/components/crm/CrmTabs";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
+import { useCrmPermissions } from "@/hooks/useCrmPermissions";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { onParBadgeRefresh } from "@/lib/par/badgeBus";
 import { DOCS_BASE } from "@/lib/docs/paths";
+import type { CrmPermission } from "@/lib/api/crm";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { cachedOnce, peekResolved } from "@/lib/sessionCache";
@@ -105,6 +106,11 @@ interface NavItem {
    * SHELL-502: PAR roles allowed to SEE this nav item. Undefined = any PAR member.
    */
   roles?: ParNavRole[];
+  /**
+   * CRM-SIDEBAR: dreptul CRM necesar ca să VEZI rândul. Undefined = orice membru CRM.
+   * Oglindește `requireCrmPermission` de pe server — ascunderea e curtoazie, nu apărare.
+   */
+  crmPermission?: CrmPermission;
 }
 
 interface NavGroup {
@@ -158,27 +164,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Rezidenți ITPark", href: "/business/fin/itpark", icon: Building2, tone: "violet" },
       { label: "Securitate", href: "/business/fin/settings/security", icon: Shield, tone: "rose" },
       { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings, tone: "amber" },
-    ],
-  },
-  {
-    // CRM Faza 1 — vizibil doar pe rutele /business/crm/*, ca DocMerge. Doar
-    // Pipeline și Produse sunt funcționale; restul submodulelor apar pe pagina
-    // modulului marcate „În curând", nu în meniu.
-    section: "CRM",
-    prefix: "/business/crm",
-    items: [
-      { label: "Astăzi", href: "/business/crm/astazi", icon: CalendarClock, tone: "amber" },
-      { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare, tone: "sky" },
-      { label: "Produse", href: "/business/crm/produse", icon: Package, tone: "emerald" },
-      { label: "Clienți", href: "/business/crm/clienti", icon: Building2, tone: "rose" },
-      { label: "Import", href: "/business/crm/import", icon: Upload, tone: "teal" },
-      { label: "Documente", href: "/business/crm/documente", icon: FileText, tone: "orange" },
-      { label: "Comunicare", href: "/business/crm/comunicare", icon: MessageCircle, tone: "blue" },
-      { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
-      { label: "Cadențe", href: "/business/crm/cadente", icon: RefreshCw, tone: "amber" },
-      { label: "Jurnal", href: "/business/crm/jurnal", icon: HistoryIcon, tone: "violet" },
-      { label: "Drepturi", href: "/business/crm/drepturi", icon: ShieldCheck, tone: "teal" },
-      { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3, tone: "violet" },
     ],
   },
   {
@@ -242,6 +227,56 @@ const PAR_NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * CRM-only navigation — shown when the current route is under /business/crm/*, exact ca PAR.
+ *
+ * De ce nu mai e o secțiune din meniul global: cu PAR și FinDesk deasupra, cele douăsprezece
+ * rânduri de CRM începeau pe la jumătatea meniului, iar omul care intră în CRM de zece ori pe zi
+ * derula ca să ajungă la Pipeline. În interiorul modulului, celelalte module sunt zgomot —
+ * întoarcerea la ele se face prin „Înapoi la module", nu prin douăzeci de rânduri străine.
+ *
+ * Filele care cer un drept apar doar pentru cine îl are (`crmPermission`).
+ */
+const CRM_NAV_GROUPS: NavGroup[] = [
+  {
+    section: null,
+    items: [
+      { label: "Acasă CRM", href: "/business/crm", icon: Home, tone: "violet" },
+      { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare, tone: "sky" },
+      { label: "Astăzi", href: "/business/crm/astazi", icon: CalendarClock, tone: "amber" },
+      { label: "Clienți", href: "/business/crm/clienti", icon: Building2, tone: "rose" },
+      { label: "Produse", href: "/business/crm/produse", icon: Package, tone: "emerald" },
+    ],
+  },
+  {
+    section: "Documente & comunicare",
+    prefix: "/business/crm",
+    items: [
+      { label: "Documente", href: "/business/crm/documente", icon: FileText, tone: "orange" },
+      { label: "Comunicare", href: "/business/crm/comunicare", icon: MessageCircle, tone: "blue" },
+      { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
+      { label: "Cadențe", href: "/business/crm/cadente", icon: RefreshCw, tone: "amber" },
+    ],
+  },
+  {
+    section: "Analiză",
+    prefix: "/business/crm",
+    items: [
+      { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3, tone: "violet" },
+      { label: "Import", href: "/business/crm/import", icon: Upload, tone: "teal" },
+    ],
+  },
+  {
+    section: "Administrare",
+    prefix: "/business/crm",
+    items: [
+      { label: "Drepturi", href: "/business/crm/drepturi", icon: ShieldCheck, tone: "teal", crmPermission: "audit.view" },
+      { label: "Jurnal", href: "/business/crm/jurnal", icon: HistoryIcon, tone: "violet", crmPermission: "audit.view" },
+      { label: "API", href: "/business/crm/api", icon: Zap, tone: "rose", crmPermission: "audit.view" },
+    ],
+  },
+];
+
 /** Exported for testing purposes only (T-DOCMERGE-004-4). Do not use in production code. */
 export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
 
@@ -251,9 +286,15 @@ export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
 const PUBLIC_PATHS = ["/business/login"];
 const PUBLIC_EXACT = ["/business"];
 
+/**
+ * Rândurile care duc la pagina de start a unui modul. Se aprind DOAR pe potrivire exactă: prin
+ * prefix, „/business/crm" ar înghiți toate rutele copil și ar rămâne aprins pe tot modulul.
+ */
+const INDEX_HREFS = ["/business/par", "/business/fin/", "/business/crm"];
+
 /** True when `path` should light up `item` — index rows match exactly, the rest by prefix. */
 function isItemActive(item: NavItem, path: string): boolean {
-  const isIndexItem = item.href === "/business/par" || item.href === "/business/fin/";
+  const isIndexItem = INDEX_HREFS.includes(item.href);
   if (isIndexItem) return path === item.href || path === item.href.replace(/\/$/, "");
   return path.startsWith(item.href);
 }
@@ -561,19 +602,25 @@ export function BusinessShell({
   const isParModule = path.startsWith("/business/par");
   // Meniul PAR complet: în interiorul modulului SAU când PAR e tot ce are workspace-ul.
   const useParNav = isParModule || (parOnlyWorkspace && hasPar);
+  // CRM-SIDEBAR: la fel pentru CRM — în interiorul modulului meniul e doar al lui.
+  const isCrmModule = path.startsWith("/business/crm");
+  const crmOnlyWorkspace = enabledModules.length === 1 && enabledModules[0] === "crm";
+  const useCrmNav = !useParNav && (isCrmModule || (crmOnlyWorkspace && isEnabled("crm")));
+  // Drepturile se cer numai în CRM: pe restul rutelor n-au ce rând să ascundă.
+  const { can: crmCan } = useCrmPermissions({ enabled: useCrmNav });
 
   const availableGroups: NavGroup[] = isPlatformAdmin
     ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform", items: [{ label: "Consola Platformă", href: "/business/platform", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
     : NAV_GROUPS;
   const baseGroups = useParNav
     ? PAR_NAV_GROUPS
+    : useCrmNav
+    ? CRM_NAV_GROUPS
     : availableGroups.filter((g) => {
         if (g.section === "PAR — Cereri de plată") return hasPar;
         if (g.section === "FinDesk — Finanțe") return isEnabled("findesk");
         // DocMerge apare în sidebar doar când ești pe rutele DocMerge
         if (g.section === "Document Merge") return isEnabled("docmerge") && path.startsWith("/business/docmerge");
-      // CRM: la fel ca DocMerge — meniul lui apare doar când ești în modul.
-      if (g.section === "CRM") return isEnabled("crm") && path.startsWith("/business/crm");
         return true;
       });
 
@@ -583,6 +630,7 @@ export function BusinessShell({
       ...g,
       items: g.items.filter((it) => {
         if (it.roles && !it.roles.some((r) => parRoles.includes(r))) return false;
+        if (it.crmPermission && !crmCan(it.crmPermission)) return false;
         // Rândul ITPark trăiește sub FinDesk, dar e un modul separat în catalog.
         if (it.href.startsWith("/business/fin/itpark")) return isEnabled("itpark");
         return true;
@@ -616,14 +664,20 @@ export function BusinessShell({
     ?? session.data?.user?.role
     ?? "membru";
 
+  // „Înapoi la module" apare cât timp CHIAR există alt modul de întors; într-un workspace cu un
+  // singur modul, meniul lui e tot meniul, deci rămâne rândul de Dashboard.
+  const inFocusedModule = (isParModule && !parOnlyWorkspace) || (isCrmModule && !crmOnlyWorkspace);
+  const showBackToModules = inFocusedModule;
+  const showDashboard = !inFocusedModule;
+
   const sidebarBody = (
     <SidebarBody
       navGroups={navGroups}
       path={path}
       inboxCount={inboxCount}
       financeCount={financeCount}
-      showBackToModules={isParModule && !parOnlyWorkspace}
-      showDashboard={!isParModule || parOnlyWorkspace}
+      showBackToModules={showBackToModules}
+      showDashboard={showDashboard}
       userName={userName}
       userRole={userRole}
       onLogout={handleLogout}
@@ -661,8 +715,8 @@ export function BusinessShell({
               path={path}
               inboxCount={inboxCount}
               financeCount={financeCount}
-              showBackToModules={isParModule && !parOnlyWorkspace}
-              showDashboard={!isParModule || parOnlyWorkspace}
+              showBackToModules={showBackToModules}
+              showDashboard={showDashboard}
               userName={userName}
               userRole={userRole}
               onLogout={handleLogout}
@@ -709,10 +763,6 @@ export function BusinessShell({
           {pageTitle ? (
             <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} />
           ) : null}
-          {/* Sub-navigarea modulului, sub antetul paginii. Stă AICI, nu în fiecare ecran, din două
-              motive: apare la fel pe toate (douăsprezece copii ar diverge la prima grabă) și nu
-              obligă fiecare pagină nouă de CRM să-și amintească s-o adauge. */}
-          {path.startsWith("/business/crm") && <CrmTabs />}
           {children}
         </main>
       </div>
@@ -727,7 +777,14 @@ export function BusinessShell({
           const canApprove = parRoles.some((r) => ["approver", "par_admin"].includes(r));
           const canAnalyse = parRoles.some((r) => ["approver", "finance", "par_admin"].includes(r));
           const isParAdmin = parRoles.includes("par_admin");
-          const mobileItems = isParModule
+          const mobileItems = isCrmModule
+            ? [
+                { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare },
+                { label: "Astăzi", href: "/business/crm/astazi", icon: CalendarClock },
+                { label: "Clienți", href: "/business/crm/clienti", icon: Building2 },
+                { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3 },
+              ]
+            : isParModule
             ? [
                 { label: "Cereri", href: "/business/par", icon: ClipboardList },
                 ...(canApprove ? [{ label: "Aprobări", href: "/business/par/inbox", icon: ShieldCheck }] : []),

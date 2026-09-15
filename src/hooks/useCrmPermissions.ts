@@ -7,6 +7,12 @@
  *
  * Cât timp lista nu s-a încărcat, `can()` întoarce `false`: mai bine un buton care apare o clipă
  * mai târziu decât unul care apare și apoi dispare sub degetul omului.
+ *
+ * CRM-SIDEBAR: `enabled: false` nu interoghează nimic. Meniul lateral cere drepturile ca să
+ * ascundă rândurile administrative, dar el trăiește pe TOATE rutele /business/*; fără comutator,
+ * fiecare pagină de PAR sau FinDesk ar fi tras după ea un GET /api/crm/permissions degeaba.
+ * Răspunsul NU se pune în `sessionCache`: drepturile se schimbă din ecranul de administrare, iar
+ * un cache de 5 minute ar ținut ascuns un rând pe care omul îl primise deja.
  */
 import { useEffect, useState } from "react";
 import { getCrmPermissions, type CrmPermission } from "@/lib/api/crm";
@@ -18,12 +24,19 @@ export interface UseCrmPermissions {
   can: (permission: CrmPermission) => boolean;
 }
 
-export function useCrmPermissions(): UseCrmPermissions {
+export interface UseCrmPermissionsOptions {
+  /** `false` = nu interoga serverul (ex. meniul, când nu ești pe o rută CRM). Implicit `true`. */
+  enabled?: boolean;
+}
+
+export function useCrmPermissions(options: UseCrmPermissionsOptions = {}): UseCrmPermissions {
+  const enabled = options.enabled ?? true;
   const [permissions, setPermissions] = useState<CrmPermission[]>([]);
   const [role, setRole] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     getCrmPermissions()
       .then((res) => {
@@ -42,7 +55,7 @@ export function useCrmPermissions(): UseCrmPermissions {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
   return {
     permissions,
