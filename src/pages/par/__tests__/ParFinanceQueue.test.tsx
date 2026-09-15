@@ -714,3 +714,119 @@ describe("Pe telefon, coada se citește fără să tragi pagina lateral", () => 
     expect(document.querySelector("table")).not.toBeNull();
   });
 });
+
+/**
+ * VM4-05 — arhiva. O cerere refuzată pe care solicitantul o abandonează stă în coadă la nesfârșit
+ * (iar dacă e „urgentă", chiar pe primul rând). Arhivarea o mută într-un tab separat, reversibil.
+ */
+describe("VM4-05 — arhivarea cererilor din coada de finanțe", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    });
+  });
+
+  it("[blocant] butonul „Arhivează” cheamă ruta de arhivare și reîncarcă lista", async () => {
+    const getQueue = vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "changes_requested" })],
+      total: 1,
+      activeCount: 1,
+      archivedCount: 0,
+    });
+    const archive = vi
+      .spyOn(parApi, "financeArchivePar")
+      .mockResolvedValue({ archived: true, par: {} as never });
+
+    render(<ParFinanceQueue />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /arhivează cererea PAR-2026-0001/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^arhivează$/i }));
+
+    await waitFor(() => expect(archive).toHaveBeenCalledWith("par-fin-001", null));
+    // Lista se reîncarcă după arhivare — altfel rândul rămâne pe ecran deși nu mai e în coadă.
+    await waitFor(() => expect(getQueue).toHaveBeenCalledTimes(2));
+  });
+
+  it("[blocant] tabul „Arhivate” cere lista arhivată, nu pe cea de lucru", async () => {
+    const getQueue = vi
+      .spyOn(parApi, "getFinanceQueue")
+      .mockImplementation(async (opts?: { archived?: boolean }) => ({
+        items: opts?.archived
+          ? [
+              makeFinanceItem({
+                id: "par-fin-arh",
+                requestNo: "PAR-2026-0020",
+                payeeName: "WILDBERRIES GROUP SRL",
+                status: "changes_requested",
+                financeArchive: {
+                  archivedAt: "2026-09-11T10:00:00.000Z",
+                  note: "solicitantul a renunțat",
+                  byName: "Violeta Bordeniuc",
+                },
+              }),
+            ]
+          : [makeFinanceItem({ status: "in_finance" })],
+        total: 1,
+        activeCount: 1,
+        archivedCount: 1,
+      }));
+
+    render(<ParFinanceQueue />);
+    await screen.findByText("Daria Roitman");
+
+    fireEvent.click(screen.getByRole("tab", { name: /arhivate/i }));
+
+    await screen.findByText("WILDBERRIES GROUP SRL");
+    expect(getQueue).toHaveBeenLastCalledWith({ archived: true });
+    // Cine a arhivat și de ce — altfel rândul nu explică de ce nu mai e în coadă.
+    expect(screen.getByText(/Violeta Bordeniuc/)).toBeInTheDocument();
+    expect(screen.getByText(/solicitantul a renunțat/)).toBeInTheDocument();
+  });
+
+  it("[blocant] în arhivă nu se mai lucrează: rămân „Restaurează” și dosarul, nu plata", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockImplementation(async (opts?: { archived?: boolean }) => ({
+      items: [makeFinanceItem({ status: "in_finance", financeArchive: opts?.archived ? { archivedAt: null, note: null, byName: "Violeta Bordeniuc" } : null })],
+      total: 1,
+      activeCount: 0,
+      archivedCount: 1,
+    }));
+    const restore = vi
+      .spyOn(parApi, "financeUnarchivePar")
+      .mockResolvedValue({ archived: false, par: {} as never });
+
+    render(<ParFinanceQueue />);
+    fireEvent.click(await screen.findByRole("tab", { name: /arhivate/i }));
+
+    const restoreBtn = await screen.findByRole("button", { name: /readu PAR-2026-0001 în coada/i });
+    expect(screen.queryByRole("button", { name: /înregistrează plata/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /completează secțiunea 16/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /descarcă dosarul complet/i })).toBeInTheDocument();
+
+    fireEvent.click(restoreBtn);
+    fireEvent.click(await screen.findByRole("button", { name: /readu în coadă/i }));
+    await waitFor(() => expect(restore).toHaveBeenCalledWith("par-fin-001", null));
+  });
+
+  it("arhivarea unei cereri care încă așteaptă plata avertizează, dar nu blochează", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "in_finance" })],
+      total: 1,
+      activeCount: 1,
+      archivedCount: 0,
+    });
+
+    render(<ParFinanceQueue />);
+    fireEvent.click(await screen.findByRole("button", { name: /arhivează cererea PAR-2026-0001/i }));
+
+    expect(await screen.findByText(/așteaptă lucru din partea finanțelor/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^arhivează$/i })).not.toBeDisabled();
+  });
+});

@@ -6,6 +6,7 @@
  *   - Completare secțiune 16 (PAR BL / Received By / Assigned To) → PAR → in_finance
  *   - Înregistrare plată (suma reală, dată, referință, dovadă) → PAR → paid sau reapproval_required
  *   - Vizualizare status 10%-overage cu notă de re-aprobare necesară
+ *   - VM4-05: arhivare — cererile moarte ies din lista de lucru într-un tab separat, reversibil
  *
  * CORE: backlog/par/PAR-CORE.md §0.16, §3, §4, §6
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
@@ -24,6 +25,8 @@ import {
   Check,
   FileText,
   X,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -38,6 +41,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
   Textarea,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
@@ -48,6 +52,8 @@ import {
   submitSection16,
   executePayment,
   financeReturnPar,
+  financeArchivePar,
+  financeUnarchivePar,
   uploadAttachmentDirect,
   reconcileInBackground,
   listAttachments,
@@ -56,6 +62,7 @@ import {
   downloadDosar,
   type ParFinanceQueueItem,
   type ParFinanceReturn,
+  type ParFinanceArchive,
   type ParAttachment,
   type Section16Payload,
   type PayPayload,
@@ -652,6 +659,126 @@ function RefusePaymentModal({ par, onClose, onReturned }: RefusePaymentModalProp
   );
 }
 
+// ─── VM4-05: arhivare / restaurare ───────────────────────────────────────────
+// O cerere refuzată pe care solicitantul o abandonează stă în coadă la nesfârșit — și dacă e
+// marcată „urgentă", stă chiar pe primul rând, peste lucrul adevărat. Arhivarea o mută într-un tab
+// separat fără să-i schimbe statusul și fără să șteargă nimic; restaurarea o aduce înapoi.
+
+interface ArchiveModalProps {
+  par: ParFinanceQueueItem;
+  /** „archive" scoate cererea din listă, „restore" o readuce. */
+  mode: "archive" | "restore";
+  onClose: () => void;
+  onDone: () => void;
+}
+
+/** Statusurile în care cererea așteaptă lucru CHIAR de la finanțe — arhivarea lor merită un avertisment. */
+const AWAITING_FINANCE = ["approved", "in_finance"];
+
+function ArchiveModal({ par, mode, onClose, onDone }: ArchiveModalProps) {
+  useEscapeToClose(onClose);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const archiving = mode === "archive";
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      if (archiving) await financeArchivePar(par.id, note.trim() || null);
+      else await financeUnarchivePar(par.id, note.trim() || null);
+      onDone();
+      onClose();
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : archiving
+            ? "Eroare la arhivare"
+            : "Eroare la restaurare"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="archive-title"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm"
+    >
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
+        <h2 id="archive-title" className="text-lg font-semibold text-card-foreground">
+          {archiving ? "Arhivează cererea" : "Readu cererea în coadă"}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {par.requestNo} · {par.payeeName ?? "beneficiar nespecificat"} ·{" "}
+          {parAmount(par.totalEstimatedCents, par.currency)}
+        </p>
+
+        {error && (
+          <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {error}
+          </div>
+        )}
+
+        {/* Arhivarea unei cereri care încă așteaptă plata nu se blochează, dar nici nu trece în
+            tăcere: omul trebuie să vadă că scoate din listă exact munca lui. */}
+        {archiving && AWAITING_FINANCE.includes(par.status) && (
+          <Alert variant="warning" icon={<AlertCircle className="h-4 w-4" aria-hidden="true" />}>
+            Cererea așteaptă lucru din partea finanțelor
+            {par.status === "in_finance" ? " (secțiunea 16 completată, plata neînregistrată)" : ""}.
+            Arhivarea o scoate din listă — plata nu se mai vede de nimeni până la restaurare.
+          </Alert>
+        )}
+
+        <div>
+          <label htmlFor="archive-note" className="mb-1 block text-sm font-medium text-foreground">
+            Notă <span className="font-normal text-muted-foreground">(opțional)</span>
+          </label>
+          <Textarea
+            id="archive-note"
+            rows={2}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={
+              archiving
+                ? "ex. solicitantul a renunțat, se reface cererea în altă perioadă"
+                : "ex. solicitantul a revenit cu documentele corecte"
+            }
+            maxLength={500}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            {archiving
+              ? "Statusul cererii nu se schimbă și nimic nu se șterge — o găsești oricând în tabul „Arhivate”. Dacă solicitantul o corectează și cererea e aprobată din nou, revine singură în listă."
+              : "Cererea se întoarce în lista de lucru, exact în starea în care e acum."}
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Anulare
+          </Button>
+          <Button onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : archiving ? (
+              <Archive className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
+            )}
+            {archiving ? "Arhivează" : "Readu în coadă"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── VM3-01: copy-to-clipboard cell ──────────────────────────────────────────
 // Violeta (finance): "se poți face copie de aici în bancă direct. Nu mai bat eu pe tastat."
 // Display text stays selectable; the button copies the RAW value (e.g. "7000.00", the full IBAN)
@@ -892,14 +1019,28 @@ interface QueueActionsProps {
   onSection16: (par: ParFinanceQueueItem) => void;
   onPay: (par: ParFinanceQueueItem) => void;
   onDosar: (par: ParFinanceQueueItem) => void;
+  onArchive: (par: ParFinanceQueueItem) => void;
+  onRestore: (par: ParFinanceQueueItem) => void;
+  /** Ce listă se vede acum — în arhivă nu se lucrează, deci acolo rămân doar dosarul și restaurarea. */
+  archivedView?: boolean;
   wrap?: boolean;
 }
 
-function QueueActions({ par, dosarJob, onSection16, onPay, onDosar, wrap = false }: QueueActionsProps) {
+function QueueActions({
+  par,
+  dosarJob,
+  onSection16,
+  onPay,
+  onDosar,
+  onArchive,
+  onRestore,
+  archivedView = false,
+  wrap = false,
+}: QueueActionsProps) {
   return (
     <div className={cn("flex items-center justify-start gap-2", wrap ? "flex-wrap" : "flex-nowrap")}>
       {/* Secțiunea 16 — pe cererile aprobate / ajunse la finanțe */}
-      {["approved", "in_finance"].includes(par.status) && (
+      {!archivedView && ["approved", "in_finance"].includes(par.status) && (
         <Button
           variant="outline"
           size="sm"
@@ -910,14 +1051,14 @@ function QueueActions({ par, dosarJob, onSection16, onPay, onDosar, wrap = false
         </Button>
       )}
       {/* Plata — pe cererile ajunse la finanțe */}
-      {par.status === "in_finance" && (
+      {!archivedView && par.status === "in_finance" && (
         <Button size="sm" onClick={() => onPay(par)} aria-label={`Înregistrează plata pentru ${par.requestNo}`}>
           <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
           Înregistrează plata
         </Button>
       )}
       {/* După re-aprobarea depășirii, plata se poate relua */}
-      {par.status === "reapproval_required" && par.payment?.overageReapproved && (
+      {!archivedView && par.status === "reapproval_required" && par.payment?.overageReapproved && (
         <Button
           size="sm"
           onClick={() => onPay(par)}
@@ -927,7 +1068,7 @@ function QueueActions({ par, dosarJob, onSection16, onPay, onDosar, wrap = false
           Plătește (re-aprobat)
         </Button>
       )}
-      {par.status === "reapproval_required" && !par.payment?.overageReapproved && (
+      {!archivedView && par.status === "reapproval_required" && !par.payment?.overageReapproved && (
         <span className="whitespace-nowrap text-sm text-warning">Așteptare re-aprobare…</span>
       )}
       {/* VM1-12: dosarul complet PDF — pe orice status */}
@@ -946,6 +1087,30 @@ function QueueActions({ par, dosarJob, onSection16, onPay, onDosar, wrap = false
         )}
         Dosar PDF
       </Button>
+      {/* VM4-05: scoate din listă / readu în listă */}
+      {archivedView ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onRestore(par)}
+          aria-label={`Readu ${par.requestNo} în coada de finanțe`}
+          title="Readu cererea în coada de lucru"
+        >
+          <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
+          Restaurează
+        </Button>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onArchive(par)}
+          aria-label={`Arhivează cererea ${par.requestNo}`}
+          title="Scoate cererea din lista de lucru (reversibil)"
+        >
+          <Archive className="h-4 w-4" aria-hidden="true" />
+          Arhivează
+        </Button>
+      )}
     </div>
   );
 }
@@ -963,7 +1128,18 @@ interface QueueCardProps extends Omit<QueueActionsProps, "wrap"> {
   onDocuments: (par: ParFinanceQueueItem) => void;
 }
 
-function QueueCard({ par, dosarJob, onSection16, onPay, onDosar, onOpen, onDocuments }: QueueCardProps) {
+function QueueCard({
+  par,
+  dosarJob,
+  onSection16,
+  onPay,
+  onDosar,
+  onArchive,
+  onRestore,
+  archivedView,
+  onOpen,
+  onDocuments,
+}: QueueCardProps) {
   return (
     <li className="space-y-3 rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
@@ -1012,10 +1188,23 @@ function QueueCard({ par, dosarJob, onSection16, onPay, onDosar, onOpen, onDocum
         {par.status === "reapproval_required" && (
           <p className="text-xs font-medium text-warning">Re-aprobare necesară (&gt;10% depășire)</p>
         )}
+        {par.financeArchive && financeArchiveLine(par.financeArchive) && (
+          <p className="text-xs text-muted-foreground">Arhivată · {financeArchiveLine(par.financeArchive)}</p>
+        )}
       </div>
 
       <div className="space-y-2 border-t border-border pt-3">
-        <QueueActions par={par} dosarJob={dosarJob} onSection16={onSection16} onPay={onPay} onDosar={onDosar} wrap />
+        <QueueActions
+          par={par}
+          dosarJob={dosarJob}
+          onSection16={onSection16}
+          onPay={onPay}
+          onDosar={onDosar}
+          onArchive={onArchive}
+          onRestore={onRestore}
+          archivedView={archivedView}
+          wrap
+        />
         {par.attachmentsMeta && par.attachmentsMeta.length > 0 && (
           <Button
             variant="outline"
@@ -1047,6 +1236,11 @@ function financeReturnLine(ret: ParFinanceReturn): string {
   return [ret.byName, fmtShortDate(ret.returnedAt), ret.reason].filter(Boolean).join(" · ");
 }
 
+/** Cine a arhivat, când și cu ce notă — aceeași formă scurtă, pentru tabul „Arhivate". */
+function financeArchiveLine(arch: ParFinanceArchive): string {
+  return [arch.byName, fmtShortDate(arch.archivedAt), arch.note].filter(Boolean).join(" · ");
+}
+
 export default function ParFinanceQueue() {
   const { navigate } = useRouter();
   const [items, setItems] = useState<ParFinanceQueueItem[]>([]);
@@ -1059,6 +1253,11 @@ export default function ParFinanceQueue() {
   // Tabelul de 13 coloane nu încape pe un telefon; acolo aceleași cereri se citesc ca niște carduri.
   const isPhone = useIsPhone();
   const [refusePar, setRefusePar] = useState<ParFinanceQueueItem | null>(null);
+  // VM4-05: ce listă se vede — cea de lucru sau arhiva. Contoarele vin din același răspuns,
+  // deci tabul inactiv își știe numărul fără o a doua cerere.
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [counts, setCounts] = useState<{ active: number; archived: number }>({ active: 0, archived: 0 });
+  const [archivePar, setArchivePar] = useState<{ par: ParFinanceQueueItem; mode: "archive" | "restore" } | null>(null);
   const [filterQ, setFilterQ] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -1067,18 +1266,24 @@ export default function ParFinanceQueue() {
   const [minTotal, setMinTotal] = useState("");
   const [maxTotal, setMaxTotal] = useState("");
 
+  const archivedView = view === "archived";
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getFinanceQueue();
+      const data = await getFinanceQueue({ archived: archivedView });
       setItems(data.items);
+      setCounts({
+        active: data.activeCount ?? (archivedView ? 0 : data.items.length),
+        archived: data.archivedCount ?? (archivedView ? data.items.length : 0),
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Eroare la încărcarea cozii");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [archivedView]);
 
   useEffect(() => {
     void load();
@@ -1124,9 +1329,22 @@ export default function ParFinanceQueue() {
     >
       <div className="space-y-6">
 
+        {/* VM4-05: lista de lucru și arhiva, separate. Contorul de pe tabul „Arhivate" e acolo ca
+            nimeni să nu uite că a scos ceva din listă. */}
+        <Tabs
+          aria-label="Ce listă de cereri se vede"
+          tabs={[
+            { value: "active", label: "În lucru", count: counts.active },
+            { value: "archived", label: "Arhivate", count: counts.archived },
+          ]}
+          value={view}
+          onChange={(next) => setView(next as "active" | "archived")}
+          className="w-fit max-w-full"
+        />
+
         {!loading && !error && items.length > 0 && (
           <Card className="flex flex-wrap gap-2 p-3">
-            <Input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Caută PAR, beneficiar, IBAN…" aria-label="Caută în coada finanțe" className="min-w-[240px] flex-1" />
+            <Input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Caută PAR, beneficiar, IBAN…" aria-label={archivedView ? "Caută în arhiva finanțelor" : "Caută în coada finanțe"} className="min-w-[240px] flex-1" />
             <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="w-auto"><option value="">Toate proiectele</option>{[...new Set(items.map((i) => i.projectName).filter(Boolean))].map((p) => <option key={p!} value={p!}>{p}</option>)}</Select>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut" className="w-auto"><option value="">Toate statusurile</option><option value="approved">Aprobate</option><option value="in_finance">În finanțe</option><option value="reapproval_required">Reaprobare</option><option value="changes_requested">Refuzate de finanțe</option></Select>
             <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="De la" className="w-auto" />
@@ -1154,9 +1372,21 @@ export default function ParFinanceQueue() {
         {/* Empty state */}
         {!loading && !error && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <BanknoteIcon className="h-12 w-12 mb-4 opacity-30" aria-hidden="true" />
-            <p className="text-lg font-medium">Nicio cerere în coadă</p>
-            <p className="text-sm mt-1">PAR-urile aprobate de tip &ldquo;execute payment&rdquo; vor apărea aici.</p>
+            {archivedView ? (
+              <>
+                <Archive className="h-12 w-12 mb-4 opacity-30" aria-hidden="true" />
+                <p className="text-lg font-medium">Arhiva e goală</p>
+                <p className="text-sm mt-1">
+                  Cererile scoase din lista de lucru ajung aici și pot fi readuse oricând.
+                </p>
+              </>
+            ) : (
+              <>
+                <BanknoteIcon className="h-12 w-12 mb-4 opacity-30" aria-hidden="true" />
+                <p className="text-lg font-medium">Nicio cerere în coadă</p>
+                <p className="text-sm mt-1">PAR-urile aprobate de tip &ldquo;execute payment&rdquo; vor apărea aici.</p>
+              </>
+            )}
           </div>
         )}
 
@@ -1164,7 +1394,7 @@ export default function ParFinanceQueue() {
             budget line), text copiabil, nr. PAR clickabil, aprobatori cu data deciziei. */}
         {/* Pe telefon: carduri. De la tabletă în sus: tabelul complet, cu toate coloanele. */}
         {!loading && !error && items.length > 0 && isPhone && (
-          <ul className="space-y-3" aria-label="Coadă finanțe">
+          <ul className="space-y-3" aria-label={archivedView ? "Cereri arhivate" : "Coadă finanțe"}>
             {filteredItems.map((par) => (
               <QueueCard
                 key={par.id}
@@ -1173,6 +1403,9 @@ export default function ParFinanceQueue() {
                 onSection16={setS16Par}
                 onPay={setPayPar}
                 onDosar={(p) => void startDosar(p)}
+                onArchive={(p) => setArchivePar({ par: p, mode: "archive" })}
+                onRestore={(p) => setArchivePar({ par: p, mode: "restore" })}
+                archivedView={archivedView}
                 onOpen={(p) => navigate(`/business/par/${p.id}`)}
                 onDocuments={setAttPar}
               />
@@ -1181,7 +1414,7 @@ export default function ParFinanceQueue() {
         )}
 
         {!loading && !error && items.length > 0 && !isPhone && (
-          <Table className="min-w-[1280px]" aria-label="Coadă finanțe">
+          <Table className="min-w-[1280px]" aria-label={archivedView ? "Cereri arhivate" : "Coadă finanțe"}>
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Acțiuni</th>
@@ -1215,6 +1448,9 @@ export default function ParFinanceQueue() {
                         onSection16={setS16Par}
                         onPay={setPayPar}
                         onDosar={(p) => void startDosar(p)}
+                        onArchive={(p) => setArchivePar({ par: p, mode: "archive" })}
+                        onRestore={(p) => setArchivePar({ par: p, mode: "restore" })}
+                        archivedView={archivedView}
                       />
                     </td>
                     <td className="px-3 py-3">
@@ -1268,6 +1504,16 @@ export default function ParFinanceQueue() {
                         {par.above_micro_threshold && (
                           <span className="text-xs text-muted-foreground">
                             (peste prag micro-purchase)
+                          </span>
+                        )}
+                        {/* În arhivă, cine a scos-o din listă și când — altfel rândul nu explică
+                            de ce nu mai e în coadă. */}
+                        {par.financeArchive && financeArchiveLine(par.financeArchive) && (
+                          <span
+                            className="max-w-[220px] truncate text-xs text-muted-foreground"
+                            title={`Arhivată · ${financeArchiveLine(par.financeArchive)}`}
+                          >
+                            Arhivată · {financeArchiveLine(par.financeArchive)}
                           </span>
                         )}
                       </div>
@@ -1406,6 +1652,14 @@ export default function ParFinanceQueue() {
           <AttachmentsModal
             par={attPar}
             onClose={() => setAttPar(null)}
+          />
+        )}
+        {archivePar && (
+          <ArchiveModal
+            par={archivePar.par}
+            mode={archivePar.mode}
+            onClose={() => setArchivePar(null)}
+            onDone={() => void load()}
           />
         )}
         {dosarJob && (

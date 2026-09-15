@@ -8,6 +8,8 @@
  *   GET  /api/par/payment-proofs                  → VM4-04: plăți fără ordin de plată în dosar
  *   POST /api/par/:id/unpay                       → VM4-01: anulează plata înregistrată din greșeală; PAR → in_finance
  *   POST /api/par/:id/finance-return              → VM4-02: finanțele refuză plata; PAR → changes_requested
+ *   POST /api/par/:id/finance-archive             → VM4-05: scoate cererea din coada de lucru (arhivă)
+ *   POST /api/par/:id/finance-unarchive           → VM4-05: readuce cererea arhivată în coadă
  *
  * Note: POST /api/par/:id/reapprove lives in parApprovals.ts (it's an approval action).
  *
@@ -41,10 +43,15 @@ import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSav
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { buildBodyForHash } from "../lib/par/submit";
 import {
+  FINANCE_ARCHIVE_EVENT,
   FINANCE_QUEUE_STATUSES,
   FINANCE_RETURN_EVENT,
+  FINANCE_UNARCHIVE_EVENT,
   belongsInFinanceQueue,
+  financeArchiveDiff,
+  financeArchiveNote,
   financeReturnReason,
+  isArchivedFromFinanceQueue,
   isFinanceReturnedStatus,
 } from "../lib/par/financeQueue";
 import { verifyParBodyHash } from "../lib/par/integrity";
@@ -64,6 +71,8 @@ async function writeAudit(params: {
   actorUserId: string;
   event: string;
   detail?: string;
+  /** JSON — starea de dinainte/după, pentru evenimentele care au nevoie de ea (vezi arhivarea). */
+  diff?: string;
 }) {
   await db.insert(parAudit).values({
     tenantId: params.tenantId,
@@ -71,6 +80,7 @@ async function writeAudit(params: {
     actorUserId: params.actorUserId,
     event: params.event,
     detail: params.detail ?? null,
+    diff: params.diff ?? null,
   });
 }
 
@@ -241,13 +251,47 @@ parPaymentsRoutes.get("/finance", async (c) => {
   for (const r of returnRows) if (!returnByPar.has(r.parId)) returnByPar.set(r.parId, r);
 
   const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
-  const queue = rawQueue.filter((par) => {
+  const visible = rawQueue.filter((par) => {
     const inScope = par.projectId
       ? projectScope === null || projectScope.includes(par.projectId)
       : !!par.payerId && (payerScope === null || payerScope.includes(par.payerId));
     if (!inScope) return false;
     return belongsInFinanceQueue(par, { returnedByFinance: returnByPar.has(par.id) });
   });
+
+  // VM4-05: arhiva. Starea e ultimul eveniment `finance_archived` / `finance_unarchived` din
+  // jurnal — o cerere arhivată iese din lista de lucru, dar rămâne la un click distanță în tabul
+  // „Arhivate", cu tot ce se știe despre ea. `?archived=1` cere lista arhivată în locul celei active.
+  const wantArchived = ["1", "true", "yes"].includes((c.req.query("archived") ?? "").toLowerCase());
+  const visibleIds = visible.map((p) => p.id);
+  const archiveRows = visibleIds.length
+    ? await db
+        .select({
+          parId: parAudit.parId,
+          event: parAudit.event,
+          detail: parAudit.detail,
+          diff: parAudit.diff,
+          createdAt: parAudit.createdAt,
+          actorUserId: parAudit.actorUserId,
+        })
+        .from(parAudit)
+        .where(
+          and(
+            eq(parAudit.tenantId, tenantId),
+            inArray(parAudit.event, [FINANCE_ARCHIVE_EVENT, FINANCE_UNARCHIVE_EVENT]),
+            inArray(parAudit.parId, visibleIds)
+          )
+        )
+        .orderBy(desc(parAudit.createdAt))
+    : [];
+  // Cel mai recent eveniment per cerere decide: arhivată sau nu.
+  const archiveByPar = new Map<string, (typeof archiveRows)[number]>();
+  for (const r of archiveRows) if (!archiveByPar.has(r.parId)) archiveByPar.set(r.parId, r);
+  const archivedIds = new Set(
+    visible.filter((p) => isArchivedFromFinanceQueue(p.status, archiveByPar.get(p.id))).map((p) => p.id)
+  );
+
+  const queue = visible.filter((p) => archivedIds.has(p.id) === wantArchived);
 
   // Attach existing par_payments section-16 data
   const parIds = queue.map((p) => p.id);
@@ -275,6 +319,8 @@ parPaymentsRoutes.get("/finance", async (c) => {
       ...approvalRows.filter((a) => a.step >= 1 && a.decision === "approved" && a.approverUserId).map((a) => a.approverUserId as string),
       // Cine din finanțe a refuzat plata — coada arată numele, nu un UUID.
       ...queue.map((p) => returnByPar.get(p.id)?.actorUserId).filter((v): v is string => !!v),
+      // Cine a arhivat cererea — la fel, arhiva arată un nume.
+      ...queue.map((p) => archiveByPar.get(p.id)?.actorUserId).filter((v): v is string => !!v),
     ]),
   ];
   const projRows = projectIds.length
@@ -347,9 +393,28 @@ parPaymentsRoutes.get("/finance", async (c) => {
         byName: userName(r.actorUserId),
       };
     })(),
+    // VM4-05: nenul doar pe cererile arhivate — cine a scos-o din coadă, când și cu ce notă.
+    financeArchive: (() => {
+      if (!archivedIds.has(p.id)) return null;
+      const a = archiveByPar.get(p.id);
+      if (!a) return null;
+      return {
+        archivedAt: a.createdAt,
+        note: financeArchiveNote(a.detail),
+        byName: userName(a.actorUserId),
+      };
+    })(),
   }));
 
-  return c.json({ items, total: items.length, threeWayMatchEnforced });
+  return c.json({
+    items,
+    total: items.length,
+    threeWayMatchEnforced,
+    // Ambele numere pleacă indiferent de tabul cerut: taburile își arată contorul fără a doua cerere.
+    activeCount: visible.length - archivedIds.size,
+    archivedCount: archivedIds.size,
+    archived: wantArchived,
+  });
 });
 
 // ─── POST /api/par/:id/finance ────────────────────────────────────────────────
@@ -937,6 +1002,128 @@ parPaymentsRoutes.post(
     return c.json({ status: "changes_requested", par: updated });
   }
 );
+
+// ─── VM4-05: arhiva cozii de finanțe ─────────────────────────────────────────
+// POST /api/par/:id/finance-archive    — scoate cererea din lista de lucru
+// POST /api/par/:id/finance-unarchive  — o readuce
+//
+// Nimic nu se șterge și niciun status nu se schimbă: arhivarea e o etichetă în jurnal, deci
+// cererea rămâne exact în starea ei (o cerere refuzată e tot refuzată, doar că nu mai stă în ochii
+// nimănui). Dacă între timp cererea se mișcă — solicitantul o corectează, ea e aprobată din nou —
+// statusul diferă de cel de la arhivare și cererea reapare singură în coadă (vezi
+// `isArchivedFromFinanceQueue`): o plată reală nu are voie să rămână ascunsă.
+
+/** Nota de arhivare e opțională — arhivarea e curățenie, nu un refuz care cere justificare. */
+async function readArchiveNote(c: { req: { json: () => Promise<unknown> } }): Promise<string | null> {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return null; // corp gol = fără notă, nu eroare
+  }
+  if (!body || typeof body !== "object") return null;
+  const raw = (body as { note?: unknown }).note;
+  if (typeof raw !== "string") return null;
+  const note = raw.trim().slice(0, 500);
+  return note || null;
+}
+
+/** Cererea + verificările comune celor două acțiuni (rol, perimetru, „chiar e în coadă?"). */
+async function loadArchivablePar(
+  user: { id: string; tenantId: string; role: string },
+  parId: string
+): Promise<
+  | { ok: true; par: typeof parRequests.$inferSelect }
+  | { ok: false; status: 403 | 404 | 409; error: string }
+> {
+  const tenantId = user.tenantId;
+  const roles = await getUserPARRoles(user.id, tenantId);
+  if (!roles.includes("finance") && !roles.includes("par_admin")) {
+    return { ok: false, status: 403, error: "forbidden: finance role required" };
+  }
+
+  const [par] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+  if (!par) return { ok: false, status: 404, error: "not_found" };
+
+  const inScope = par.projectId
+    ? await mayAccessProject(user.id, tenantId, par.projectId, user.role)
+    : await mayAccessPayer(user.id, tenantId, par.payerId, user.role);
+  if (!inScope) return { ok: false, status: 404, error: "not_found" };
+
+  // Doar ce trece prin coada de finanțe se poate arhiva DIN coada de finanțe. O cerere plătită sau
+  // respinsă a ieșit deja din ea; „arhivarea" ei aici n-ar avea ce ascunde.
+  if (!(FINANCE_QUEUE_STATUSES as readonly string[]).includes(par.status)) {
+    return {
+      ok: false,
+      status: 409,
+      error: `conflict: PAR status is '${par.status}', not in the finance queue`,
+    };
+  }
+  const returned = par.status === "changes_requested"
+    ? await db
+        .select({ id: parAudit.id })
+        .from(parAudit)
+        .where(
+          and(
+            eq(parAudit.tenantId, tenantId),
+            eq(parAudit.parId, par.id),
+            eq(parAudit.event, FINANCE_RETURN_EVENT)
+          )
+        )
+        .limit(1)
+    : [];
+  if (!belongsInFinanceQueue(par, { returnedByFinance: returned.length > 0 })) {
+    return { ok: false, status: 409, error: "conflict: PAR is not in the finance queue" };
+  }
+
+  return { ok: true, par };
+}
+
+parPaymentsRoutes.post("/:id/finance-archive", async (c) => {
+  const user = c.get("user");
+  const parId = c.req.param("id");
+  const note = await readArchiveNote(c);
+
+  const loaded = await loadArchivablePar(user, parId);
+  if (!loaded.ok) return c.json({ error: loaded.error }, loaded.status);
+  const { par } = loaded;
+
+  await writeAudit({
+    tenantId: user.tenantId,
+    parId,
+    actorUserId: user.id,
+    event: FINANCE_ARCHIVE_EVENT,
+    detail:
+      `Scoasă din coada de finanțe (arhivată din statusul '${par.status}').` +
+      (note ? ` Notă: ${note}` : ""),
+    diff: financeArchiveDiff(par.status),
+  });
+
+  return c.json({ archived: true, par });
+});
+
+parPaymentsRoutes.post("/:id/finance-unarchive", async (c) => {
+  const user = c.get("user");
+  const parId = c.req.param("id");
+  const note = await readArchiveNote(c);
+
+  const loaded = await loadArchivablePar(user, parId);
+  if (!loaded.ok) return c.json({ error: loaded.error }, loaded.status);
+  const { par } = loaded;
+
+  await writeAudit({
+    tenantId: user.tenantId,
+    parId,
+    actorUserId: user.id,
+    event: FINANCE_UNARCHIVE_EVENT,
+    detail: `Readusă în coada de finanțe.` + (note ? ` Notă: ${note}` : ""),
+  });
+
+  return c.json({ archived: false, par });
+});
 
 // ─── VF-505: GET /api/par/:id/match — 3-way match state (for the UI). ──────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

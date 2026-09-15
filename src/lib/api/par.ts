@@ -1012,6 +1012,13 @@ export interface ParFinanceReturn {
   byName: string | null;
 }
 
+/** VM4-05: cine a scos cererea din coada de lucru, când și cu ce notă. */
+export interface ParFinanceArchive {
+  archivedAt: string | null;
+  note: string | null;
+  byName: string | null;
+}
+
 export interface ParFinanceQueueItem extends ParRequest {
   above_micro_threshold: boolean;
   payment: ParPaymentRecord | null;
@@ -1023,15 +1030,54 @@ export interface ParFinanceQueueItem extends ParRequest {
   attachmentsMeta?: ParAttachmentMeta[];
   /** Nenul doar pentru cererile pe care finanțele le-au refuzat și le-au trimis la solicitant. */
   financeReturn?: ParFinanceReturn | null;
+  /** Nenul doar pentru cererile arhivate (tabul „Arhivate"). */
+  financeArchive?: ParFinanceArchive | null;
 }
 
-export async function getFinanceQueue(): Promise<{
+export interface ParFinanceQueueResponse {
   items: ParFinanceQueueItem[];
   total: number;
   /** PARQA-014: false = 3-way match control is OFF (finance pays without PO/receipt verification). */
   threeWayMatchEnforced?: boolean;
-}> {
-  return api("/api/par/finance");
+  /** VM4-05: câte cereri sunt în lista de lucru, indiferent de tabul cerut. */
+  activeCount?: number;
+  /** VM4-05: câte cereri sunt în arhivă, indiferent de tabul cerut. */
+  archivedCount?: number;
+  /** Ce listă s-a întors: arhiva sau lista de lucru. */
+  archived?: boolean;
+}
+
+/** `archived: true` întoarce arhiva în locul listei de lucru (VM4-05). */
+export async function getFinanceQueue(
+  opts: { archived?: boolean } = {}
+): Promise<ParFinanceQueueResponse> {
+  return api(`/api/par/finance${opts.archived ? "?archived=1" : ""}`);
+}
+
+/**
+ * VM4-05 — scoate cererea din coada de lucru a finanțelor. Nu schimbă statusul și nu șterge nimic:
+ * cererea trece în tabul „Arhivate", de unde se poate readuce oricând. Dacă între timp cererea se
+ * mișcă (e corectată și reaprobată), revine singură în lista de lucru.
+ */
+export async function financeArchivePar(
+  parId: string,
+  note?: string | null
+): Promise<{ archived: true; par: ParRequest }> {
+  return api(`/api/par/${parId}/finance-archive`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? null }),
+  });
+}
+
+/** VM4-05 — readuce o cerere arhivată în coada de lucru. */
+export async function financeUnarchivePar(
+  parId: string,
+  note?: string | null
+): Promise<{ archived: false; par: ParRequest }> {
+  return api(`/api/par/${parId}/finance-unarchive`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? null }),
+  });
 }
 
 export interface Section16Payload {

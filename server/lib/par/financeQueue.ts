@@ -65,3 +65,79 @@ export function financeReturnReason(detail: string | null | undefined): string |
   const reason = (at >= 0 ? detail.slice(at + marker.length) : detail).trim();
   return reason || null;
 }
+
+// ─── VM4-05: arhiva cozii de finanțe ─────────────────────────────────────────
+//
+// O cerere refuzată de finanțe pe care solicitantul o abandonează rămâne în coadă la nesfârșit:
+// nimeni n-o mai mișcă, dar ocupă primul rând (mai ales dacă e „urgentă") și acoperă lucrul real.
+// Ștergerea nu e o opțiune — jurnalul unei cereri de plată nu se rupe. Deci: se ARHIVEAZĂ, adică
+// iese din lista de lucru și intră într-o listă separată, de unde poate fi oricând restaurată.
+//
+// Starea de arhivă NU e o coloană nouă pe `par_requests`, ci ultimul eveniment de audit
+// `finance_archived` / `finance_unarchived` — același tipar ca `finance_returned` (VM4-02b), fără
+// migrare și cu urma „cine, când, de ce" primită gratis.
+
+/** Evenimentul scris de POST /api/par/:id/finance-archive. */
+export const FINANCE_ARCHIVE_EVENT = "finance_archived";
+
+/** Evenimentul scris de POST /api/par/:id/finance-unarchive. */
+export const FINANCE_UNARCHIVE_EVENT = "finance_unarchived";
+
+/** Ultimul eveniment de arhivare/restaurare al unei cereri, așa cum vine din `par_audit`. */
+export interface FinanceArchiveEvent {
+  event: string;
+  /** `par_audit.diff` — JSON cu statusul de la momentul arhivării. */
+  diff?: string | null;
+}
+
+/**
+ * Statusul cererii în clipa arhivării, citit din `par_audit.diff`.
+ * `null` pentru evenimentele vechi sau stricate — vezi `isArchivedFromFinanceQueue`.
+ */
+export function financeArchiveStatus(diff: string | null | undefined): string | null {
+  if (!diff) return null;
+  try {
+    const parsed: unknown = JSON.parse(diff);
+    if (parsed && typeof parsed === "object" && "statusAtArchive" in parsed) {
+      const v = (parsed as { statusAtArchive: unknown }).statusAtArchive;
+      return typeof v === "string" && v ? v : null;
+    }
+  } catch {
+    // Un diff nevalid nu e motiv să ascundem o cerere: cade pe `null` = arhivă necondiționată.
+  }
+  return null;
+}
+
+/** `par_audit.diff` scris la arhivare — statusul de atunci, ca să știm dacă cererea s-a mișcat. */
+export function financeArchiveDiff(statusAtArchive: string): string {
+  return JSON.stringify({ statusAtArchive });
+}
+
+/**
+ * E cererea arhivată ACUM?
+ *
+ * `latest` = cel mai recent eveniment `finance_archived` / `finance_unarchived` al cererii.
+ *
+ * Arhivarea ține doar cât timp cererea stă pe loc. Dacă solicitantul a corectat-o și a retrimis-o,
+ * iar ea a fost aprobată din nou, statusul curent diferă de cel de la arhivare → cererea revine
+ * singură în lista de lucru. Altfel o plată reală ar rămâne ascunsă într-o arhivă pe care nimeni
+ * nu o deschide.
+ */
+export function isArchivedFromFinanceQueue(
+  currentStatus: string,
+  latest: FinanceArchiveEvent | null | undefined
+): boolean {
+  if (!latest || latest.event !== FINANCE_ARCHIVE_EVENT) return false;
+  const at = financeArchiveStatus(latest.diff);
+  return at === null || at === currentStatus;
+}
+
+/** Motivul/nota din detaliul evenimentului de arhivare (poate lipsi — nota e opțională). */
+export function financeArchiveNote(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  const marker = "Notă:";
+  const at = detail.lastIndexOf(marker);
+  if (at < 0) return null;
+  const note = detail.slice(at + marker.length).trim();
+  return note || null;
+}
