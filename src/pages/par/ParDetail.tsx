@@ -4,7 +4,7 @@
  * Full-parity PAR detail page:
  *   • All 16 sections read-only, grouped like the form (PAR-115 already had these)
  *   • Approval chain via ParApprovalChain (PAR-118) + ParTimeline (PAR-110)
- *   • Download PDF button (PAR-115)
+ *   • Formularul PAR: „Vezi PDF" (în aplicație) + „Descarcă PDF" (PAR-115)
  *   • Role-aware action buttons shown ONLY when valid for state+role:
  *       - requestor:      Edit draft (draft), Cancel (non-terminal), Re-submit (changes_requested)
  *       - active approver: Approve, Reject, Request changes (pending_approval + my step)
@@ -37,7 +37,7 @@ import {
   RotateCcw,
   CornerUpLeft,
   History,
-  Paperclip, BookOpen} from "lucide-react";
+  Paperclip, BookOpen, Eye} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
@@ -79,7 +79,7 @@ import { describeParSubmitError } from "@/lib/par/submitErrors";
 // NU se re-adaugă `import { downloadParPdf }`: pe main, parPdf (html2canvas + jsPDF, ~174 KB gzip)
 // se încarcă abia la click — un import static aici l-ar aduce înapoi în pachetul principal.
 import { viewParAttachment } from "@/lib/parFiles";
-import { openParAttachmentViewer, parDosarViewerTarget } from "@/lib/par/attachmentViewerBus";
+import { openParAttachmentViewer, parDosarViewerTarget, parFormViewerTarget } from "@/lib/par/attachmentViewerBus";
 import { validateIban } from "@/lib/par/iban";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
@@ -242,7 +242,17 @@ function PoButton({ par, orgName }: { par: ParDetailType; orgName: string }) {
   );
 }
 
-// ─── PDF download button ───────────────────────────────────────────────────────
+/**
+ * Deschide un PDF al cererii în vizualizatorul din aplicație. Dacă nu e montat niciun vizualizator
+ * (o pagină randată izolat, într-un test), cade pe filă nouă — ca `viewParAttachment` — ca butonul
+ * să nu rămână mut.
+ */
+function openParPdf(target: ReturnType<typeof parFormViewerTarget>): void {
+  if (openParAttachmentViewer(target)) return;
+  if (target.url) window.open(target.url, "_blank", "noopener,noreferrer");
+}
+
+// ─── Formularul PAR: citit în aplicație sau descărcat ──────────────────────────
 
 interface PdfButtonProps {
   par: ParDetailType;
@@ -273,20 +283,34 @@ function PdfDownloadButton({ par }: PdfButtonProps) {
 
   return (
     <div className="flex flex-col items-start gap-1">
-      <button
-        type="button"
-        onClick={handleDownload}
-        disabled={status === "generating"}
-        aria-label="Descarcă formularul PAR ca PDF"
-        className={cn(
-          "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]",
-          status === "done" ? "bg-success text-success-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90",
-          status === "generating" && "opacity-70 cursor-not-allowed"
-        )}
-      >
-        {status === "generating" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : status === "done" ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
-        {status === "generating" ? "Se generează PDF..." : status === "done" ? "PDF descărcat" : "Download PDF"}
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Owner: „vreau să văd PAR-ul cum va arăta PDF-ul final, nu mereu să-l descarc." Hârtia se
+            verifică înainte de a fi salvată — altfel fiecare corectură însemna încă un fișier în
+            Downloads. Se deschide în vizualizatorul din aplicație, peste pagină, ca dosarul. */}
+        <button
+          type="button"
+          onClick={() => openParPdf(parFormViewerTarget(par.id, par.requestNo))}
+          aria-label="Vezi formularul PAR ca PDF, în aplicație"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
+        >
+          <Eye className="h-4 w-4" aria-hidden />
+          Vezi PDF
+        </button>
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={status === "generating"}
+          aria-label="Descarcă formularul PAR ca PDF"
+          className={cn(
+            "inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px]",
+            status === "done" && "border-success text-success",
+            status === "generating" && "opacity-70 cursor-not-allowed"
+          )}
+        >
+          {status === "generating" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : status === "done" ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
+          {status === "generating" ? "Se generează PDF..." : status === "done" ? "PDF descărcat" : "Descarcă PDF"}
+        </button>
+      </div>
       {status === "error" && errMsg && <p role="alert" className="text-xs text-destructive">{errMsg}</p>}
     </div>
   );
@@ -321,7 +345,7 @@ function DosarButton({ par }: { par: ParDetailType }) {
             descărcare și fără o a doua filă. */}
         <button
           type="button"
-          onClick={() => openParAttachmentViewer(parDosarViewerTarget(par.id, par.requestNo))}
+          onClick={() => openParPdf(parDosarViewerTarget(par.id, par.requestNo))}
           aria-label="Citește dosarul complet în aplicație"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px]"
         >

@@ -36,13 +36,33 @@ export function parAttachmentPreviewUrl(parId: string, attachmentId: string): st
   return `/api/par/${parId}/attachments/${attachmentId}/preview`;
 }
 
+/**
+ * `?inline=1`: ruta servește documentul cu `Content-Disposition: inline`, deci `<iframe>`-ul
+ * vizualizatorului îl AFIȘEAZĂ. Fără el, ruta răspunde cu `attachment` (cum trebuie la descărcare),
+ * iar browserul ar salva fișierul și ar lăsa cadrul alb.
+ */
+const INLINE = "?inline=1";
+
 /** VM5-14: dosarul complet, citit în aplicație (aceeași autorizare ca la descărcare). */
 export function parDosarViewerTarget(parId: string, requestNo: string | null): ParAttachmentTarget {
   return {
     parId,
     attachmentId: "dosar",
     fileName: `Dosar ${requestNo ?? ""}`.trim(),
-    url: `/api/par/${parId}/dosar`,
+    url: `/api/par/${parId}/dosar${INLINE}`,
+  };
+}
+
+/**
+ * Formularul PAR — exact hârtia care se tipărește — citit în aplicație, înainte de a-l descărca.
+ * Aceeași autorizare ca la „Download PDF": ruta verifică dreptul de vizualizare a cererii.
+ */
+export function parFormViewerTarget(parId: string, requestNo: string | null): ParAttachmentTarget {
+  return {
+    parId,
+    attachmentId: "form",
+    fileName: `Formular ${requestNo ?? ""}`.trim(),
+    url: `/api/par/${parId}/form.pdf${INLINE}`,
   };
 }
 

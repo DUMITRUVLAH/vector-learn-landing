@@ -211,6 +211,21 @@ describe("GET /api/par/:id/form.pdf", () => {
     const res = await app.request(`/api/par/00000000-0000-0000-0000-000000000000/form.pdf`);
     expect(res.status).toBe(404);
   });
+
+  // „Vezi PDF": formularul se citește în aplicație, într-un `<iframe>`. Cu `attachment` browserul
+  // ar fi descărcat fișierul și ar fi lăsat cadrul alb — exact ce nu voia owner-ul.
+  it("[blocant] `?inline=1` servește formularul inline, ca să poată fi AFIȘAT, nu descărcat", async () => {
+    const res = await app.request(`/api/par/${parId}/form.pdf?inline=1`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/pdf");
+    expect(res.headers.get("content-disposition")).toMatch(/^inline/);
+    expect(res.headers.get("content-disposition")).toContain("PAR_Form_PAR-2026-0023.pdf");
+  }, 60_000);
+
+  it("fără `?inline=1` rămâne descărcare — butonul de descărcare nu se schimbă", async () => {
+    const res = await app.request(`/api/par/${parId}/form.pdf`);
+    expect(res.headers.get("content-disposition")).toMatch(/^attachment/);
+  }, 60_000);
 });
 
 /**

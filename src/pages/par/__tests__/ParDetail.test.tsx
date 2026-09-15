@@ -77,6 +77,14 @@ vi.mock("@/lib/api/par", () => ({
     thresholdCents: 0, yearToDateCents: 0, projectedCents: 0, overByCents: 0, year: 2026,
   }),
   clearTender: vi.fn().mockResolvedValue({ id: "clearance-1" }),
+  // PARVERIFY-001: fișa montează cardul codului de verificare, care își cere singur datele. Fără
+  // mock, efectul lui arunca „No export is defined on the mock" DUPĂ ce testul începuse — o eroare
+  // necapturată care pica un test la întâmplare, altul la fiecare rulare.
+  getParVerifyCode: vi.fn().mockResolvedValue(null),
+  setParVerifyCode: vi.fn().mockResolvedValue(null),
+  // Butonul „Descarcă PDF" cere formularul de la server; aici nu se apasă, dar mock-ul trebuie
+  // să existe ca importul paginii să se rezolve întreg.
+  downloadParForm: vi.fn().mockResolvedValue(undefined),
   formatMDL: (c: number) => `${(c / 100).toLocaleString()} MDL`,
   PAR_STATUS_LABELS: {
     draft: "Ciornă",

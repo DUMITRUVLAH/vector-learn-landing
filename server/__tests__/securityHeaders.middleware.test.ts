@@ -29,6 +29,16 @@ describe("securityHeaders — încadrarea", () => {
     expect(res.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'self'");
   });
 
+  // Dosarul și formularul se citesc în ACELAȘI vizualizator, tot într-un `<iframe>`. Fără excepția
+  // asta, „Citește dosarul" / „Vezi PDF" arătau un cadru gol cu „This content is blocked".
+  it("dosarul și formularul PAR pot fi încadrate de propria noastră origine", async () => {
+    for (const path of ["/api/par/par-1/dosar", "/api/par/par-1/form.pdf"]) {
+      const res = await appWith(path).request(path);
+      expect(res.headers.get("X-Frame-Options"), path).toBe("SAMEORIGIN");
+      expect(res.headers.get("Content-Security-Policy"), path).toContain("frame-ancestors 'self'");
+    }
+  });
+
   it("orice altă rută rămâne de neîncadrat", async () => {
     for (const path of ["/api/health", "/api/par/par-1", "/api/par/par-1/attachments"]) {
       const res = await appWith(path).request(path);

@@ -10,12 +10,13 @@
  * document e cea care decide ce poate face aplicația în browser. Două copii ținute egale „prin
  * comentariu" au produs deja o pană (vezi acolo).
  *
- * SINGURA excepție de la „nimeni nu ne încadrează": chiar răspunsul rutei
- * `GET /api/par/:id/attachments/:attId/preview`. Un `X-Frame-Options: DENY` pe EL bloca pagina
- * noastră să-și arate propriul document („This content is blocked"), deși cine cere e tot originea
- * noastră. Documentul e conținut static (PDF/imagine), fără butoane care să acționeze în numele
- * cuiva, deci `SAMEORIGIN` + `frame-ancestors 'self'` nu deschid nicio cale de clickjacking; restul
- * aplicației rămâne pe `DENY` / `'none'`.
+ * SINGURA excepție de la „nimeni nu ne încadrează": răspunsurile pe care chiar aplicația noastră
+ * le pune într-un `<iframe>` — documentele PAR citite în vizualizator: atașamentul
+ * (`/attachments/:attId/preview`), DOSARUL complet (`/dosar`) și FORMULARUL (`/form.pdf`). Un
+ * `X-Frame-Options: DENY` pe ELE bloca pagina noastră să-și arate propriul document („This content
+ * is blocked"), deși cine cere e tot originea noastră. Sunt conținut static (PDF/imagine), fără
+ * butoane care să acționeze în numele cuiva, deci `SAMEORIGIN` + `frame-ancestors 'self'` nu
+ * deschid nicio cale de clickjacking; restul aplicației rămâne pe `DENY` / `'none'`.
  *
  * `frame-ancestors 'none'` + `X-Frame-Options: DENY` sunt intenționat duplicate: primul e
  * standardul, al doilea acoperă browserele/proxy-urile care încă nu-l citesc pe primul.
@@ -38,8 +39,8 @@ const CSP = csp({ storageOrigin: STORAGE_ORIGIN });
 /** Același CSP, dar documentul poate fi încadrat de propria noastră aplicație. Vezi comentariul de sus. */
 const CSP_SELF_FRAMEABLE = csp({ storageOrigin: STORAGE_ORIGIN, frameAncestors: "'self'" });
 
-/** Ruta care servește atașamentul PAR inline — singurul răspuns pe care îl încadrăm noi înșine. */
-const FRAMEABLE_BY_US = /^\/api\/par\/[^/]+\/attachments\/[^/]+\/preview$/;
+/** Rutele care servesc documente PAR inline — singurele răspunsuri pe care le încadrăm noi înșine. */
+const FRAMEABLE_BY_US = /^\/api\/par\/[^/]+\/(attachments\/[^/]+\/preview|dosar|form\.pdf)$/;
 
 const IS_PROD = process.env.NODE_ENV === "production";
 

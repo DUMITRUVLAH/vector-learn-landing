@@ -2,8 +2,9 @@
  * PAR-115: PAR detail page with PDF download button
  * Tests: T-PAR-115-1, T-PAR-115-2
  *
- * T-PAR-115-1 [blocant]: Given /app/par/:id, page renders without crash and Download PDF button exists
- * T-PAR-115-2 [normal]: clicking Download PDF cere formularul de la server
+ * T-PAR-115-1 [blocant]: Given /app/par/:id, page renders without crash and the Vezi PDF /
+ *   Descarcă PDF buttons exist
+ * T-PAR-115-2 [normal]: clicking Descarcă PDF cere formularul de la server
  *   (`GET /api/par/:id/form.pdf`) — fără html2canvas și fără atașare, vezi VM4-07.
  *
  * @vitest-environment jsdom
@@ -14,6 +15,10 @@ import ParDetailPage from "../ParDetail";
 import * as parApi from "@/lib/api/par";
 import * as parPdf from "@/lib/parPdf";
 import type { ParDetail } from "@/lib/api/par";
+import {
+  registerParAttachmentViewer,
+  type ParAttachmentTarget,
+} from "@/lib/par/attachmentViewerBus";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -170,18 +175,17 @@ describe("ParDetailPage — T-PAR-115-1 [blocant]: render without crash", () => 
     }, { timeout: 5000 });
   });
 
-  it("shows the Download PDF button", async () => {
+  it("shows the Descarcă PDF button", async () => {
     render(<ParDetailPage />);
     await waitFor(() => {
-      // Button text is "Download PDF", accessible name is "Descarcă formularul PAR ca PDF"
-      // Use text query which checks both
+      // Textul butonului e „Descarcă PDF", numele accesibil „Descarcă formularul PAR ca PDF".
       const btn = screen.queryByRole("button", { name: /descarcă formularul par/i })
-               ?? screen.queryByText(/download pdf/i);
+               ?? screen.queryByText(/descarcă pdf/i);
       expect(btn).not.toBeNull();
     }, { timeout: 5000 });
   });
 
-  it("Download PDF button has correct aria-label", async () => {
+  it("Descarcă PDF button has correct aria-label", async () => {
     render(<ParDetailPage />);
     await waitFor(() => {
       const btn = screen.getByRole("button", { name: /descarcă formularul par ca pdf/i });
@@ -227,7 +231,7 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
   // Formularul se scrie acum pe SERVER (`GET /api/par/:id/form.pdf`), ca text vectorial. Butonul
   // nu mai rasterizează nimic în browser și nu mai atașează formularul la cerere: dosarul îl
   // generează singur, deci un al doilea exemplar în atașamente ar fi doar zgomot.
-  it("[blocant] Download PDF cere formularul de la server, fără rasterizare în browser", async () => {
+  it("[blocant] Descarcă PDF cere formularul de la server, fără rasterizare în browser", async () => {
     const downloadSpy = vi.spyOn(parApi, "downloadParForm").mockResolvedValue(undefined);
     render(<ParDetailPage />);
     await waitFor(() => {
@@ -275,6 +279,67 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
     await waitFor(() => {
       expect(parApi.getPar).toHaveBeenCalledWith("par-uuid-001");
     }, { timeout: 3000 });
+  });
+});
+
+/**
+ * Owner: „vreau să pot vizualiza PAR-ul cum va arăta PDF-ul final, nu mereu să-l descarc.”
+ * Formularul se deschide în vizualizatorul din aplicație, de pe ruta serverului cerută INLINE —
+ * altfel `<iframe>`-ul ar declanșa o descărcare și ar rămâne alb.
+ */
+describe("ParDetailPage — „Vezi PDF”: formularul se citește în aplicație", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(parApi, "getPar").mockResolvedValue(makeDetail());
+  });
+
+  it("[blocant] click pe „Vezi PDF” deschide formularul în vizualizator, inline", async () => {
+    const opened: ParAttachmentTarget[] = [];
+    const unregister = registerParAttachmentViewer((t) => opened.push(t));
+
+    render(<ParDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /vezi formularul par ca pdf/i }));
+
+    expect(opened).toHaveLength(1);
+    expect(opened[0].url).toBe("/api/par/par-uuid-001/form.pdf?inline=1");
+    expect(opened[0].fileName).toContain("PAR-2026-0001");
+    unregister();
+  });
+
+  it("nu descarcă nimic când doar se uită la formular", async () => {
+    const downloadSpy = vi.spyOn(parApi, "downloadParForm").mockResolvedValue(undefined);
+    const unregister = registerParAttachmentViewer(() => {});
+
+    render(<ParDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /vezi formularul par ca pdf/i }));
+
+    expect(downloadSpy).not.toHaveBeenCalled();
+    unregister();
+  });
+
+  it("fără vizualizator montat, cade pe filă nouă — butonul nu rămâne mut", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+
+    render(<ParDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /vezi formularul par ca pdf/i }));
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "/api/par/par-uuid-001/form.pdf?inline=1",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    openSpy.mockRestore();
+  });
+
+  it("dosarul complet se citește tot inline (aceeași regulă)", async () => {
+    const opened: ParAttachmentTarget[] = [];
+    const unregister = registerParAttachmentViewer((t) => opened.push(t));
+
+    render(<ParDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /citește dosarul complet/i }));
+
+    expect(opened[0].url).toBe("/api/par/par-uuid-001/dosar?inline=1");
+    unregister();
   });
 });
 

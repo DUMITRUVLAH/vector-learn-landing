@@ -2026,6 +2026,15 @@ parRoutes.post("/:id/withdraw", async (c) => {
   });
 });
 
+/**
+ * Cum ajunge PDF-ul la om: descărcat (implicit) sau afișat pe loc, când e cerut cu `?inline=1`.
+ * Un `Content-Disposition: attachment` într-un `<iframe>` declanșează o descărcare și lasă cadrul
+ * alb, deci vizualizatorul din aplicație cere explicit `inline`.
+ */
+function pdfDisposition(c: { req: { query: (k: string) => string | undefined } }): "inline" | "attachment" {
+  return c.req.query("inline") === "1" ? "inline" : "attachment";
+}
+
 // ─── GET /api/par/:id/form.pdf — formularul PAR, scris pe server ────────────
 // Owner (10.09.2026): formularul ajungea în dosar doar dacă cineva apăsa „Download PDF" în browser,
 // iar ce ieșea de acolo era o FOTOGRAFIE a paginii (html2canvas): text neselectabil, calitate
@@ -2053,7 +2062,13 @@ parRoutes.get("/:id/form.pdf", async (c) => {
     buildParFormDefinition(data, token ? { token, requestOrigin: origin } : null)
   );
   c.header("Content-Type", "application/pdf");
-  c.header("Content-Disposition", contentDisposition("attachment", parFormFileName(par.requestNo, parId)));
+  // `?inline=1` = formularul se CITEȘTE în aplicație (vizualizatorul îl pune într-un `<iframe>`),
+  // nu se salvează pe disc. Cu `attachment`, browserul descarcă fișierul și lasă cadrul gol — deci
+  // butonul „Vezi PDF" ar fi arătat exact ca „Descarcă". Descărcarea rămâne comportamentul implicit.
+  c.header(
+    "Content-Disposition",
+    contentDisposition(pdfDisposition(c), parFormFileName(par.requestNo, parId))
+  );
   return c.body(bytes);
 });
 
@@ -2171,7 +2186,7 @@ parRoutes.get("/:id/dosar", async (c) => {
   if (!built) return c.json({ error: "not_found" }, 404);
 
   c.header("Content-Type", "application/pdf");
-  c.header("Content-Disposition", contentDisposition("attachment", built.fileName));
+  c.header("Content-Disposition", contentDisposition(pdfDisposition(c), built.fileName));
   return c.body(built.bytes);
 });
 

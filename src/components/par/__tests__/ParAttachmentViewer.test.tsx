@@ -213,7 +213,9 @@ describe("ParAttachmentViewer", () => {
     });
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-    expect(String(fetchSpy.mock.calls[0][0])).toBe("/api/par/par-1/dosar");
+    // `?inline=1`: ruta răspunde cu `Content-Disposition: inline`, altfel `<iframe>`-ul de mai jos
+    // ar declanșa o descărcare și ar rămâne alb.
+    expect(String(fetchSpy.mock.calls[0][0])).toBe("/api/par/par-1/dosar?inline=1");
     fetchSpy.mockRestore();
   });
 });
