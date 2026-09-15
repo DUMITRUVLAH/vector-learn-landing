@@ -47,6 +47,7 @@ import { runAutomations } from "./crmAutomations";
 import { assignLeadAutomatically } from "./crmAssignment";
 import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
 import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
+import { syncLeadStockForStage } from "../lib/crm/productStock";
 import { crmPipelines, type CrmPipeline } from "../db/schema/crmPipelines";
 import { crmProducts } from "../db/schema/crmProducts";
 import { crmCompanies } from "../db/schema/crmCompanies";
@@ -81,6 +82,7 @@ const LEAD_COLS = {
   company: leads.company,
   interestCourse: leads.interestCourse,
   productId: leads.productId,
+  productQty: leads.productQty,
   probabilityPct: leads.probabilityPct,
   source: leads.source,
   stage: leads.stage,
@@ -158,6 +160,8 @@ const leadFieldsSchema = z.object({
   interestCourse: z.string().max(200).optional().nullable(),
   /** Produsul din catalog (`crm_products`). `null` = fără produs ales. */
   productId: z.string().uuid().optional().nullable(),
+  /** Câte bucăți se vând. La câștig, atâtea se scad din stocul produsului (migrarea 0177). */
+  productQty: z.number().int().min(1).max(100000).optional(),
   /** Probabilitatea acestei oportunități; `null` = se moștenește de la etapă. */
   probabilityPct: z.number().int().min(0).max(100).optional().nullable(),
   source: z.enum(LEAD_SOURCES).optional(),
@@ -809,6 +813,13 @@ crmLeadsRoutes.post("/bulk", requireCrmPermission("leads.edit"), zValidator("jso
       });
       if (row) {
         await runAutomations({ tenantId, userId: user.id, lead: row, kind: "lead.stage_changed", toStage: stageKey });
+        await syncLeadStockForStage({
+          tenantId,
+          userId: user.id,
+          lead: row,
+          fromStage: l.stage,
+          toStage: stageKey,
+        });
       }
       await enrollByStage(tenantId, l.id, stageKey);
       updated++;
@@ -1041,6 +1052,7 @@ crmLeadsRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   if (body.dealName !== undefined) values.dealName = body.dealName;
   if (body.interestCourse !== undefined) values.interestCourse = body.interestCourse;
   if (body.productId !== undefined) values.productId = body.productId;
+  if (body.productQty !== undefined) values.productQty = body.productQty;
   if (body.probabilityPct !== undefined) values.probabilityPct = body.probabilityPct;
   if (body.source !== undefined) values.source = body.source;
   if (body.stage !== undefined) {
@@ -1110,7 +1122,7 @@ crmLeadsRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => 
   const body = c.req.valid("json");
 
   const [existing] = await db
-    .select({ id: leads.id })
+    .select({ id: leads.id, stage: leads.stage })
     .from(leads)
     .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
   if (!existing) return c.json({ error: "not_found" }, 404);
@@ -1129,6 +1141,7 @@ crmLeadsRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => 
   if (body.dealName !== undefined) updates.dealName = body.dealName;
   if (body.interestCourse !== undefined) updates.interestCourse = body.interestCourse;
   if (body.productId !== undefined) updates.productId = body.productId;
+  if (body.productQty !== undefined) updates.productQty = body.productQty;
   if (body.probabilityPct !== undefined) updates.probabilityPct = body.probabilityPct;
   if (body.source !== undefined) updates.source = body.source;
   if (body.stage !== undefined) updates.stage = body.stage;
@@ -1154,6 +1167,19 @@ crmLeadsRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => 
     targetId: id,
     after: body,
   });
+
+  // Salvarea generică poate muta și etapa (fișa leadului, nu doar kanbanul). Dacă a trecut peste
+  // granița „câștigat", stocul trebuie să se miște la fel ca pe ruta dedicată — altfel fișa ar fi
+  // o poartă din spate prin care se vinde fără să scadă nimic.
+  if (row && body.stage !== undefined && body.stage !== existing.stage) {
+    await syncLeadStockForStage({
+      tenantId: user.tenantId,
+      userId: user.id,
+      lead: row,
+      fromStage: existing.stage,
+      toStage: body.stage,
+    });
+  }
 
   return c.json(row);
 });
@@ -1237,11 +1263,23 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
   // Idempotent pe (lead, cadență) activă — o mutare înainte-înapoi nu-l înscrie de două ori.
   await enrollByStage(user.tenantId, id, stage);
 
+  // Stocul produsului: scade la prima intrare în „câștigat", se întoarce la ieșirea din el.
+  // Vezi server/lib/crm/productStock.ts pentru regulile complete (idempotență, stoc insuficient).
+  const stock = await syncLeadStockForStage({
+    tenantId: user.tenantId,
+    userId: user.id,
+    lead: row,
+    fromStage,
+    toStage: stage,
+  });
+
   const [fresh] = await db
     .select()
     .from(leads)
     .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
-  return c.json(fresh ?? row);
+  // `stock` călătorește lângă lead, nu în el: interfața are nevoie de rezultat ca să anunțe omul
+  // („-2 buc., au rămas 5" sau „stoc insuficient"), dar nu e o coloană a leadului.
+  return c.json({ ...(fresh ?? row), stock });
 });
 
 

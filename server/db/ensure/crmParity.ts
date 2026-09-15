@@ -190,4 +190,12 @@ export const CRM_PARITY_ENSURE_STATEMENTS: string[] = [
     CONSTRAINT "crm_user_perms_uniq" UNIQUE("user_id","permission")
   )`,
   `CREATE INDEX IF NOT EXISTS "crm_user_perms_tenant_idx" ON "crm_user_permissions" ("tenant_id","user_id")`,
+
+  // ── Stoc pe produse (migrarea 0177) ────────────────────────────────────────
+  // Stocul propriu-zis stă în `fin_inventory_items` (modulul FinDesk); aici doar legătura,
+  // cantitatea vândută pe oportunitate și ancora de idempotență a scăderii.
+  `ALTER TABLE "crm_products" ADD COLUMN IF NOT EXISTS "inventory_item_id" uuid`,
+  `CREATE INDEX IF NOT EXISTS "crm_products_inventory_idx" ON "crm_products" ("tenant_id","inventory_item_id")`,
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "product_qty" integer DEFAULT 1 NOT NULL`,
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "stock_movement_id" uuid`,
 ];

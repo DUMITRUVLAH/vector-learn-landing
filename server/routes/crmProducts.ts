@@ -8,6 +8,14 @@
  * PATCH /api/crm/products/:id       — actualizare parțială
  * POST /api/crm/products/:id/archive — arhivează (isActive=false)
  * POST /api/crm/products/:id/restore — dezarhivează (isActive=true)
+ * POST /api/crm/products/:id/stock/enable  — pornește urmărirea stocului (migrarea 0177)
+ * POST /api/crm/products/:id/stock/adjust  — corecție de cantitate (recepție / inventar)
+ * POST /api/crm/products/:id/stock/disable — oprește urmărirea (articolul de inventar rămâne)
+ *
+ * STOCUL NU stă aici. Produsul se leagă de un articol de inventar FinDesk
+ * (`fin_inventory_items`), unde există deja cantitate, cost mediu ponderat și jurnal de
+ * mișcări — vezi server/lib/crm/productStock.ts pentru motiv și pentru scăderea automată
+ * la câștigarea unei oportunități.
  *
  * NU se șterge niciodată fizic un produs: un produs arhivat poate fi deja referit de istoricul
  * de vânzări/oferte, iar un DELETE ar rupe acele înregistrări. Arhivarea doar îl scoate din
@@ -23,6 +31,8 @@ import { z } from "zod";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmProducts } from "../db/schema/crmProducts";
+import { finInventoryItems } from "../db/schema";
+import { recordStockMovement } from "../lib/finInventoryMovements";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
 
@@ -71,11 +81,36 @@ crmProductsRoutes.get("/", async (c) => {
   const conditions = [eq(crmProducts.tenantId, user.tenantId)];
   if (!includeInactive) conditions.push(eq(crmProducts.isActive, true));
 
-  const items = await db
-    .select()
+  // LEFT JOIN, nu o a doua cerere: lista de produse e ecranul pe care omul decide ce mai poate
+  // vinde, iar „câte mai am" trebuie să vină odată cu prețul, nu după el.
+  const rows = await db
+    .select({
+      product: crmProducts,
+      qtyOnHand: finInventoryItems.qtyOnHand,
+      minQtyAlert: finInventoryItems.minQtyAlert,
+      avgCostCents: finInventoryItems.avgCostCents,
+    })
     .from(crmProducts)
+    .leftJoin(
+      finInventoryItems,
+      and(
+        eq(finInventoryItems.id, crmProducts.inventoryItemId),
+        eq(finInventoryItems.tenantId, user.tenantId)
+      )
+    )
     .where(and(...conditions))
     .orderBy(asc(crmProducts.orderIndex), asc(crmProducts.name));
+
+  const items = rows.map((r) => ({
+    ...r.product,
+    // `tracksStock` e fals și când legătura a rămas suspendată (articol șters manual din bază):
+    // mai bine „fără stoc" decât o cantitate inventată.
+    tracksStock: r.qtyOnHand !== null,
+    qtyOnHand: r.qtyOnHand,
+    minQtyAlert: r.minQtyAlert,
+    avgCostCents: r.avgCostCents,
+    lowStock: r.qtyOnHand !== null && (r.minQtyAlert ?? 0) > 0 && r.qtyOnHand <= (r.minQtyAlert ?? 0),
+  }));
 
   return c.json({ items });
 });
@@ -175,4 +210,152 @@ crmProductsRoutes.post("/:id/restore", async (c) => {
 
   if (!row) return c.json({ error: "not_found" }, 404);
   return c.json(row);
+});
+
+// ─── Stoc ─────────────────────────────────────────────────────────────────────
+//
+// Trei rute subțiri peste inventarul FinDesk. Omul din vânzări nu trebuie să știe că modulul
+// de contabilitate există ca să răspundă la „câte mai am pe stoc"; contabilul nu trebuie să
+// primească un al doilea stoc, ținut separat de CRM.
+
+const enableStockSchema = z.object({
+  /** Cantitatea existentă acum în depozit. 0 = se pornește urmărirea de la zero. */
+  initialQty: z.number().int().min(0).default(0),
+  /** Costul unitar de achiziție, în bani. Intră în costul mediu ponderat al articolului. */
+  unitCostCents: z.number().int().min(0).default(0),
+  /** Sub cât se dă alerta de stoc scăzut. 0 = fără alertă. */
+  minQtyAlert: z.number().int().min(0).default(0),
+});
+
+const adjustStockSchema = z.object({
+  /** Diferența, cu semn: +10 la o recepție, -3 la o pierdere sau la un inventar în minus. */
+  delta: z.number().int().refine((v) => v !== 0, { message: "Corecția nu poate fi zero" }),
+  /** Doar la intrări: costul unitar al lotului. Fără el, cantitatea intră la costul mediu curent. */
+  unitCostCents: z.number().int().min(0).optional(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+async function productOfTenant(tenantId: string, id: string) {
+  const [row] = await db
+    .select()
+    .from(crmProducts)
+    .where(and(eq(crmProducts.id, id), eq(crmProducts.tenantId, tenantId)));
+  return row ?? null;
+}
+
+// ─── POST /:id/stock/enable ───────────────────────────────────────────────────
+
+crmProductsRoutes.post("/:id/stock/enable", zValidator("json", enableStockSchema), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const body = c.req.valid("json");
+
+  const product = await productOfTenant(user.tenantId, id);
+  if (!product) return c.json({ error: "not_found" }, 404);
+
+  // Deja legat → doar întoarcem starea. A doua apăsare pe „urmărește stocul" nu are voie să
+  // creeze un al doilea articol de inventar pentru același produs.
+  if (product.inventoryItemId) {
+    const [existing] = await db
+      .select()
+      .from(finInventoryItems)
+      .where(
+        and(eq(finInventoryItems.id, product.inventoryItemId), eq(finInventoryItems.tenantId, user.tenantId))
+      );
+    if (existing) return c.json({ product, item: existing });
+  }
+
+  const [item] = await db
+    .insert(finInventoryItems)
+    .values({
+      tenantId: user.tenantId,
+      name: product.name,
+      sku: product.sku ? product.sku.slice(0, 50) : null,
+      // Coloana din inventar e mai scurtă decât cea din catalog (varchar 20 vs 30).
+      unit: (product.unit || "buc").slice(0, 20),
+      description: product.description ?? null,
+      minQtyAlert: body.minQtyAlert,
+    })
+    .returning();
+
+  const [updated] = await db
+    .update(crmProducts)
+    .set({ inventoryItemId: item.id, updatedAt: new Date() })
+    .where(and(eq(crmProducts.id, id), eq(crmProducts.tenantId, user.tenantId)))
+    .returning();
+
+  // Cantitatea de pornire intră ca achiziție, nu ca simplă cifră scrisă în coloană: așa are
+  // dată, autor și cost în jurnal, iar valoarea stocului din contabilitate rămâne corectă.
+  let qtyOnHand = 0;
+  if (body.initialQty > 0) {
+    const result = await recordStockMovement({
+      tenantId: user.tenantId,
+      itemId: item.id,
+      movementType: "purchase",
+      qty: body.initialQty,
+      unitCostCents: body.unitCostCents,
+      reference: `CRM-INIT`,
+      notes: `Stoc inițial la pornirea urmăririi din CRM`,
+      movedBy: user.id,
+    });
+    if (result.ok) qtyOnHand = result.newQtyOnHand;
+  }
+
+  return c.json({ product: updated, item: { ...item, qtyOnHand } }, 201);
+});
+
+// ─── POST /:id/stock/adjust ───────────────────────────────────────────────────
+
+crmProductsRoutes.post("/:id/stock/adjust", zValidator("json", adjustStockSchema), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const body = c.req.valid("json");
+
+  const product = await productOfTenant(user.tenantId, id);
+  if (!product) return c.json({ error: "not_found" }, 404);
+  if (!product.inventoryItemId) return c.json({ error: "stock_not_tracked" }, 409);
+
+  // O intrare CU cost e o achiziție (recalculează costul mediu); una fără cost, sau o ieșire,
+  // e o ajustare de inventar — mișcă doar cantitatea, lasă costul mediu neatins.
+  const isPurchase = body.delta > 0 && body.unitCostCents !== undefined;
+  const result = await recordStockMovement({
+    tenantId: user.tenantId,
+    itemId: product.inventoryItemId,
+    movementType: isPurchase ? "purchase" : "adjustment",
+    qty: body.delta,
+    unitCostCents: body.unitCostCents,
+    reference: "CRM-AJUST",
+    notes: body.notes ?? null,
+    movedBy: user.id,
+  });
+
+  if (!result.ok) {
+    if (result.error === "item_not_found") return c.json({ error: "not_found" }, 404);
+    return c.json(
+      { error: "insufficient_stock", available: result.available, requested: result.requested },
+      422
+    );
+  }
+
+  return c.json({ qtyOnHand: result.newQtyOnHand, avgCostCents: result.newAvgCostCents });
+});
+
+// ─── POST /:id/stock/disable ──────────────────────────────────────────────────
+
+crmProductsRoutes.post("/:id/stock/disable", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+
+  const product = await productOfTenant(user.tenantId, id);
+  if (!product) return c.json({ error: "not_found" }, 404);
+
+  // Doar dezlegăm. Articolul de inventar și mișcările lui rămân: sunt registrul unei perioade
+  // care chiar a existat, iar ștergerea lor ar rupe valoarea stocului din rapoartele financiare.
+  const [updated] = await db
+    .update(crmProducts)
+    .set({ inventoryItemId: null, updatedAt: new Date() })
+    .where(and(eq(crmProducts.id, id), eq(crmProducts.tenantId, user.tenantId)))
+    .returning();
+
+  return c.json(updated);
 });

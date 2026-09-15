@@ -62,6 +62,7 @@ import {
   removeCrmLeadTag,
   listCrmTagSuggestions,
   listCrmProducts,
+  type CrmProduct,
   type CrmLead,
   type CrmLeadDetailResponse,
   type CrmLeadInteraction,
@@ -179,6 +180,8 @@ interface DetailFormState {
   fullName: string;
   /** Produsul din catalog; „" = niciunul. */
   productId: string;
+  /** Câte bucăți se vând; la câștig, atâtea se scad din stoc. „" = 1. */
+  productQtyText: string;
   /** Probabilitatea proprie; „" = se moștenește de la etapă. */
   probabilityText: string;
   dealName: string;
@@ -196,6 +199,7 @@ function toFormState(lead: CrmLead): DetailFormState {
   return {
     fullName: lead.fullName,
     productId: lead.productId ?? "",
+    productQtyText: lead.productQty == null ? "" : String(lead.productQty),
     probabilityText: lead.probabilityPct == null ? "" : String(lead.probabilityPct),
     dealName: lead.dealName ?? "",
     company: lead.company ?? "",
@@ -246,7 +250,9 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
   const [taskActionId, setTaskActionId] = useState<string | null>(null);
 
   /** Catalogul de produse — pentru select-ul din „Detalii". Se cere o dată, la deschidere. */
-  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
+  // Produsele vin cu starea stocului (`tracksStock`, `qtyOnHand`): fișa leadului e locul unde se
+  // decide vânzarea, deci „câte mai am" trebuie să fie vizibil ÎNAINTE de a promite clientului.
+  const [products, setProducts] = useState<CrmProduct[]>([]);
 
   // Etichete
   const [tags, setTags] = useState<CrmLeadTag[]>([]);
@@ -326,7 +332,7 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     // Separat de `Promise.all`-ul fișei, ca la acte: un catalog care nu răspunde nu are voie să
     // golească fișa leadului.
     listCrmProducts()
-      .then((res) => setProducts(res.items.map((p) => ({ id: p.id, name: p.name }))))
+      .then((res) => setProducts(res.items))
       .catch(() => setProducts([]));
   }, [leadId]);
 
@@ -354,6 +360,12 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     return detail?.stage ?? stages.find((s) => s.key === lead.stage) ?? null;
   }, [detail, lead, stages]);
 
+  // Produsul ales acum în formular — de el atârnă și câmpul de cantitate, și cifra de stoc.
+  const selectedProduct = useMemo(
+    () => (form?.productId ? products.find((p) => p.id === form.productId) ?? null : null),
+    [form?.productId, products]
+  );
+
   const assigneeOptions = useMemo(() => {
     if (!form || !form.assignedTo || teamMembers.some((m) => m.id === form.assignedTo)) return teamMembers;
     // Responsabilul curent nu (mai) e în listă (ex. cont dezactivat) — îl păstrăm ca opțiune, ca
@@ -375,8 +387,28 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     setMovingStage(true);
     setDetail((d) => (d ? { ...d, lead: { ...d.lead, stage: toStage } } : d));
     try {
-      await moveCrmLeadStage(leadId, { stage: toStage, lostReason });
-      onToast({ kind: "success", message: `Lead mutat la „${crmStageLabel(stages, toStage)}”.` });
+      const moved = await moveCrmLeadStage(leadId, { stage: toStage, lostReason });
+      // Stocul e consecința mutării, deci se anunță în același mesaj: altfel omul află că a rămas
+      // fără marfă abia când nu mai poate onora comanda următoare.
+      const stock = moved.stock;
+      if (stock?.status === "insufficient") {
+        onToast({
+          kind: "error",
+          message: `Lead mutat, dar stocul la „${stock.productName}” nu ajunge: cerute ${stock.requested}, disponibile ${stock.available}.`,
+        });
+      } else if (stock?.status === "decremented") {
+        onToast({
+          kind: "success",
+          message: `Lead mutat la „${crmStageLabel(stages, toStage)}”. Stoc: −${stock.qty} × „${stock.productName}”, au rămas ${stock.remaining}.`,
+        });
+      } else if (stock?.status === "restored") {
+        onToast({
+          kind: "success",
+          message: `Lead mutat la „${crmStageLabel(stages, toStage)}”. Stoc returnat: +${stock.qty} × „${stock.productName}”.`,
+        });
+      } else {
+        onToast({ kind: "success", message: `Lead mutat la „${crmStageLabel(stages, toStage)}”.` });
+      }
       // Reîncarcă fișa: serverul a scris deja un `stage_change` în istoric la mutare — vrem să
       // apară în timeline fără un reload de pagină, doar fișa își reia propriile date.
       await refetchDetail();
@@ -416,6 +448,7 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       email: emptyToNull(form.email),
       interestCourse: emptyToNull(form.interestCourse),
       productId: form.productId ? form.productId : null,
+      productQty: Math.max(1, Number(form.productQtyText) || 1),
       // Gol = „moștenește de la etapă", nu „0%": diferența contează la prognoză.
       probabilityPct: form.probabilityText.trim() === "" ? null : Math.max(0, Math.min(100, Number(form.probabilityText) || 0)),
       valueCents: leadValueToCents(form.valueText),
@@ -431,6 +464,7 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       email: patch.email ?? null,
       interestCourse: patch.interestCourse ?? null,
       productId: patch.productId ?? null,
+      productQty: patch.productQty ?? detail.lead.productQty ?? 1,
       probabilityPct: patch.probabilityPct ?? null,
       valueCents: patch.valueCents ?? detail.lead.valueCents,
       source: patch.source ?? detail.lead.source,
@@ -1041,7 +1075,33 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
                       </option>
                     ))}
                   </Select>
+                  {selectedProduct?.tracksStock ? (
+                    <p
+                      className={`text-xs ${selectedProduct.lowStock ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      Stoc disponibil: {selectedProduct.qtyOnHand} {selectedProduct.unit}
+                      {selectedProduct.lowStock ? " — sub pragul de alertă" : ""}
+                    </p>
+                  ) : null}
                 </div>
+                {/* Cantitatea se arată doar la produsele cu stoc: la un serviciu n-ar însemna nimic
+                    și ar mai cere o decizie degeaba. */}
+                {selectedProduct?.tracksStock ? (
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="lead-sheet-product-qty">Cantitate</Label>
+                    <Input
+                      id="lead-sheet-product-qty"
+                      type="number"
+                      min={1}
+                      value={form.productQtyText}
+                      onChange={(e) => setForm({ ...form, productQtyText: e.target.value })}
+                      placeholder="1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Se scade din stoc când leadul ajunge în etapa de câștig.
+                    </p>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="lead-sheet-probability">Probabilitate (%)</Label>
                   <Input

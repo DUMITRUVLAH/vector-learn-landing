@@ -45,6 +45,13 @@ export const leads = pgTable(
      *  și rapoartele se sprijină pe legătura asta. FK-ul e declarat în migrare, nu aici, ca
      *  schema să nu depindă de ordinea importurilor între fișiere. */
     productId: uuid("product_id"),
+    /** Câte bucăți acoperă oportunitatea (migrarea 0177). La câștig, atâtea se scad din stocul
+     *  produsului. 1 = cazul implicit, ca lead-urile de dinainte să nu-și schimbe înțelesul. */
+    productQty: integer("product_qty").notNull().default(1),
+    /** Mișcarea de ieșire (`fin_stock_movements`) care a consumat stocul pentru acest lead.
+     *  E ancora de idempotență: cât timp e setată, o nouă intrare în etapa „câștigat" NU mai
+     *  scade nimic, iar ieșirea din etapă știe exact ce mișcare să compenseze. */
+    stockMovementId: uuid("stock_movement_id"),
     /** Probabilitatea de câștig A ACESTEI oportunități, 0-100. `null` = se moștenește de la
      *  etapă (`crm_pipeline_stages.probability_pct`). Caietul de sarcini (cerința 10) o cere per
      *  oportunitate, nu doar per etapă: două afaceri în aceeași etapă nu au aceeași șansă. */

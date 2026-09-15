@@ -20,12 +20,8 @@ import { and, eq, desc, asc, lte, gte } from "drizzle-orm";
 import { db } from "../db/client";
 import { finInventoryItems, finStockMovements } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import {
-  calculateAvgCost,
-  calculateExitCost,
-  isInbound,
-  isOutbound,
-} from "../lib/finInventoryEngine";
+import { calculateAvgCost, calculateExitCost } from "../lib/finInventoryEngine";
+import { recordStockMovement } from "../lib/finInventoryMovements";
 
 export const finInventoryRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -185,87 +181,40 @@ finInventoryRoutes.get("/movements", async (c) => {
 
 finInventoryRoutes.post("/movements", zValidator("json", createMovementSchema), async (c) => {
   const user = c.get("user");
-  const tenantId = user.tenantId;
   const body = c.req.valid("json");
 
-  // Fetch articolul curent
-  const [item] = await db
-    .select()
-    .from(finInventoryItems)
-    .where(and(eq(finInventoryItems.id, body.itemId), eq(finInventoryItems.tenantId, tenantId)));
-
-  if (!item) {
-    return c.json({ error: "item_not_found" }, 404);
-  }
-
-  let qtyDelta = 0;
-  let unitCostCents = body.unitCostCents;
-  let totalCostCents = 0;
-  let newAvgCostCents = item.avgCostCents;
-  let newQtyOnHand = item.qtyOnHand;
-
-  if (isInbound(body.movementType)) {
-    // Intrare → recalculează CMP
-    const result = calculateAvgCost({
-      oldQty: item.qtyOnHand,
-      oldAvgCostCents: item.avgCostCents,
-      qtyIn: body.qty,
-      unitCostCents: body.unitCostCents,
-    });
-    newAvgCostCents = result.newAvgCostCents;
-    newQtyOnHand = result.newQtyOnHand;
-    totalCostCents = result.entryTotalCostCents;
-    qtyDelta = body.qty;
-  } else if (isOutbound(body.movementType)) {
-    // Ieșire → verifică stoc suficient, cost la CMP curent
-    const result = calculateExitCost(item.qtyOnHand, item.avgCostCents, body.qty);
-    if (!result.ok) {
-      return c.json(
-        { error: "insufficient_stock", available: result.available, requested: result.requested },
-        422
-      );
-    }
-    unitCostCents = result.unitCostCents;
-    totalCostCents = result.totalCostCents;
-    newQtyOnHand = result.remainingQty;
-    qtyDelta = -body.qty;
-  } else if (body.movementType === "adjustment") {
-    // Ajustare → qty poate fi adăugat sau scăzut, dar stocul nu poate deveni negativ
-    const afterAdj = item.qtyOnHand + body.qty;
-    if (afterAdj < 0) {
-      return c.json({ error: "insufficient_stock", available: item.qtyOnHand, requested: body.qty }, 422);
-    }
-    newQtyOnHand = afterAdj;
-    totalCostCents = body.qty * item.avgCostCents;
-    qtyDelta = body.qty;
-  }
-
-  // Tranzacție: inserează mișcarea + actualizează articolul
-  const [movement] = await db.insert(finStockMovements).values({
-    tenantId,
+  // Calculul (CMP la intrare, cost de ieșire, verificarea de stoc) stă în
+  // `server/lib/finInventoryMovements.ts`, ca mișcarea scrisă de mână de aici și cea scrisă
+  // automat de CRM la câștigarea unui lead să treacă prin exact același cod.
+  const result = await recordStockMovement({
+    tenantId: user.tenantId,
     itemId: body.itemId,
     movementType: body.movementType,
     qty: body.qty,
-    unitCostCents,
-    totalCostCents,
-    invoiceId: body.invoiceId ?? null,
-    reference: body.reference ?? null,
-    notes: body.notes ?? null,
-    branchId: body.branchId ?? null,
+    unitCostCents: body.unitCostCents,
+    invoiceId: body.invoiceId,
+    reference: body.reference,
+    notes: body.notes,
+    branchId: body.branchId,
     movedBy: user.id,
-    movedAt: new Date(),
-  }).returning();
+  });
 
-  await db
-    .update(finInventoryItems)
-    .set({
-      qtyOnHand: newQtyOnHand,
-      avgCostCents: newAvgCostCents,
-      updatedAt: new Date(),
-    })
-    .where(eq(finInventoryItems.id, body.itemId));
+  if (!result.ok) {
+    if (result.error === "item_not_found") return c.json({ error: "item_not_found" }, 404);
+    return c.json(
+      { error: "insufficient_stock", available: result.available, requested: result.requested },
+      422
+    );
+  }
 
-  return c.json({ movement, newQtyOnHand, newAvgCostCents }, 201);
+  return c.json(
+    {
+      movement: result.movement,
+      newQtyOnHand: result.newQtyOnHand,
+      newAvgCostCents: result.newAvgCostCents,
+    },
+    201
+  );
 });
 
 // ─── POST /hook/invoice-issued ─────────────────────────────────────────────────

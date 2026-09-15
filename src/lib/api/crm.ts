@@ -47,6 +47,8 @@ export interface CrmLead {
   interestCourse: string | null;
   /** Produsul din catalog (`crm_products`) — pe el se sprijină raportul „pe produs". */
   productId?: string | null;
+  /** Câte bucăți se vând. La câștig, atâtea se scad din stocul produsului. */
+  productQty?: number | null;
   /** Probabilitatea acestei oportunități; `null` = se moștenește de la etapă. */
   probabilityPct?: number | null;
   source: CrmLeadSource;
@@ -382,6 +384,7 @@ export interface CreateCrmLeadBody {
   company?: string | null;
   interestCourse?: string | null;
   productId?: string | null;
+  productQty?: number;
   probabilityPct?: number | null;
   source?: CrmLeadSource;
   valueCents?: number;
@@ -405,8 +408,21 @@ export interface MoveCrmLeadStageBody {
   lostReason?: string;
 }
 
-export function moveCrmLeadStage(id: string, body: MoveCrmLeadStageBody): Promise<CrmLead> {
-  return api<CrmLead>(`/api/crm/leads/${id}/stage`, { method: "PATCH", body: JSON.stringify(body) });
+/** Ce a pățit stocul produsului la această mutare — vezi server/lib/crm/productStock.ts. */
+export type CrmLeadStockOutcome =
+  | { status: "noop" }
+  | { status: "decremented"; productName: string; qty: number; remaining: number }
+  | { status: "restored"; productName: string; qty: number; remaining: number }
+  | { status: "insufficient"; productName: string; requested: number; available: number };
+
+export function moveCrmLeadStage(
+  id: string,
+  body: MoveCrmLeadStageBody
+): Promise<CrmLead & { stock?: CrmLeadStockOutcome }> {
+  return api<CrmLead & { stock?: CrmLeadStockOutcome }>(`/api/crm/leads/${id}/stage`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 export interface MoveCrmLeadPipelineBody {
@@ -486,6 +502,14 @@ export interface CrmProduct {
   vatPercent: number | string;
   isActive: boolean;
   orderIndex: number;
+  /** Stocul NU e o coloană a produsului: vine din articolul de inventar legat (FinDesk).
+   *  `tracksStock: false` → produs fără stoc (serviciu, abonament) și restul câmpurilor sunt null. */
+  tracksStock?: boolean;
+  qtyOnHand?: number | null;
+  minQtyAlert?: number | null;
+  avgCostCents?: number | null;
+  /** Cantitatea a ajuns la sau sub pragul de alertă. */
+  lowStock?: boolean;
 }
 
 export interface ListCrmProductsResponse {
@@ -526,6 +550,44 @@ export function archiveCrmProduct(id: string): Promise<CrmProduct> {
 /** Poate răspunde 409 `sku_taken` dacă SKU-ul e deja folosit de alt produs activ. */
 export function restoreCrmProduct(id: string): Promise<CrmProduct> {
   return api<CrmProduct>(`/api/crm/products/${id}/restore`, { method: "POST" });
+}
+
+// ─── Stocul produselor ────────────────────────────────────────────────────────
+//
+// Stocul stă în inventarul FinDesk; rutele de mai jos sunt ferestrele CRM-ului către el.
+
+export interface EnableProductStockBody {
+  /** Cantitatea din depozit acum. */
+  initialQty?: number;
+  /** Costul unitar de achiziție, în bani. */
+  unitCostCents?: number;
+  /** Sub cât se dă alerta. 0 = fără alertă. */
+  minQtyAlert?: number;
+}
+
+export function enableCrmProductStock(
+  id: string,
+  body: EnableProductStockBody = {}
+): Promise<{ product: CrmProduct; item: { id: string; qtyOnHand: number } }> {
+  return api(`/api/crm/products/${id}/stock/enable`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** `delta` cu semn: +10 la recepție, -3 la inventar în minus. 422 `insufficient_stock` sub zero. */
+export function adjustCrmProductStock(
+  id: string,
+  body: { delta: number; unitCostCents?: number; notes?: string }
+): Promise<{ qtyOnHand: number; avgCostCents: number }> {
+  return api(`/api/crm/products/${id}/stock/adjust`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function disableCrmProductStock(id: string): Promise<CrmProduct> {
+  return api<CrmProduct>(`/api/crm/products/${id}/stock/disable`, { method: "POST" });
 }
 
 // ─── Taskuri pe lead ────────────────────────────────────────────────────────────

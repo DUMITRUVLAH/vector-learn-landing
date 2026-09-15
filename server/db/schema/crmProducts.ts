@@ -35,6 +35,14 @@ export const crmProducts = pgTable(
     /** Dezactivarea ascunde produsul din ofertare fără să rupă istoricul care
      *  îl referențiază — de aceea nu ștergem niciodată definitiv. */
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * Legătura opțională cu articolul de inventar din FinDesk (`fin_inventory_items`).
+     * Acolo stau cantitatea, costul mediu ponderat și jurnalul de mișcări — CRM-ul NU ține
+     * o a doua cantitate proprie, ca stocul din ofertare și cel din contabilitate să nu
+     * poată diverge. NULL = produs fără stoc (serviciu, abonament, consultanță).
+     * Migrare: drizzle/0177_crm_product_stock.sql
+     */
+    inventoryItemId: uuid("inventory_item_id"),
     orderIndex: integer("order_index").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -42,6 +50,7 @@ export const crmProducts = pgTable(
   (t) => [
     index("crm_products_tenant_idx").on(t.tenantId),
     index("crm_products_active_idx").on(t.tenantId, t.isActive),
+    index("crm_products_inventory_idx").on(t.tenantId, t.inventoryItemId),
   ]
 );
 

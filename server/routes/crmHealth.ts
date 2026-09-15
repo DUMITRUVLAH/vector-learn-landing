@@ -83,13 +83,27 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
       db.execute(
         sql`SELECT id, tenant_id, sku, name, category, description, unit,
                    list_price_cents, currency, vat_percent, is_active, order_index,
-                   created_at, updated_at
+                   inventory_item_id, created_at, updated_at
             FROM crm_products LIMIT 0`
       ),
   },
   // Tabelele adăugate de Fazele 3-7. Fiecare e pe calea unei pagini sau a
   // salvării unui lead: dacă o migrare n-a ajuns pe un workspace, vreau să știu
   // de aici, nu de la owner care vede „internal_error" pe ecran.
+  {
+    // CRM-ul scade stocul la câștigarea unei oportunități prin inventarul FinDesk. Dacă acel
+    // modul lipsește de pe un workspace, vreau să știu de aici: scăderea e best-effort și ar
+    // trece tăcută, iar omul ar crede că stocul se mișcă.
+    name: "crm_stock_link",
+    run: () =>
+      db.execute(
+        sql`SELECT p.inventory_item_id, i.qty_on_hand, l.product_qty, l.stock_movement_id
+            FROM crm_products p
+            LEFT JOIN fin_inventory_items i ON i.id = p.inventory_item_id
+            LEFT JOIN leads l ON false
+            LIMIT 0`
+      ),
+  },
   { name: "crm_lead_tasks", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, title, due_at, status FROM crm_lead_tasks LIMIT 0`) },
   { name: "crm_companies", run: () => db.execute(sql`SELECT id, tenant_id, name, name_normalized, idno FROM crm_companies LIMIT 0`) },
   { name: "crm_import_jobs", run: () => db.execute(sql`SELECT id, tenant_id, file_name, created_count FROM crm_import_jobs LIMIT 0`) },
