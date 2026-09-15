@@ -267,8 +267,35 @@ describe("Cardul poartă semnalul de lucru", () => {
     const { container } = render(<CrmPipelinePage />);
     await findLeadCards("Alfa Logistic SRL");
 
-    // Dunga roșie din stânga cardului e semnalul care se vede fără să citești nimic.
-    expect(container.querySelectorAll(".border-l-destructive").length).toBeGreaterThan(0);
+    // Dunga roșie din stânga cardului e semnalul care se vede fără să citești nimic. Testul se
+    // uită la `data-overdue`, nu la clasa de bordură: semnalul e o dungă desenată ÎN card (o
+    // bordură de 4px muta tot textul la dreapta), iar garanția e „cardul e marcat ca restanță",
+    // nu „cardul are exact clasa asta de Tailwind".
+    expect(container.querySelectorAll('[data-overdue="true"]').length).toBeGreaterThan(0);
+  });
+
+  it("[blocant] cardul nu scrie numele firmei de două ori", async () => {
+    getCrmPipeline.mockResolvedValue({
+      ...boardWithValues(),
+      grouped: {
+        new: [
+          makeLead({
+            id: "l1",
+            fullName: "Ion Rusu",
+            company: "Alfa Logistic SRL",
+            dealName: "Alfa Logistic SRL — Training AI operațional",
+          }),
+        ],
+        paid: [],
+      },
+    });
+    render(<CrmPipelinePage />);
+
+    // Titlul păstrează CE se vinde; firma apare o singură dată, pe rândul de dedesubt.
+    expect((await screen.findAllByText("Training AI operațional")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Alfa Logistic SRL — Training AI operațional")).not.toBeInTheDocument();
+    // Pe fiecare tablă (desktop + mobil) firma apare exact o dată, nu de două ori.
+    expect(screen.getAllByText("Alfa Logistic SRL").length).toBe(2);
   });
 
   it("[normal] fără task, cardul nu inventează niciun semnal", async () => {
@@ -276,7 +303,7 @@ describe("Cardul poartă semnalul de lucru", () => {
     const { container } = render(<CrmPipelinePage />);
     await findLeadCards("Alfa Logistic SRL");
 
-    expect(container.querySelectorAll(".border-l-destructive").length).toBe(0);
+    expect(container.querySelectorAll('[data-overdue="true"]').length).toBe(0);
   });
 });
 
