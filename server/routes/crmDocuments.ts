@@ -33,7 +33,8 @@ import { crmProducts } from "../db/schema/crmProducts";
 import { docDocuments } from "../db/schema/docs";
 import { docShareLinks } from "../db/schema/docShareLinks";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { createDocumentRecord } from "./docs";
+import { createDocumentRecord, ensureSystemTemplates } from "./docs";
+import { docmergeTemplates } from "../db/schema/docmergeTemplates";
 
 export const crmDocumentsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmDocumentsRoutes.use("/*", requireAuth);
@@ -44,6 +45,32 @@ export const CRM_DOC_KINDS = {
   contract_servicii: "Contract",
   act_primire_predare: "Act de primire-predare",
 } as const;
+
+/**
+ * Care șablon se potrivește cel mai bine unui tip de act pornit din CRM.
+ *
+ * Preferințele nu sunt arbitrare: din vânzări, un contract se face „în baza ofertei acceptate"
+ * (are clauza care leagă cele două acte), iar actul de primire-predare e cel de SERVICII —
+ * CRM-ul vinde servicii, nu bunuri. Când preferatul lipsește (organizația l-a șters sau are
+ * doar șabloane proprii), luăm orice șablon al tipului, cu prioritate celor proprii: un șablon
+ * scris de firmă bate unul standard, dacă există.
+ */
+const PREFERRED_TEMPLATE: Record<string, string> = {
+  oferta_comerciala: "Ofertă comercială",
+  contract_servicii: "Contract în baza ofertei acceptate",
+  act_primire_predare: "Act de primire-predare — servicii prestate",
+};
+
+export function pickTemplate(
+  kind: string,
+  candidates: { id: string; name: string; isSystem?: boolean | null }[]
+): string | null {
+  if (candidates.length === 0) return null;
+  const preferred = candidates.find((t) => t.name === PREFERRED_TEMPLATE[kind]);
+  if (preferred) return preferred.id;
+  const own = candidates.find((t) => !t.isSystem);
+  return (own ?? candidates[0]).id;
+}
 
 const createInput = z.object({
   leadId: z.string().uuid(),
@@ -270,9 +297,34 @@ crmDocumentsRoutes.post("/", zValidator("json", createInput), async (c) => {
     });
   }
 
+  /**
+   * Șablonul actului. Fără el, `renderBody` întoarce un corp GOL — actul se năștea cu rechizitele
+   * clientului înghețate, cu poziții și total, dar fără niciun text: omul deschidea editorul și
+   * găsea o pagină albă. „Fă un contract din fișa clientului" nu înseamnă „fă un dosar gol".
+   *
+   * Ordinea: ce a ales omul explicit; altfel șablonul preferat al tipului de act; altfel orice
+   * șablon al tipului. Dacă workspace-ul n-are încă biblioteca instalată, o instalăm acum —
+   * aceeași funcție pe care o cheamă ecranul de șabloane la prima deschidere.
+   */
+  let templateId = body.templateId ?? null;
+  if (!templateId) {
+    try {
+      await ensureSystemTemplates(user.tenantId);
+      const candidates = await db
+        .select({ id: docmergeTemplates.id, name: docmergeTemplates.name, isSystem: docmergeTemplates.isSystem })
+        .from(docmergeTemplates)
+        .where(and(eq(docmergeTemplates.tenantId, user.tenantId), eq(docmergeTemplates.kind, body.kind)));
+      templateId = pickTemplate(body.kind, candidates);
+    } catch (err) {
+      // Biblioteca inaccesibilă (schemă în urma codului) nu blochează crearea actului: iese cu
+      // corp gol, ca înainte, dar restul datelor sunt acolo.
+      if (!isMissingSchemaError(err)) throw err;
+    }
+  }
+
   const partyName = snapshot.denumire ?? lead.fullName;
   const created = await createDocumentRecord(user as { id: string; tenantId: string; name?: string }, {
-    templateId: body.templateId ?? null,
+    templateId,
     kind: body.kind,
     title: body.title?.trim() || `${CRM_DOC_KINDS[body.kind]} — ${partyName}`,
     counterparty: {

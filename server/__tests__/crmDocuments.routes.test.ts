@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
@@ -23,6 +23,7 @@ import { tenants, users, leads } from "../db/schema";
 import { crmCompanies } from "../db/schema/crmCompanies";
 import { crmProducts } from "../db/schema/crmProducts";
 import { docDocuments, docDocumentLines } from "../db/schema/docs";
+import { docmergeTemplates } from "../db/schema/docmergeTemplates";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -344,5 +345,115 @@ describe("de la ofertă la contract", () => {
     const [doc] = await testDb.select().from(docDocuments).where(eq(docDocuments.tenantId, tenantA));
     const ctx = JSON.parse(doc.context) as Record<string, string>;
     expect(ctx["document.baza"]).toContain("ofertei nr. 12");
+  });
+});
+
+describe("actul se naște CU TEXT, nu cu pagina albă", () => {
+  /**
+   * Bugul pe care îl închid testele astea, raportat de owner: „nu pot genera din cartonașul
+   * clientului direct contract cu datele sale". Actul SE crea — cu rechizitele înghețate, cu
+   * poziții și total — dar `renderBody` întoarce corp gol când nu primește `templateId`, iar
+   * dialogul nu trimitea niciunul. Omul ajungea în editor și găsea o pagină albă.
+   */
+  it("[blocant] contractul pornit din fișă are corp, cu datele clientului în el", async () => {
+    const res = await app.request("/api/crm/documents", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ leadId: (await makeLead(tenantA, { company: "Agro Nord SRL" })).id, kind: "contract_servicii", items: [] }),
+    });
+    expect(res.status).toBe(201);
+    const doc = await res.json();
+
+    expect(doc.bodyHtml.length).toBeGreaterThan(500);
+    expect(doc.templateId).not.toBeNull();
+    // Datele clientului chiar au intrat în text, nu doar în fișa actului.
+    expect(doc.bodyHtml).toContain("Agro Nord SRL");
+    // Și nu au rămas acolade necompletate pentru câmpurile pe care LE ȘTIM.
+    expect(doc.bodyHtml).not.toContain("{{contraparte.denumire}}");
+  });
+
+  it("[blocant] oferta și actul de primire pornesc din șabloanele lor, nu din același", async () => {
+    const lead = await makeLead(tenantA, { company: "Agro Nord SRL" });
+    const oferta = await (
+      await app.request("/api/crm/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id, kind: "oferta_comerciala", items: [] }),
+      })
+    ).json();
+    const act = await (
+      await app.request("/api/crm/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id, kind: "act_primire_predare", items: [] }),
+      })
+    ).json();
+
+    expect(oferta.bodyHtml.length).toBeGreaterThan(300);
+    expect(act.bodyHtml.length).toBeGreaterThan(300);
+    expect(oferta.templateId).not.toBe(act.templateId);
+    expect(oferta.bodyHtml).toContain("OFERT");
+    expect(act.bodyHtml).toContain("PRIMIRE-PREDARE");
+  });
+
+  it("[blocant] pozițiile alese ajung în TEXTUL actului, nu doar în tabela de linii", async () => {
+    const lead = await makeLead(tenantA, { company: "Agro Nord SRL" });
+    const produs = await makeProduct(tenantA, { name: "Training AI in-house" });
+    const doc = await (
+      await app.request("/api/crm/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          leadId: lead.id,
+          kind: "oferta_comerciala",
+          items: [{ productId: produs.id, quantity: 2 }],
+        }),
+      })
+    ).json();
+
+    // Tabelul pozițiilor e inserat în corp, cu denumirea produsului în el.
+    expect(doc.bodyHtml).toContain("<table");
+    expect(doc.bodyHtml).toContain("Training AI");
+  });
+
+  it("[normal] un șablon cerut explicit îl bate pe cel implicit", async () => {
+    const [ales] = await testDb
+      .select()
+      .from(docmergeTemplates)
+      .where(
+        and(
+          eq(docmergeTemplates.tenantId, tenantA),
+          eq(docmergeTemplates.name, "Contract de prestări servicii")
+        )
+      );
+    const doc = await (
+      await app.request("/api/crm/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          leadId: (await makeLead(tenantA, { company: "Agro Nord SRL" })).id,
+          kind: "contract_servicii",
+          templateId: ales.id,
+          items: [],
+        }),
+      })
+    ).json();
+    expect(doc.templateId).toBe(ales.id);
+  });
+});
+
+describe("alegerea șablonului (funcție pură)", () => {
+  it("[blocant] preferatul tipului învinge, apoi șablonul propriu al firmei", async () => {
+    const { pickTemplate } = await import("../routes/crmDocuments");
+    const candidates = [
+      { id: "sys-1", name: "Contract de prestări servicii", isSystem: true },
+      { id: "sys-2", name: "Contract în baza ofertei acceptate", isSystem: true },
+      { id: "own-1", name: "Contractul nostru", isSystem: false },
+    ];
+    expect(pickTemplate("contract_servicii", candidates)).toBe("sys-2");
+    // Fără preferat, un șablon scris de firmă bate unul standard.
+    expect(pickTemplate("contract_servicii", [candidates[0], candidates[2]])).toBe("own-1");
+    // Fără niciun șablon, actul se creează oricum — dar fără text.
+    expect(pickTemplate("contract_servicii", [])).toBeNull();
   });
 });

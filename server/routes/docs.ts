@@ -348,6 +348,20 @@ export async function createDocumentRecord(
     userName: (user as { name?: string }).name ?? null,
     clientContext: body.context,
   });
+  /**
+   * Contrapartea care NU e în registrul de furnizori — un lead din CRM, o parte scrisă de mână —
+   * își aduce rechizitele cu ea, în `counterparty.snapshot`. Fără rândurile astea, ele ajungeau
+   * doar în fișa actului, iar TEXTUL rămânea cu `{{contraparte.denumire}}` necompletat: exact
+   * plângerea ownerului, „nu pot genera din cartonașul clientului un contract cu datele sale".
+   *
+   * Se completează DOAR golurile: pentru un furnizor din registru, registrul rămâne sursa —
+   * altfel un snapshot vechi trimis de client ar rescrie IBAN-ul real.
+   */
+  for (const [key, value] of Object.entries(body.counterparty?.snapshot ?? {})) {
+    const field = `contraparte.${key}`;
+    if (value && !context[field]) context[field] = String(value);
+  }
+
   const { bodyHtml, templateVersion, placeholders } = await renderBody(
     user.tenantId,
     body.templateId,
@@ -791,7 +805,7 @@ docsRoutes.post("/documents/:id/cancel", zValidator("json", cancelSchema), async
  * inserează doar cele care lipsesc, după (nume + is_system), deci rularea repetată nu duplică
  * nimic și nu atinge ce a editat organizația.
  */
-async function ensureSystemTemplates(tenantId: string): Promise<void> {
+export async function ensureSystemTemplates(tenantId: string): Promise<void> {
   const existing = await db
     .select({
       id: docmergeTemplates.id,

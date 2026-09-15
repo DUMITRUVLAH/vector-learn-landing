@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FileText, Loader2, Plus, Trash2 } from "lucide-react";
 import { Alert, Button, Dialog, Input, Label, Select } from "@/components/ds";
 import { listCrmProducts, type CrmProduct } from "@/lib/api/crm";
+import { listDocTemplates, type DocTemplateListItem } from "@/lib/api/docs";
 import { createCrmDocument, CRM_DOC_KIND_LABELS, type CrmDocKind } from "@/lib/api/crmDocuments";
 import { docPath } from "@/lib/docs/paths";
 
@@ -29,6 +30,17 @@ interface FreeLine {
   quantity: number;
   priceText: string;
 }
+
+/**
+ * Șablonul preferat per tip de act — ACEEAȘI ordine ca pe server (`pickTemplate` din
+ * `server/routes/crmDocuments.ts`). Dacă cele două ar diverge, ecranul ar arăta un șablon și
+ * actul s-ar naște din altul.
+ */
+const PREFERRED_TEMPLATE: Record<string, string> = {
+  oferta_comerciala: "Ofertă comercială",
+  contract_servicii: "Contract în baza ofertei acceptate",
+  act_primire_predare: "Act de primire-predare — servicii prestate",
+};
 
 function money(cents: number): string {
   return new Intl.NumberFormat("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
@@ -55,6 +67,9 @@ export function NewDocumentDialog({
 }) {
   const [kind, setKind] = useState<CrmDocKind>("oferta_comerciala");
   const [products, setProducts] = useState<CrmProduct[]>([]);
+  /** Șabloanele workspace-ului. Fără unul ales, actul se năștea cu pagina albă. */
+  const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
+  const [templateId, setTemplateId] = useState<string>("");
   const [chosen, setChosen] = useState<ChosenProduct[]>([]);
   const [freeLines, setFreeLines] = useState<FreeLine[]>([]);
   const [basedOn, setBasedOn] = useState("");
@@ -65,7 +80,25 @@ export function NewDocumentDialog({
     listCrmProducts()
       .then((r) => setProducts(r.items))
       .catch(() => setProducts([]));
+    // Lista cere `/api/docs/templates`, care instalează biblioteca standard la prima deschidere —
+    // deci un workspace nou are din prima din ce alege.
+    listDocTemplates()
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
   }, []);
+
+  /** Șabloanele potrivite tipului ales. Un contract nu se face dintr-un act de primire. */
+  const kindTemplates = useMemo(() => templates.filter((t) => t.kind === kind), [templates, kind]);
+
+  // Schimbarea tipului reașază șablonul: cel ales pentru ofertă n-are ce căuta pe un contract.
+  // Preferăm același șablon pe care l-ar alege serverul, ca ecranul să nu promită altceva.
+  useEffect(() => {
+    const preferred =
+      kindTemplates.find((t) => t.name === PREFERRED_TEMPLATE[kind]) ??
+      kindTemplates.find((t) => !t.isSystem) ??
+      kindTemplates[0];
+    setTemplateId(preferred?.id ?? "");
+  }, [kind, kindTemplates]);
 
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
@@ -98,6 +131,7 @@ export function NewDocumentDialog({
       const doc = await createCrmDocument({
         leadId,
         kind,
+        templateId: templateId || null,
         items: chosen.map((c) => ({
           productId: c.productId,
           quantity: c.quantity,
@@ -136,6 +170,32 @@ export function NewDocumentDialog({
               </option>
             ))}
           </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="doc-sablon">Șablonul folosit</Label>
+          <Select
+            id="doc-sablon"
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            disabled={kindTemplates.length === 0}
+          >
+            {kindTemplates.length === 0 ? (
+              <option value="">Niciun șablon pentru acest tip</option>
+            ) : (
+              kindTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.isSystem ? " (standard)" : ""}
+                </option>
+              ))
+            )}
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {kindTemplates.length === 0
+              ? "Actul se va crea fără text — completează-l în editor sau adaugă un șablon în biblioteca de acte."
+              : "Textul se completează singur cu datele clientului: denumire, IDNO, adresă, contact, poziții și total."}
+          </p>
         </div>
 
         {kind !== "oferta_comerciala" && (
