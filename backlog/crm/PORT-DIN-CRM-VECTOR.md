@@ -144,6 +144,17 @@ de sistem în cronologie) și reversibilă cu un click din fișă.
 **9. Vizualizările salvate sunt personale.** În referință erau globale, fiindcă
 baza avea un singur utilizator.
 
+**11. Stocul produselor nu e al CRM-ului.** Adăugat peste crm-vector, la cererea
+clientului („produsele să aibă stoc, iar când se vinde un produs, să scadă").
+Cantitatea NU stă în `crm_products`: produsul se leagă de articolul de inventar
+FinDesk (`fin_inventory_items`), unde există deja cost mediu ponderat și jurnal de
+mișcări. Un stoc propriu al CRM-ului ar fi divergat de cel din contabilitate la
+prima corecție făcută doar într-unul, iar firma ar fi avut două adevăruri despre
+aceeași marfă. Scăderea e legată de flagul `is_won` al etapei, e idempotentă prin
+`leads.stock_movement_id` și se întoarce dacă vânzarea e retrasă. Stocul
+insuficient nu blochează câștigarea afacerii — o semnalează. Detalii și motive:
+`server/lib/crm/productStock.ts`.
+
 ## De verificat pe producție
 
 `GET /api/crm/health` (neautentificat) probează toate tabelele CRM, tipul coloanei
