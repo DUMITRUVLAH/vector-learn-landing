@@ -24,6 +24,7 @@ import {
 } from "../../db/schema/par";
 import { users } from "../../db/schema/users";
 import type { ApprovalSheetData } from "./approvalSheet";
+import { loadAttachmentBytes } from "./attachmentStore";
 import { buildDosarPagesDefinition, renderDosarPagesPdf, type DosarSeparator } from "./dosarPdf";
 import { buildParFormDefinition } from "./parFormPdf";
 import { ensureVerifyToken } from "./verifyToken";
@@ -192,19 +193,39 @@ export async function buildDosar(
   // ── Dynamic import of pdf-lib (NEVER top-level — exceljs outage lesson) ──
   const { PDFDocument, StandardFonts } = await import("pdf-lib");
 
-  /** Octeții unui atașament, din data-URL sau de la URL extern. */
-  const attachmentBytes = async (fileUrl: string): Promise<Uint8Array> => {
-    if (fileUrl.startsWith("data:")) {
-      const base64 = fileUrl.split(",")[1];
-      if (!base64) throw new Error("fișier gol");
-      return new Uint8Array(Buffer.from(base64, "base64"));
+  /**
+   * Octeții unui atașament — din Storage (rândurile noi), din data-URL-ul vechi sau de la un URL
+   * extern. Sursa e aceeași cu a rutei de preview, și de aceea trece prin `loadAttachmentBytes`.
+   *
+   * Regresia pe care o repară (raportată 15.09.2026): mutarea fișierelor în Supabase Storage
+   * (2026-09-12) lasă `file_url` NULL pe orice atașament nou, iar dosarul citea DOAR de acolo.
+   * `fetch("")` aruncă „Failed to parse URL from", așa că fiecare act urcat după acea dată intra
+   * în dosar ca pagină-notă „PDF corupt sau inaccesibil — descărcați separat", deși în aplicație
+   * același document se deschidea fără probleme.
+   */
+  const attachmentBytes = async (att: (typeof attachments)[number]): Promise<Uint8Array> => {
+    const fileUrl = att.fileUrl ?? "";
+    // Un URL extern nu e ținut de noi: singura cale spre octeți rămâne rețeaua.
+    if (!att.storagePath && /^https?:\/\//i.test(fileUrl)) {
+      const resp = await fetch(fileUrl);
+      if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+      return new Uint8Array(await resp.arrayBuffer());
     }
-    const resp = await fetch(fileUrl);
-    if (!resp.ok) throw new Error(`fetch ${resp.status}`);
-    return new Uint8Array(await resp.arrayBuffer());
+    const { bytes } = await loadAttachmentBytes(att);
+    return new Uint8Array(bytes);
   };
 
-  const mimeOf = (fileUrl: string): string => fileUrl.match(/^data:([^;,]+)/)?.[1] ?? "";
+  /** Tipul real al fișierului: coloana `mime_type` (scrisă la încărcare) e sursa de adevăr;
+   *  prefixul data-URL rămâne doar pentru rândurile de dinainte de mutarea în Storage. */
+  const mimeOf = (att: { mimeType?: string | null; fileUrl: string | null }): string =>
+    (att.mimeType?.trim() || att.fileUrl?.match(/^data:([^;,]+)/)?.[1] || "").toLowerCase();
+
+  /** Extensia fișierului, chiar când numele de la dosar o poartă în paranteză — dovada de plată se
+   *  salvează ca „Confirmare plată — PAR-2026-0023 (captura-ordin-plata.png)", iar un
+   *  `endsWith(".png")` pe numele ăsta dă fals, deci captura ajungea în dosar ca notă
+   *  „Tipul de fișier PNG) nu poate fi inclus", nu ca pagină. */
+  const extOf = (fileName: string): string =>
+    fileName.toLowerCase().match(/\.([a-z0-9]{1,8})\s*[)\]]?\s*$/)?.[1] ?? "";
 
   /** Ce contribuie fiecare atașament la dosar. Se decide ÎNAINTE de a scrie paginile, ca
    *  separatoarele (inclusiv notele de eroare) să fie cunoscute și să poată fi generate cu
@@ -233,20 +254,19 @@ export async function buildDosar(
       plan.push({ separator: { title: section.slice(0, 90) } });
     }
 
-    const fileUrl = att.fileUrl ?? "";
     const fileName = att.fileName ?? "fișier";
     const shortName = fileName.length > 80 ? `${fileName.slice(0, 79)}…` : fileName;
-    const mime = mimeOf(fileUrl);
-    const lower = fileName.toLowerCase();
-    const isPdf = lower.endsWith(".pdf") || mime === "application/pdf" || mime === "application/x-pdf";
+    const mime = mimeOf(att);
+    const ext = extOf(fileName);
+    const isPdf = ext === "pdf" || mime === "application/pdf" || mime === "application/x-pdf";
     // pdf-lib încorporează DOAR PNG și JPEG. WebP/GIF/AVIF rămân cu nota lor — mai bine o spunem
     // decât să pretindem că le-am pus în dosar.
-    const isPng = mime === "image/png" || lower.endsWith(".png");
-    const isJpg = mime === "image/jpeg" || mime === "image/jpg" || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
+    const isPng = mime === "image/png" || ext === "png";
+    const isJpg = mime === "image/jpeg" || mime === "image/jpg" || ext === "jpg" || ext === "jpeg";
 
     if (isPdf) {
       try {
-        const src = await PDFDocument.load(await attachmentBytes(fileUrl), { ignoreEncryption: true });
+        const src = await PDFDocument.load(await attachmentBytes(att), { ignoreEncryption: true });
         plan.push({ piece: { type: "pdf", pages: src } });
       } catch (err) {
         plan.push({
@@ -267,7 +287,7 @@ export async function buildDosar(
       // poate fi inserată?" Ba da — captura de ecran a ordinului de plată e chiar dovada, deci
       // intră în dosar ca pagină, nu ca trimitere la un fișier pe care auditorul nu-l are.
       try {
-        plan.push({ piece: { type: "image", bytes: await attachmentBytes(fileUrl), format: isPng ? "png" : "jpg" } });
+        plan.push({ piece: { type: "image", bytes: await attachmentBytes(att), format: isPng ? "png" : "jpg" } });
       } catch (err) {
         plan.push({
           separator: {
@@ -287,12 +307,12 @@ export async function buildDosar(
     // doar o trimitere la un fișier pe care auditorul nu-l are. Conversia e pur JS (pdfmake +
     // Tinos, ca fișa aprobărilor), pentru că pe serverless nu există LibreOffice.
     const isDocx =
-      lower.endsWith(".docx") ||
+      ext === "docx" ||
       mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     if (isDocx) {
       try {
         const { renderDocxAsPdf } = await import("./docxToPdf");
-        const converted = await renderDocxAsPdf(await attachmentBytes(fileUrl), { fileName });
+        const converted = await renderDocxAsPdf(await attachmentBytes(att), { fileName });
         plan.push({ piece: { type: "pdf", pages: await PDFDocument.load(converted) } });
       } catch (err) {
         plan.push({
@@ -308,11 +328,11 @@ export async function buildDosar(
       continue;
     }
 
-    const ext = fileName.split(".").pop()?.toUpperCase() ?? "FIȘIER";
+    const extLabel = (ext || fileName.split(".").pop() || "").toUpperCase() || "FIȘIER";
     plan.push({
       separator: {
         title: `Anexă: ${shortName}`,
-        subtitle: `Tipul de fișier ${ext.slice(0, 10)} nu poate fi inclus într-un PDF — descărcați-l separat din cerere.`,
+        subtitle: `Tipul de fișier ${extLabel.slice(0, 10)} nu poate fi inclus într-un PDF — descărcați-l separat din cerere.`,
       },
       piece: { type: "note" },
     });

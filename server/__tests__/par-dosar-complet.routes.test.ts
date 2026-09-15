@@ -33,6 +33,24 @@ vi.mock("../db/client", () => ({
   closeDb: async () => {},
 }));
 
+/**
+ * Bucket-ul `par-attachments`, simulat: cheia e chiar `storage_path`-ul din rând.
+ *
+ * De ce contează aici: din 2026-09-12 atașamentele NU mai stau ca data-URL în baza de date, iar
+ * testele dosarului acopereau doar rândurile vechi. Așa a trecut nevăzută regresia în care fiecare
+ * act urcat după acea dată ajungea în dosar ca notă „descărcați separat".
+ */
+const storageObjects = new Map<string, Buffer>();
+
+vi.mock("../lib/storage/objectStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/storage/objectStore")>()),
+  downloadObject: async (_bucket: string, objectPath: string) => {
+    const bytes = storageObjects.get(objectPath);
+    if (!bytes) throw new Error(`storage_object_missing:${objectPath}`);
+    return bytes;
+  },
+}));
+
 vi.mock("../middleware/requireAuth", () => ({
   requireAuth: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
     c.set("user", { id: userId, tenantId, role: "manager", email: "finance@vector.md" });
@@ -57,6 +75,11 @@ async function applyMigrations(pg: PGlite) {
   }
 }
 
+/** PDF minimal valid, o pagină — octeții bruți (cum stau în Storage). */
+function onePagePdfBytes(): Buffer {
+  return Buffer.from(ONE_PAGE_PDF, "latin1");
+}
+
 /** PDF minimal valid, o pagină. */
 function onePagePdf(): string {
   const pdf = `%PDF-1.4
@@ -72,6 +95,18 @@ startxref
 %%EOF`;
   return `data:application/pdf;base64,${Buffer.from(pdf).toString("base64")}`;
 }
+
+const ONE_PAGE_PDF = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj
+xref
+0 4
+0000000000 65535 f
+trailer<</Size 4/Root 1 0 R>>
+startxref
+0
+%%EOF`;
 
 /** PNG real 2×2 (pdf-lib chiar îl decodează — un PNG inventat ar pica la embed). */
 const PNG_2x2 = Buffer.from(
@@ -284,5 +319,66 @@ describe("Dosarul complet", () => {
     expect(text).toContain("nu poate fi inclus");
 
     await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
+  }, 60_000);
+
+  it("[blocant] un act ținut în Storage (file_url NULL) intră în dosar, nu ca notă „corupt”", async () => {
+    // Regresia raportată pe 15.09.2026: „separat îl poate deschide ca document din platformă",
+    // dar în dosar apărea „PDF corupt sau inaccesibil — Detaliu: Failed to parse URL from" —
+    // adică un `fetch("")` pe `file_url`-ul gol al oricărui fișier urcat după mutarea în Storage.
+    const objectPath = `${tenantId}/1757900000-abcdef-act.pdf`;
+    storageObjects.set(objectPath, onePagePdfBytes());
+    const [att] = await testDb
+      .insert(parAttachments)
+      .values({
+        tenantId,
+        parId,
+        fileUrl: null,
+        storagePath: objectPath,
+        mimeType: "application/pdf",
+        fileName: "Acte de predare-primire_ATIC_august 2026.pdf",
+        kind: "act_of_receipt",
+        uploadedBy: userId,
+      })
+      .returning();
+
+    const text = await pdfText(await dosar());
+    expect(text).toContain("Act de recepție");
+    expect(text).not.toContain("PDF corupt sau inaccesibil");
+    expect(text).not.toContain("Failed to parse URL");
+
+    await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
+    storageObjects.delete(objectPath);
+  }, 60_000);
+
+  it("[blocant] dovada de plată din Storage intră ca IMAGINE, deși extensia stă în paranteză", async () => {
+    // `ParPaymentProofCard` salvează captura sub numele „Confirmare plată — <nr> (fișier.png)".
+    // Verificarea pe extensie se făcea cu `endsWith(".png")`, deci paranteza finală o rata și
+    // dovada — exact documentul pentru care se deschide dosarul — ajungea doar ca notă.
+    const before = await pageCount(await dosar());
+    const objectPath = `${tenantId}/1757900001-abcdef-captura.png`;
+    storageObjects.set(objectPath, PNG_2x2);
+    const [att] = await testDb
+      .insert(parAttachments)
+      .values({
+        tenantId,
+        parId,
+        fileUrl: null,
+        storagePath: objectPath,
+        mimeType: "image/png",
+        fileName: "Confirmare plată — PAR-2026-0023 (captura-ordin-plata.png)",
+        kind: "payment_order",
+        uploadedBy: userId,
+      })
+      .returning();
+
+    const bytes = await dosar();
+    expect(await pageCount(bytes)).toBeGreaterThan(before);
+    expect(bytes.toString("latin1")).toContain("/Subtype /Image");
+    const text = await pdfText(bytes);
+    expect(text).toContain("Ordin de plată");
+    expect(text).not.toContain("nu poate fi inclus");
+
+    await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
+    storageObjects.delete(objectPath);
   }, 60_000);
 });

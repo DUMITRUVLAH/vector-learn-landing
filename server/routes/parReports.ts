@@ -31,6 +31,7 @@ import { users } from "../db/schema/users";
 import { tenants } from "../db/schema/tenants";
 import { buildParWorkbook } from "../lib/par/excelExport";
 import { buildDosar } from "../lib/par/buildDosar";
+import { loadAttachmentBytes } from "../lib/par/attachmentStore";
 import { parAttachments as parAttachmentsTable } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
@@ -862,13 +863,25 @@ parReportsRoutes.get("/audit-package.zip", async (c) => {
     // Actele originale, cu numele lor real — pe lângă dosarul PDF. Auditul cere uneori factura ca
     // fișier (s-o deschidă în programul lui de contabilitate), nu o pagină într-un PDF combinat.
     const attachmentRows = await db
-      .select({ fileName: parAttachmentsTable.fileName, fileUrl: parAttachmentsTable.fileUrl, kind: parAttachmentsTable.kind })
+      .select({
+        fileName: parAttachmentsTable.fileName,
+        fileUrl: parAttachmentsTable.fileUrl,
+        storagePath: parAttachmentsTable.storagePath,
+        mimeType: parAttachmentsTable.mimeType,
+        kind: parAttachmentsTable.kind,
+      })
       .from(parAttachmentsTable)
       .where(and(eq(parAttachmentsTable.tenantId, tenantId), eq(parAttachmentsTable.parId, par.id)));
     for (const att of attachmentRows) {
-      const m = att.fileUrl?.match(/^data:([^;]+);base64,(.*)$/s);
-      if (!m) continue;
-      zip.file(`documente/${folder}/${safe(att.fileName || att.kind || "document")}`, m[2], { base64: true });
+      // Octeții vin de unde stau azi: Storage pentru fișierele urcate după 2026-09-12, data-URL
+      // pentru cele vechi. Citind doar data-URL-ul, pachetul livra un folder `documente/` GOL
+      // pentru orice cerere recentă — tăcut, fiindcă rândul fără base64 era pur și simplu sărit.
+      try {
+        const { bytes } = await loadAttachmentBytes(att);
+        zip.file(`documente/${folder}/${safe(att.fileName || att.kind || "document")}`, bytes);
+      } catch {
+        // Un singur fișier necitibil (URL extern, obiect șters din bucket) nu oprește pachetul.
+      }
     }
   }
 

@@ -33,6 +33,18 @@ vi.mock("../db/client", () => ({
   get db() { return testDb; },
   closeDb: async () => {},
 }));
+/** Bucket-ul `par-attachments`, simulat: cheia e `storage_path`-ul din rând. */
+const storageObjects = new Map<string, Buffer>();
+
+vi.mock("../lib/storage/objectStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/storage/objectStore")>()),
+  downloadObject: async (_bucket: string, objectPath: string) => {
+    const bytes = storageObjects.get(objectPath);
+    if (!bytes) throw new Error(`storage_object_missing:${objectPath}`);
+    return bytes;
+  },
+}));
+
 vi.mock("../middleware/requireAuth", () => ({
   requireAuth: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
     c.set("user", session);
@@ -108,7 +120,18 @@ beforeAll(async () => {
     return par.id;
   };
 
-  await mkPar("PAR-2026-0601", "2026-06-10T00:00:00Z", 120000);
+  const parWithStorageDoc = await mkPar("PAR-2026-0601", "2026-06-10T00:00:00Z", 120000);
+  // Un act aflat unde stau fișierele din 2026-09-12 încoace: în Storage, cu `file_url` NULL.
+  storageObjects.set(`${tenantId}/1757900000-abcdef-contract.pdf`, Buffer.from("%PDF-1.4\n"));
+  await testDb.insert(parAttachments).values({
+    tenantId,
+    parId: parWithStorageDoc,
+    kind: "contract",
+    fileName: "contract-prestari-servicii.pdf",
+    fileUrl: null,
+    storagePath: `${tenantId}/1757900000-abcdef-contract.pdf`,
+    mimeType: "application/pdf",
+  });
   await mkPar("PAR-2026-0602", "2026-06-20T00:00:00Z", 340000);
   // În afara perioadei cerute mai jos — nu are ce căuta în pachet.
   await mkPar("PAR-2026-0603", "2026-09-01T00:00:00Z", 50000);
@@ -124,6 +147,13 @@ describe("GET /api/par/reports/audit-package.zip", () => {
     expect(entries).toContain("CUPRINS.txt");
     expect(entries.some((e) => e.startsWith("dosare/PAR-2026-0601"))).toBe(true);
     expect(entries.some((e) => e.startsWith("documente/PAR-2026-0601/"))).toBe(true);
+  }, 120_000);
+
+  it("[blocant] actele ținute în Storage ajung în `documente/`, nu doar cele vechi din baza de date", async () => {
+    // Pachetul citea exclusiv data-URL-ul base64 și sărea tăcut peste orice rând fără el — adică
+    // peste TOATE fișierele urcate după mutarea în Supabase Storage. Un audit primea folderul gol.
+    const entries = await packageEntries("?from=2026-06-01&to=2026-06-30");
+    expect(entries).toContain("documente/PAR-2026-0601/contract-prestari-servicii.pdf");
   }, 120_000);
 
   it("nu include cereri din afara perioadei", async () => {
