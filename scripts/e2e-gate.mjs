@@ -101,6 +101,63 @@ const AREAS = {
     routes: ["/business/fin/invoices", "/business/fin/expenses", "/business/fin/captures", "/business/fin/parties", "/business/fin/statement"],
     deep: ["e2e-crud.mjs"],
   },
+  crm: {
+    label: "CRM",
+    // Zona lipsea cu totul: orice schimbare în CRM (rute, ecrane, client) nu potrivea nicio
+    // zonă, deci poarta rula doar nucleul și raporta VERDE fără să atingă un singur ecran de
+    // vânzări — exact greșeala descrisă mai sus pentru PAR, repetată pe alt modul.
+    match: /(server\/(routes|lib)\/crm|server\/db\/schema\/crm|src\/(pages\/business\/crm|components\/crm|lib\/(api\/)?crm))/i,
+    // Fiecare verificare invocă ruta ȘI îi validează FORMA — un 200 cu alt corp e o rută ruptă
+    // pe care o poartă „doar status" ar declara sănătoasă.
+    api: [
+      // Tabla: coloanele vin din etapele tenantului, iar contoarele sunt pe setul COMPLET.
+      ["GET", "/api/crm/leads/pipeline", (j) => !!j?.grouped && !!j?.counts && Array.isArray(j?.stages)],
+      // Filtrele tablei se aplică PE SERVER: cu un termen imposibil, toate coloanele sunt 0 și
+      // răspunsul se declară filtrat. Dacă filtrarea ar redeveni locală, `counts` ar rămâne pline.
+      [
+        "GET",
+        "/api/crm/leads/pipeline?search=zzzz-nimeni-nu-se-numeste-asa",
+        (j) => j?.segmented === true && Object.values(j?.counts ?? {}).every((n) => n === 0),
+      ],
+      ["GET", "/api/crm/leads", (j) => Array.isArray(j?.items) && typeof j?.total === "number"],
+      // Segmentarea (cerința 4): opțiunile sunt liste, iar consumul e un interval sau `null`.
+      [
+        "GET",
+        "/api/crm/leads/segments",
+        (j) => Array.isArray(j?.industries) && Array.isArray(j?.regions) && Array.isArray(j?.products),
+      ],
+      // „segments" nu are voie să fie citit ca un id de lead (ordinea rutelor în crmLeads.ts).
+      ["GET", "/api/crm/leads/segments", (j) => !j?.error],
+      ["GET", "/api/crm/pipelines", (j) => Array.isArray(j?.items)],
+      ["GET", "/api/crm/stages", (j) => Array.isArray(j?.items)],
+      ["GET", "/api/crm/products", (j) => Array.isArray(j?.items)],
+      ["GET", "/api/crm/tasks/today", (j) => !!j],
+      ["GET", "/api/crm/companies", (j) => Array.isArray(j?.items)],
+      ["GET", "/api/crm/reports", (j) => !!j],
+      ["GET", "/api/crm/saved-views", (j) => Array.isArray(j?.items)],
+      ["GET", "/api/crm/permissions", (j) => Array.isArray(j?.permissions)],
+      // Echipa: ecranele CRM cereau ruta asta de luni de zile, dar nu era montată — hook-ul
+      // rămânea cu o listă goală, iar responsabilul apărea „—" peste tot. O listă goală arată
+      // exact ca o echipă fără oameni, deci nimic nu semnala problema.
+      ["GET", "/api/team/members", (j) => Array.isArray(j) && j.every((m) => typeof m?.fullName === "string")],
+      // Acțiunile în masă resping o selecție goală — validarea e pe server, nu doar în buton.
+      ["POST", "/api/crm/leads/bulk", () => true, { body: { leadIds: [], action: "assign" }, status: 400 }],
+      // Exportul chiar întoarce un CSV: antet în română, BOM pentru Excel și contorul de rânduri.
+      [
+        "GET",
+        "/api/crm/leads/export.csv",
+        (text, _status, type) => type.includes("text/csv") && text.startsWith("\ufeffNume;"),
+        { kind: "text" },
+      ],
+    ],
+    routes: [
+      "/business/crm/pipeline",
+      "/business/crm/astazi",
+      "/business/crm/clienti",
+      "/business/crm/produse",
+      "/business/crm/rapoarte",
+    ],
+  },
   platform: {
     label: "Consola platformă",
     match: /(server\/routes\/(platform|impersonation|telemetry|modules)|src\/pages\/business\/Platform|src\/lib\/(platform|modules))/i,
@@ -312,15 +369,30 @@ async function apiSweep(base, areas, ctx) {
 
   const checks = [...CORE_API, ...areas.flatMap((a) => AREAS[a].api)];
   const seen = new Set();
-  for (const [method, url, shape] of checks) {
-    if (seen.has(`${method} ${url}`)) continue;
-    seen.add(`${method} ${url}`);
-    const res = await ctx.fetch(url, { method });
+  // O verificare e `[metodă, url, formă]` sau `[metodă, url, formă, opts]`, unde `opts` poate
+  // avea `body` (JSON trimis), `status` (așteptat, implicit 200) și `kind: "text"` pentru
+  // răspunsurile care NU sunt JSON (ex. exportul CSV). Fără `status`, o poartă nu poate verifica
+  // niciodată o validare — iar o validare pe care nimeni n-o probează dispare tăcut la prima
+  // refactorizare.
+  for (const [method, url, shape, opts = {}] of checks) {
+    const key = `${method} ${url}${opts.body ? ` ${JSON.stringify(opts.body)}` : ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const expectedStatus = opts.status ?? 200;
+    const res = await ctx.fetch(url, {
+      method,
+      ...(opts.body ? { data: opts.body, headers: { "content-type": "application/json" } } : {}),
+    });
     const type = res.headers()["content-type"] ?? "";
+    if (opts.kind === "text") {
+      const text = await res.text();
+      check(key, res.status() === expectedStatus && shape(text, res.status(), type), `status ${res.status()}`);
+      continue;
+    }
     // HTML pe /api/* = ruta nu e montată și cererea a căzut pe fallback-ul SPA.
     // Exact bug-ul care se manifestă în browser ca `JSON.parse('<!doctype …')`.
     if (!type.includes("application/json")) {
-      check(`${method} ${url}`, false, `content-type ${type || "necunoscut"} (rută nemontată?)`);
+      check(key, false, `content-type ${type || "necunoscut"} (rută nemontată?)`);
       continue;
     }
     let json = null;
@@ -329,7 +401,7 @@ async function apiSweep(base, areas, ctx) {
     } catch {
       /* corp gol */
     }
-    check(`${method} ${url}`, res.status() === 200 && shape(json), `status ${res.status()}`);
+    check(key, res.status() === expectedStatus && shape(json, res.status()), `status ${res.status()}`);
   }
 }
 

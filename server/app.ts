@@ -67,6 +67,7 @@ import { parMeRoutes } from "./routes/parMe";
 // VM1-13: AI prefill for PAR form fields
 import { parAiPrefillRoutes } from "./routes/parAiPrefill";
 import { parMembersRoutes } from "./routes/parMembers";
+import { teamRoutes } from "./routes/team";
 import { parPayersRoutes } from "./routes/parPayers";
 import { parProfilesRoutes } from "./routes/parProfiles";
 import { parSuggestionsRoutes } from "./routes/parSuggestions";
@@ -370,6 +371,7 @@ app.use("/api/par/*", requireModuleEntitlement("par"));
 app.route("/api/par/me", parMeRoutes);
 app.route("/api/par/ai-prefill", parAiPrefillRoutes);
 app.route("/api/par/config-import", parConfigImportRoutes);
+app.route("/api/team", teamRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/payers", parPayersRoutes);
 app.route("/api/par/profiles", parProfilesRoutes);
