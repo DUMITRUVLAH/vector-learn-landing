@@ -8,6 +8,8 @@
  *                                            Coloanele vin din `crm_pipeline_stages`, per tenant
  *                                            (nu mai sunt hardcodate) — vezi server/lib/crm/stages.ts.
  * GET    /api/crm/leads                   — listă paginată, cu căutare + filtre + sortare
+ * GET    /api/crm/leads/segments          — valorile de segmentare care există în baza tenantului
+ *                                            (industrie, regiune, mărime, consum, produse)
  * GET    /api/crm/leads/:id               — un lead (404 dacă nu e în tenant)
  * GET    /api/crm/leads/:id/detail        — lead + istoric + etapa curentă, într-o singură cerere
  * POST   /api/crm/leads                   — creare
@@ -43,6 +45,12 @@ import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
 import { crmPipelines, type CrmPipeline } from "../db/schema/crmPipelines";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { enrollByStage, stopCadencesOnReply } from "../lib/crm/cadences";
+import {
+  hasSegmentFilters,
+  leadSegmentOptions,
+  parseSegmentFilters,
+  segmentConditions,
+} from "../lib/crm/segments";
 import { logCrmAudit } from "../lib/crm/audit";
 
 /**
@@ -258,9 +266,18 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       .orderBy(asc(crmPipelineStages.orderIndex));
     const stageKeys = stageRows.map((s) => s.key);
 
-    const leadScope = active
-      ? and(eq(leads.tenantId, tenantId), leadsInPipeline(active.id, active.isDefault))
-      : eq(leads.tenantId, tenantId);
+    // Segmentarea (cerința 4) se aplică ȘI pe tablă, nu doar în listă: altfel „arată-mi
+    // industria energetică" ar da două răspunsuri diferite în cele două vederi ale aceluiași
+    // ecran. Numărătorile și sumele de mai jos folosesc același `leadScope`, deci coloanele
+    // arată totalul SEGMENTULUI, nu al pâlniei întregi.
+    const segments = parseSegmentFilters(c.req.query());
+    const scopeConditions = [eq(leads.tenantId, tenantId)];
+    if (active) {
+      const pipelineCond = leadsInPipeline(active.id, active.isDefault);
+      if (pipelineCond) scopeConditions.push(pipelineCond);
+    }
+    scopeConditions.push(...segmentConditions(tenantId, segments));
+    const leadScope = and(...scopeConditions);
 
     // O SINGURĂ interogare pentru carduri, nu una pe etapă.
     // De ce contează: pe Vercel pool-ul e `max: 3` cu `connect_timeout: 10`
@@ -326,6 +343,9 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       totalValueCents,
       pipelines: pipelineRows,
       pipelineId: active?.id ?? null,
+      // Interfața scrie „N leaduri în segment" în loc de „N leaduri" când numerele de mai sus
+      // descriu un subset filtrat — altfel un total mai mic pare o pierdere de date.
+      segmented: hasSegmentFilters(segments),
     });
   } catch (e) {
     if (isMissingSchemaError(e)) {
@@ -358,6 +378,29 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       { error: "crm_pipeline_failed", reason: (e instanceof Error ? e.message : String(e)).slice(0, 300) },
       500
     );
+  }
+});
+
+// ─── GET /segments — valorile de segmentare existente (ÎNAINTE de /:id) ──────
+
+/**
+ * Opțiunile pentru bara de segmentare: industriile, regiunile și mărimile CHIAR introduse în
+ * `crm_companies`, intervalul real de consum și produsele active din catalog.
+ *
+ * Degradează în gol, nu în 500: un workspace unde `crm_companies` n-a ajuns încă (prod-ul
+ * aplică migrările cu întârziere) trebuie să vadă bara fără opțiuni firmografice, nu un ecran
+ * roșu peste tabla de leaduri.
+ */
+crmLeadsRoutes.get("/segments", async (c) => {
+  const user = c.get("user");
+  try {
+    return c.json(await leadSegmentOptions(user.tenantId));
+  } catch (e) {
+    if (isMissingSchemaError(e)) {
+      console.error("[crm/segments] schemă incompletă în bază:", e instanceof Error ? e.message : e);
+      return c.json({ industries: [], regions: [], sizes: [], products: [], consumption: null, schemaLag: true });
+    }
+    throw e;
   }
 });
 
@@ -414,6 +457,11 @@ crmLeadsRoutes.get("/", async (c) => {
   if (stage) conditions.push(eq(leads.stage, stage));
   if (source && isLeadSource(source)) conditions.push(eq(leads.source, source));
   if (assignedTo) conditions.push(eq(leads.assignedTo, assignedTo));
+
+  // Segmentarea firmografică (cerința 4): industrie, regiune, mărime, consum anual — prin firma
+  // leadului — plus produsul din catalog. Când niciun filtru nu e activ, interogarea rămâne
+  // exact cea de dinainte: nu atingem `crm_companies` degeaba.
+  conditions.push(...segmentConditions(tenantId, parseSegmentFilters(c.req.query())));
 
   // Filtrul pe pâlnie e citit prin aceeași regulă ca pe kanban: pentru implicită intră și
   // leadurile fără `pipeline_id` (cele dinainte de migrarea 0166).

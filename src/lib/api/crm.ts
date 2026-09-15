@@ -9,6 +9,7 @@
  * există deja în acest worktree, nu doar ca spec) — nu inventa alte nume.
  */
 import { api } from "@/lib/api";
+import { crmSegmentQuery, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
 
 // ─── Leaduri ──────────────────────────────────────────────────────────────────
 
@@ -81,13 +82,40 @@ export interface CrmPipelineResponse {
   pipelines?: CrmPipeline[];
   /** Pâlnia efectiv afișată (cea cerută sau implicita). */
   pipelineId?: string | null;
+  /** `true` când numărătorile descriu un SEGMENT filtrat, nu pâlnia întreagă. */
+  segmented?: boolean;
+}
+
+// ─── Segmentare (cerința 4: industrie, regiune, mărime, consum, produs) ───────
+
+// Tipul și funcțiile pure stau în `src/lib/crm/segmentFilters.ts` — aici rămâne doar cererea
+// către server (vezi comentariul de acolo pentru motiv).
+export type { CrmSegmentFilters } from "@/lib/crm/segmentFilters";
+
+export interface CrmSegmentOptions {
+  industries: string[];
+  regions: string[];
+  sizes: string[];
+  products: { id: string; name: string }[];
+  /** Intervalul real de consum din baza workspace-ului; `null` când nicio firmă n-are cifra. */
+  consumption: { min: number; max: number } | null;
+  schemaLag?: boolean;
+}
+
+/** Valorile care CHIAR există în baza workspace-ului — un filtru nu oferă opțiuni moarte. */
+export function getCrmSegmentOptions(): Promise<CrmSegmentOptions> {
+  return api<CrmSegmentOptions>("/api/crm/leads/segments");
 }
 
 /** `pipelineId` absent = pâlnia implicită a workspace-ului. Un id străin → 404 (nu tabla proprie). */
-export function getCrmPipeline(pipelineId?: string | null): Promise<CrmPipelineResponse> {
-  return api<CrmPipelineResponse>(
-    `/api/crm/leads/pipeline${pipelineId ? `?pipelineId=${encodeURIComponent(pipelineId)}` : ""}`
-  );
+export function getCrmPipeline(
+  pipelineId?: string | null,
+  segments?: CrmSegmentFilters
+): Promise<CrmPipelineResponse> {
+  const qs = new URLSearchParams(crmSegmentQuery(segments));
+  if (pipelineId) qs.set("pipelineId", pipelineId);
+  const suffix = qs.toString();
+  return api<CrmPipelineResponse>(`/api/crm/leads/pipeline${suffix ? `?${suffix}` : ""}`);
 }
 
 // ─── Pâlnii (multiple per workspace) ──────────────────────────────────────────
@@ -192,7 +220,7 @@ export function deleteCrmStage(id: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/api/crm/stages/${id}`, { method: "DELETE" });
 }
 
-export interface CrmLeadListParams {
+export interface CrmLeadListParams extends CrmSegmentFilters {
   /** Filtrează lista pe o pâlnie (pentru implicită intră și leadurile fără `pipelineId`). */
   pipelineId?: string;
   page?: number;
@@ -587,7 +615,7 @@ export function removeCrmLeadTag(id: string): Promise<{ ok: true }> {
 // ─── Vizualizări salvate (filtre cu nume) ──────────────────────────────────────
 
 /** Filtrele salvate — aceleași chei ca bara de filtre din pipeline. */
-export interface CrmSavedViewFilters {
+export interface CrmSavedViewFilters extends CrmSegmentFilters {
   search?: string;
   source?: string;
   stage?: string;

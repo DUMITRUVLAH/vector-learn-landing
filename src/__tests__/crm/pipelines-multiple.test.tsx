@@ -177,7 +177,9 @@ describe("Selectorul de pâlnie", () => {
     fireEvent.change(screen.getByLabelText("Pâlnie"), { target: { value: B2B.id } });
 
     await findLeadCards("Corporate SRL");
-    expect(getCrmPipeline).toHaveBeenLastCalledWith(B2B.id);
+    // Al doilea argument e segmentul firmografic (cerința 4): gol aici, dar trimis mereu, ca
+    // tabla și lista să ceară serverului exact aceleași filtre.
+    expect(getCrmPipeline).toHaveBeenLastCalledWith(B2B.id, {});
     // Leadul celeilalte pâlnii dispare de pe tablă — nu rămâne amestecat.
     expect(screen.queryAllByText("Maria Popescu")).toHaveLength(0);
   });
@@ -209,7 +211,7 @@ describe("Administrarea pâlniilor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Adaugă" }));
 
     await waitFor(() => expect(createCrmPipeline).toHaveBeenCalledWith("B2B"));
-    await waitFor(() => expect(getCrmPipeline).toHaveBeenLastCalledWith(B2B.id));
+    await waitFor(() => expect(getCrmPipeline).toHaveBeenLastCalledWith(B2B.id, {}));
   });
 
   it("[blocant] implicita nu are buton de ștergere, celelalte da", async () => {

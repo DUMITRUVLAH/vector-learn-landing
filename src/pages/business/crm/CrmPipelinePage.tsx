@@ -34,6 +34,7 @@ import {
   type CrmPipeline,
   type CrmSavedViewFilters,
 } from "@/lib/api/crm";
+import { cleanCrmSegments, crmSegmentCount, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
 import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, crmSourceLabel, stageColorClasses } from "@/components/crm/constants";
 import { formatCents, leadValueToCents, leadTitle } from "@/components/crm/format";
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
@@ -42,6 +43,7 @@ import { StageEditorDialog } from "@/components/crm/StageEditorDialog";
 import { PipelineManagerDialog } from "@/components/crm/PipelineManagerDialog";
 import { LeadListView } from "@/components/crm/LeadListView";
 import { SavedViewsMenu } from "@/components/crm/SavedViewsMenu";
+import { SegmentFilterBar } from "@/components/crm/SegmentFilterBar";
 import { RemindersBell } from "@/components/crm/RemindersBell";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useCrmPermissions } from "@/hooks/useCrmPermissions";
@@ -99,7 +101,14 @@ export function CrmPipelinePage() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [onlyMine, setOnlyMine] = useState(false);
 
-  const loadPipeline = useCallback(async (opts?: { silent?: boolean; pipelineId?: string | null }) => {
+  /** Segmentarea (cerința 4) se aplică PE SERVER, în ambele vederi — spre deosebire de filtrele
+   *  de mai sus, care cern cardurile deja aduse. Motivul: firmografia stă pe firma leadului, iar
+   *  browserul n-are firmele. `segmentsRef` există pentru același motiv ca `activePipelineRef`:
+   *  `loadPipeline` are lista de dependențe goală și ar citi altfel o valoare învechită. */
+  const [segments, setSegments] = useState<CrmSegmentFilters>({});
+  const segmentsRef = useRef<CrmSegmentFilters>({});
+
+  const loadPipeline = useCallback(async (opts?: { silent?: boolean; pipelineId?: string | null; segments?: CrmSegmentFilters }) => {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     setError(null);
@@ -107,7 +116,7 @@ export function CrmPipelinePage() {
       // `pipelineId` explicit bate state-ul: la comutarea din selector, `activePipelineId` încă
       // n-a apucat să se propage prin render (stale closure) — exact capcana de la drag & drop.
       const requested = opts && "pipelineId" in opts ? opts.pipelineId : activePipelineRef.current;
-      const res = await getCrmPipeline(requested);
+      const res = await getCrmPipeline(requested, opts?.segments ?? segmentsRef.current);
       // Lista își cere singură datele de la server; semnalul ăsta o face să se resincronizeze
       // după orice schimbare venită din altă parte (fișa leadului, mutare, lead nou).
       setListRefreshToken((t) => t + 1);
@@ -159,6 +168,7 @@ export function CrmPipelinePage() {
     onlyMine: onlyMine || undefined,
     pipelineId: activePipelineId,
     view: viewMode,
+    ...segments,
   };
 
   /** Aplicarea unei vizualizări salvate: filtrele, vederea ȘI pâlnia — altfel „B2B restante"
@@ -167,8 +177,28 @@ export function CrmPipelinePage() {
     setSearch(filters.search ?? "");
     setSourceFilter(filters.source ?? "all");
     setOnlyMine(filters.onlyMine ?? false);
+    // Segmentul face parte din vizualizare: „Industria energetică, peste 500 MWh" redeschisă
+    // fără segment ar arăta toată baza sub un nume care promite altceva.
+    applySegments({
+      productId: filters.productId ?? undefined,
+      industry: filters.industry ?? undefined,
+      region: filters.region ?? undefined,
+      companySize: filters.companySize ?? undefined,
+      minConsumptionKwh: filters.minConsumptionKwh ?? undefined,
+      maxConsumptionKwh: filters.maxConsumptionKwh ?? undefined,
+    });
     if (filters.view) switchView(filters.view);
     if (filters.pipelineId && filters.pipelineId !== activePipelineId) switchPipeline(filters.pipelineId);
+  }
+
+  /** Schimbarea segmentului: ref-ul întâi, apoi o reîncărcare SILENȚIOASĂ a tablei. Silențioasă
+   *  fiindcă filtrarea e o mișcare de lucru, nu o intrare în ecran — un spinner pe toată pagina
+   *  la fiecare bifă ar face bara de segmentare greu de folosit. Lista își cere singură pagina. */
+  function applySegments(next: CrmSegmentFilters) {
+    const cleaned = cleanCrmSegments(next);
+    segmentsRef.current = cleaned;
+    setSegments(cleaned);
+    void loadPipeline({ silent: true, segments: cleaned });
   }
 
   /** Comutarea pâlniei: ref-ul întâi (îl citește `loadPipeline`), apoi cererea explicită. */
@@ -202,6 +232,10 @@ export function CrmPipelinePage() {
     return true;
   }
   const hasActiveFilters = search.trim() !== "" || sourceFilter !== "all" || onlyMine;
+  /** Separat de `hasActiveFilters`: segmentul e cernut DE SERVER, deci numărătorile pe coloană
+   *  rămân cele reale ale segmentului (nu se recalculează din cardurile încărcate). Contează
+   *  doar pentru starea goală — „Niciun lead încă" ar fi o minciună când tocmai ai filtrat. */
+  const hasSegments = crmSegmentCount(segments) > 0;
 
   /**
    * Mută leadul instant în state local (înainte de răspunsul serverului) și recalculează
@@ -390,7 +424,7 @@ export function CrmPipelinePage() {
             </Button>
           </div>
         </Alert>
-      ) : totalLeads === 0 && !hasActiveFilters && viewMode === "kanban" ? (
+      ) : totalLeads === 0 && !hasActiveFilters && !hasSegments && viewMode === "kanban" ? (
         <EmptyState
           icon={<Users className="h-6 w-6" />}
           title="Niciun lead încă"
@@ -442,6 +476,11 @@ export function CrmPipelinePage() {
             </div>
           </div>
 
+          {/* Segmentarea firmografică — spre deosebire de bara de mai sus, întreabă serverul. */}
+          <div className="mb-4">
+            <SegmentFilterBar value={segments} onChange={applySegments} />
+          </div>
+
           {viewMode === "list" ? (
             <LeadListView
               pipelineId={activePipelineId}
@@ -449,6 +488,7 @@ export function CrmPipelinePage() {
               search={search}
               source={sourceFilter}
               assignedTo={onlyMine ? currentUserId : null}
+              segments={segments}
               memberNames={memberNames}
               onOpenLead={setSelectedLeadId}
               refreshToken={listRefreshToken}

@@ -17,6 +17,7 @@ import { Loader2, AlertCircle, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Ph
 import { Alert, Button, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { listCrmLeads, type CrmLead, type CrmLeadListParams, type CrmStage } from "@/lib/api/crm";
+import type { CrmSegmentFilters } from "@/lib/crm/segmentFilters";
 import { crmStageLabel, crmSourceLabel } from "@/components/crm/constants";
 import { formatCents, leadTitle } from "@/components/crm/format";
 
@@ -31,6 +32,9 @@ export interface LeadListViewProps {
   search: string;
   source: string;
   assignedTo: string | null;
+  /** Segmentarea firmografică (industrie, regiune, mărime, consum) + produs — cernută de server
+   *  prin firma leadului, la fel ca pe tablă. Aceleași filtre, același rezultat în ambele vederi. */
+  segments?: CrmSegmentFilters;
   /** Numele responsabililor, pentru coloana „Responsabil" (id-ul singur nu spune nimic). */
   memberNames: Record<string, string>;
   onOpenLead: (leadId: string) => void;
@@ -50,6 +54,7 @@ export function LeadListView({
   search,
   source,
   assignedTo,
+  segments,
   memberNames,
   onOpenLead,
   refreshToken = 0,
@@ -66,15 +71,19 @@ export function LeadListView({
 
   // Orice schimbare de filtru readuce lista la prima pagină: altfel un filtru nou aplicat pe
   // pagina 7 ar arăta un ecran gol, deși există rezultate.
+  /** Serializat: `segments` e un obiect nou la fiecare render al părintelui, iar ca dependență
+   *  directă ar reîncărca lista la nesfârșit. Cheia se schimbă doar când se schimbă filtrele. */
+  const segmentKey = JSON.stringify(segments ?? {});
+
   useEffect(() => {
     setPage(1);
-  }, [search, source, assignedTo, pipelineId, pageSize]);
+  }, [search, source, assignedTo, pipelineId, pageSize, segmentKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params: CrmLeadListParams = { page, pageSize, sort, dir };
+      const params: CrmLeadListParams = { page, pageSize, sort, dir, ...(JSON.parse(segmentKey) as CrmSegmentFilters) };
       if (pipelineId) params.pipelineId = pipelineId;
       if (search.trim()) params.search = search.trim();
       if (source !== "all") params.source = source;
@@ -88,7 +97,7 @@ export function LeadListView({
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sort, dir, pipelineId, search, source, assignedTo]);
+  }, [page, pageSize, sort, dir, pipelineId, search, source, assignedTo, segmentKey]);
 
   useEffect(() => {
     void load();

@@ -36,6 +36,16 @@ const filtersSchema = z.object({
   view: z.enum(["kanban", "list"]).optional(),
   sort: z.string().max(40).optional(),
   dir: z.enum(["asc", "desc"]).optional(),
+  // Segmentarea (cerința 4) face parte din filtrele salvate: „Industria energetică, peste
+  // 500 MWh" e exact genul de vizualizare pe care un om o redeschide zilnic. Zod ELIMINĂ tăcut
+  // cheile nedeclarate, deci fără rândurile astea vizualizarea s-ar salva fără segment și ar
+  // arăta altceva la redeschidere — o minciună tăcută, nu o eroare.
+  productId: z.string().uuid().optional().nullable(),
+  industry: z.string().max(120).optional().nullable(),
+  region: z.string().max(120).optional().nullable(),
+  companySize: z.string().max(40).optional().nullable(),
+  minConsumptionKwh: z.number().nonnegative().optional().nullable(),
+  maxConsumptionKwh: z.number().nonnegative().optional().nullable(),
 });
 
 const createSchema = z.object({
