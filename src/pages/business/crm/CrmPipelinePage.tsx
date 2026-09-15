@@ -490,6 +490,10 @@ export function CrmPipelinePage() {
               assignedTo={onlyMine ? currentUserId : null}
               segments={segments}
               memberNames={memberNames}
+              members={teamMembers.map((m) => ({ id: m.id, fullName: m.fullName }))}
+              canBulkEdit={can("leads.edit")}
+              onToast={setToast}
+              onBulkDone={() => void loadPipeline({ silent: true })}
               onOpenLead={setSelectedLeadId}
               refreshToken={listRefreshToken}
             />

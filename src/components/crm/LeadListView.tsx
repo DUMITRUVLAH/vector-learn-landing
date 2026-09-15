@@ -14,10 +14,11 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, AlertCircle, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Phone, Mail } from "lucide-react";
-import { Alert, Button, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
+import { Alert, Button, Checkbox, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { listCrmLeads, type CrmLead, type CrmLeadListParams, type CrmStage } from "@/lib/api/crm";
 import type { CrmSegmentFilters } from "@/lib/crm/segmentFilters";
+import { LeadBulkBar } from "@/components/crm/LeadBulkBar";
 import { crmStageLabel, crmSourceLabel } from "@/components/crm/constants";
 import { formatCents, leadTitle } from "@/components/crm/format";
 
@@ -37,6 +38,13 @@ export interface LeadListViewProps {
   segments?: CrmSegmentFilters;
   /** Numele responsabililor, pentru coloana „Responsabil" (id-ul singur nu spune nimic). */
   memberNames: Record<string, string>;
+  /** Echipa, pentru acțiunile în masă. Absentă = lista nu oferă selecție multiplă. */
+  members?: { id: string; fullName: string }[];
+  /** `false` ascunde selecția multiplă — dreptul real e verificat pe server (`leads.edit`). */
+  canBulkEdit?: boolean;
+  /** După o acțiune în masă: părintele își reîncarcă tabla (numărătorile s-au schimbat). */
+  onBulkDone?: () => void;
+  onToast?: (t: { kind: "success" | "error"; message: string }) => void;
   onOpenLead: (leadId: string) => void;
   /** Crește când ceva din afară a schimbat leadurile (mutare, fișă închisă) → reîncărcare. */
   refreshToken?: number;
@@ -56,6 +64,10 @@ export function LeadListView({
   assignedTo,
   segments,
   memberNames,
+  members,
+  canBulkEdit = false,
+  onBulkDone,
+  onToast,
   onOpenLead,
   refreshToken = 0,
 }: LeadListViewProps) {
@@ -68,6 +80,11 @@ export function LeadListView({
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Selecția pentru acțiuni în masă. Ține DOAR pagina curentă, intenționat: o selecție care ar
+   *  supraviețui paginării ar promite că lucrezi pe tot segmentul, când de fapt serverul primește
+   *  100 de id-uri. Bara scrie „pe această pagină" din același motiv. */
+  const [selected, setSelected] = useState<string[]>([]);
+  const bulkEnabled = canBulkEdit && !!members;
 
   // Orice schimbare de filtru readuce lista la prima pagină: altfel un filtru nou aplicat pe
   // pagina 7 ar arăta un ecran gol, deși există rezultate.
@@ -89,6 +106,9 @@ export function LeadListView({
       if (source !== "all") params.source = source;
       if (assignedTo) params.assignedTo = assignedTo;
       const res = await listCrmLeads(params);
+      // Pagina s-a schimbat sub selecție: id-urile vechi nu mai sunt pe ecran, iar o acțiune în
+      // masă asupra lor ar atinge leaduri pe care omul nu le mai vede.
+      setSelected([]);
       setItems(res.items);
       setTotal(res.total);
       setTotalPages(res.totalPages);
@@ -150,6 +170,20 @@ export function LeadListView({
 
   return (
     <div className="flex flex-col gap-3">
+      {bulkEnabled && selected.length > 0 && (
+        <LeadBulkBar
+          selectedIds={selected}
+          stages={stages}
+          members={members ?? []}
+          onCancel={() => setSelected([])}
+          onToast={onToast}
+          onDone={() => {
+            setSelected([]);
+            void load();
+            onBulkDone?.();
+          }}
+        />
+      )}
       {loading ? (
         <div className="flex items-center justify-center py-16" role="status">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se încarcă lista de leaduri..." />
@@ -162,6 +196,15 @@ export function LeadListView({
         <Table aria-label={`Lista de leaduri — ${total} în total`}>
           <TableHeader>
             <TableRow>
+              {bulkEnabled && (
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={selected.length > 0 && selected.length === items.length}
+                    onChange={(next) => setSelected(next ? items.map((l) => l.id) : [])}
+                    aria-label="Selectează toate leadurile de pe această pagină"
+                  />
+                </TableHead>
+              )}
               <SortableHead column="fullName">Nume / Companie</SortableHead>
               <SortableHead column="stage" className="whitespace-nowrap">
                 Etapă
@@ -195,6 +238,19 @@ export function LeadListView({
                 }}
                 aria-label={`Deschide lead ${leadTitle(lead)}`}
               >
+                {bulkEnabled && (
+                  // Click pe celula de selecție nu deschide fișa: altfel bifarea a zece leaduri ar
+                  // însemna zece sertare deschise peste listă.
+                  <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selected.includes(lead.id)}
+                      onChange={(next) =>
+                        setSelected((prev) => (next ? [...prev, lead.id] : prev.filter((id) => id !== lead.id)))
+                      }
+                      aria-label={`Selectează ${leadTitle(lead)}`}
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="max-w-[260px]">
                   <p className="truncate font-semibold text-foreground">{leadTitle(lead)}</p>
                   {lead.company && <p className="truncate text-xs italic text-muted-foreground">{lead.company}</p>}

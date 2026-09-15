@@ -250,6 +250,40 @@ export function listCrmLeads(params: CrmLeadListParams = {}): Promise<CrmLeadLis
   return api<CrmLeadListResponse>(`/api/crm/leads${suffix ? `?${suffix}` : ""}`);
 }
 
+// ─── Acțiuni în masă ──────────────────────────────────────────────────────────
+
+export type CrmBulkAction = "assign" | "auto-assign" | "stage" | "tag";
+
+export interface CrmBulkBody {
+  leadIds: string[];
+  action: CrmBulkAction;
+  assignedTo?: string | null;
+  stage?: string;
+  lostReason?: string | null;
+  tag?: string;
+}
+
+export type CrmBulkSkipReason =
+  | "not_found"
+  | "unknown_stage"
+  | "lost_reason_required"
+  | "already_tagged"
+  | "already_assigned"
+  | "no_rule_matched";
+
+export interface CrmBulkResponse {
+  updated: number;
+  /** Ce NU s-a putut face, cu motivul — interfața are obligația să-l arate, nu să-l înghită. */
+  skipped: { leadId: string; reason: CrmBulkSkipReason }[];
+}
+
+/** Maximul acceptat de server într-o singură cerere (cât o pagină de listă). */
+export const CRM_BULK_LIMIT = 100;
+
+export function bulkCrmLeads(body: CrmBulkBody): Promise<CrmBulkResponse> {
+  return api<CrmBulkResponse>("/api/crm/leads/bulk", { method: "POST", body: JSON.stringify(body) });
+}
+
 export function getCrmLead(id: string): Promise<CrmLead> {
   return api<CrmLead>(`/api/crm/leads/${id}`);
 }

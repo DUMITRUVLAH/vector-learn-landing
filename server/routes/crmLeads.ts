@@ -10,6 +10,9 @@
  * GET    /api/crm/leads                   — listă paginată, cu căutare + filtre + sortare
  * GET    /api/crm/leads/segments          — valorile de segmentare care există în baza tenantului
  *                                            (industrie, regiune, mărime, consum, produse)
+ * POST   /api/crm/leads/bulk              — acțiune în masă pe leadurile selectate (responsabil,
+ *                                            repartizare automată, etapă, etichetă); răspunsul
+ *                                            spune și ce NU s-a putut face, cu motivul
  * GET    /api/crm/leads/:id               — un lead (404 dacă nu e în tenant)
  * GET    /api/crm/leads/:id/detail        — lead + istoric + etapa curentă, într-o singură cerere
  * POST   /api/crm/leads                   — creare
@@ -35,7 +38,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
+import { leads, leadInteractions, leadTags, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
 import { crmPipelineStages, type CrmPipelineStage } from "../db/schema/crmPipelineStages";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { runAutomations } from "./crmAutomations";
@@ -52,6 +55,7 @@ import {
   segmentConditions,
 } from "../lib/crm/segments";
 import { logCrmAudit } from "../lib/crm/audit";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 
 /**
  * Coloanele pe care le întoarce API-ul — EXACT cele din `CrmLead` (src/lib/api/crm.ts).
@@ -402,6 +406,209 @@ crmLeadsRoutes.get("/segments", async (c) => {
     }
     throw e;
   }
+});
+
+// ─── POST /bulk — acțiuni în masă pe leadurile selectate ─────────────────────
+
+/**
+ * Cerințele 5–6 („repartizare automată" și „repartizare manuală") existau deja, dar leadurile se
+ * puteau atinge doar unul câte unul. După segmentare (cerința 4), asta devine absurd: filtrezi 60
+ * de firme din industria alimentară și le atribui una câte una, din 60 de fișe deschise.
+ *
+ * Trei decizii, toate în favoarea onestității față de om:
+ *
+ * 1. **Răspunsul spune ce NU s-a făcut.** Un „ok: true" peste 60 de leaduri din care 7 n-au putut
+ *    fi mutate (etapa nu există în pâlnia lor) ar fi o minciună liniștitoare. Fiecare lead sărit
+ *    vine înapoi cu motivul lui.
+ * 2. **Aceleași reguli ca la un singur lead**: etapa trebuie să existe în pâlnia LEADULUI,
+ *    „pierdut" cere motiv, fiecare mutare scrie în cronologie, în jurnal, declanșează
+ *    automatizările și înscrierea în cadențe. O poartă din spate care ocolește regulile ar fi
+ *    exact locul prin care baza se strică în tăcere.
+ * 3. **Plafon de 100 de leaduri pe cerere** — cât o pagină de listă. Nu e o limită arbitrară:
+ *    fiecare lead mutat rulează automatizări, iar o cerere de 3.000 ar expira la jumătate, cu
+ *    jumătate din bază mutată și nimeni care să știe care jumătate.
+ */
+const bulkSchema = z
+  .object({
+    leadIds: z.array(z.string().uuid()).min(1, "Selectează cel puțin un lead").max(100),
+    action: z.enum(["assign", "auto-assign", "stage", "tag"]),
+    /** `assign`: cui. `null` = scoate responsabilul. */
+    assignedTo: z.string().uuid().optional().nullable(),
+    /** `stage`: cheia etapei țintă + motivul, obligatoriu la etapele „pierdut". */
+    stage: z.string().min(1).max(64).optional(),
+    lostReason: z.string().max(500).optional().nullable(),
+    /** `tag`: eticheta de adăugat (idempotent per lead). */
+    tag: z.string().min(1).max(100).optional(),
+  })
+  .refine((b) => b.action !== "stage" || !!b.stage, { message: "Etapa este obligatorie", path: ["stage"] })
+  .refine((b) => b.action !== "tag" || !!b.tag, { message: "Eticheta este obligatorie", path: ["tag"] });
+
+/** Motivele pentru care un lead selectat poate rămâne neatins — în clar, nu ca numere. */
+type BulkSkip = {
+  leadId: string;
+  reason:
+    | "not_found"
+    | "unknown_stage"
+    | "lost_reason_required"
+    | "already_tagged"
+    /** Repartizarea automată nu fură leaduri deja atribuite — ar rescrie munca cuiva. */
+    | "already_assigned"
+    /** Nicio regulă activă nu s-a potrivit pe leadul ăsta (sau nu există reguli). */
+    | "no_rule_matched";
+};
+
+crmLeadsRoutes.post("/bulk", requireCrmPermission("leads.edit"), zValidator("json", bulkSchema), async (c) => {
+  const user = c.get("user");
+  const body = c.req.valid("json");
+  const tenantId = user.tenantId;
+
+  // Un singur filtru pe tenant, la început: id-urile venite din browser sunt o listă de dorințe,
+  // nu o autorizație. Ce nu e al workspace-ului iese aici, ca „not_found" — niciodată ca 403,
+  // care ar confirma existența leadului altcuiva.
+  const owned = await db
+    .select({ id: leads.id, stage: leads.stage, pipelineId: leads.pipelineId, assignedTo: leads.assignedTo })
+    .from(leads)
+    .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, body.leadIds)));
+
+  const ownedById = new Map(owned.map((l) => [l.id, l]));
+  const skipped: BulkSkip[] = body.leadIds
+    .filter((id) => !ownedById.has(id))
+    .map((leadId) => ({ leadId, reason: "not_found" as const }));
+
+  let updated = 0;
+
+  if (body.action === "assign") {
+    const assignedTo = body.assignedTo ?? null;
+    const ids = owned.map((l) => l.id);
+    if (ids.length > 0) {
+      await db
+        .update(leads)
+        .set({ assignedTo, updatedAt: new Date() })
+        .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ids)));
+      updated = ids.length;
+
+      // Cronologia leadului trebuie să explice de ce a apărut brusc în lista altcuiva.
+      await db.insert(leadInteractions).values(
+        owned.map((l) => ({
+          tenantId,
+          leadId: l.id,
+          type: "system" as const,
+          direction: "internal" as const,
+          body: assignedTo ? "Responsabil schimbat (acțiune în masă)" : "Responsabil scos (acțiune în masă)",
+          metadata: { bulk: true, from: l.assignedTo, to: assignedTo },
+          userId: user.id,
+        }))
+      );
+      for (const l of owned) {
+        await logCrmAudit({
+          tenantId,
+          actorId: user.id,
+          action: "lead.assigned_bulk",
+          target: "crm_lead",
+          targetId: l.id,
+          before: { assignedTo: l.assignedTo },
+          after: { assignedTo },
+        });
+      }
+    }
+  } else if (body.action === "auto-assign") {
+    // Regulile de repartizare (round-robin, teritoriu, capacitate, pondere, fix) rulează PE RÂND:
+    // round-robin-ul și capacitatea zilnică depind de ce s-a atribuit cu o clipă înainte, deci o
+    // rulare în paralel ar da totul aceluiași om.
+    for (const l of owned) {
+      // Leadul deja atribuit nu se redistribuie: repartizarea automată completează golurile, nu
+      // rescrie deciziile luate de oameni. (`assignLeadAutomatically` refuză oricum — dar atunci
+      // omul ar vedea „0 actualizate" fără să afle de ce.)
+      if (l.assignedTo) {
+        skipped.push({ leadId: l.id, reason: "already_assigned" });
+        continue;
+      }
+      const decision = await assignLeadAutomatically(tenantId, l);
+      if (decision) updated++;
+      else skipped.push({ leadId: l.id, reason: "no_rule_matched" });
+    }
+  } else if (body.action === "stage") {
+    const stageKey = body.stage as string;
+    // Etapele se citesc o dată per pâlnie, nu o dată per lead: 100 de leaduri din aceeași pâlnie
+    // ar fi însemnat 100 de interogări identice pe un pool de 3 conexiuni.
+    const stageCache = new Map<string, CrmPipelineStage[]>();
+    for (const l of owned) {
+      const pipeline = await resolveRequestPipeline(tenantId, l.pipelineId);
+      const cacheKey = pipeline?.id ?? "default";
+      let pipelineStages = stageCache.get(cacheKey);
+      if (!pipelineStages) {
+        pipelineStages = await stagesOfPipeline(tenantId, pipeline?.id ?? null);
+        stageCache.set(cacheKey, pipelineStages);
+      }
+
+      const target = pipelineStages.find((st) => st.key === stageKey);
+      if (!target) {
+        skipped.push({ leadId: l.id, reason: "unknown_stage" });
+        continue;
+      }
+      if (target.isLost && !body.lostReason?.trim()) {
+        skipped.push({ leadId: l.id, reason: "lost_reason_required" });
+        continue;
+      }
+
+      const updates: Partial<NewLead> = { stage: stageKey, updatedAt: new Date() };
+      if (target.isLost) updates.lostReason = body.lostReason ?? null;
+
+      const [row] = await db
+        .update(leads)
+        .set(updates)
+        .where(and(eq(leads.id, l.id), eq(leads.tenantId, tenantId)))
+        .returning();
+
+      await db.insert(leadInteractions).values({
+        tenantId,
+        leadId: l.id,
+        type: "stage_change",
+        direction: "internal",
+        body: `${l.stage} → ${stageKey}`,
+        metadata: { from: l.stage, to: stageKey, lostReason: body.lostReason ?? null, bulk: true },
+        userId: user.id,
+      });
+      await logCrmAudit({
+        tenantId,
+        actorId: user.id,
+        action: "lead.stage_changed_bulk",
+        target: "crm_lead",
+        targetId: l.id,
+        before: { stage: l.stage },
+        after: { stage: stageKey, lostReason: body.lostReason ?? null },
+      });
+      if (row) {
+        await runAutomations({ tenantId, userId: user.id, lead: row, kind: "lead.stage_changed", toStage: stageKey });
+      }
+      await enrollByStage(tenantId, l.id, stageKey);
+      updated++;
+    }
+  } else {
+    const tag = (body.tag as string).trim();
+    const existing = await db
+      .select({ leadId: leadTags.leadId })
+      .from(leadTags)
+      .where(
+        and(
+          eq(leadTags.tenantId, tenantId),
+          eq(leadTags.tag, tag),
+          inArray(leadTags.leadId, owned.map((l) => l.id))
+        )
+      );
+    const alreadyTagged = new Set(existing.map((r) => r.leadId));
+    const toTag = owned.filter((l) => !alreadyTagged.has(l.id));
+    for (const l of owned) {
+      if (alreadyTagged.has(l.id)) skipped.push({ leadId: l.id, reason: "already_tagged" });
+    }
+    if (toTag.length > 0) {
+      // `ltags_unique_idx` NU e unic în bază (vezi crmTags.ts) — dublura se previne aici.
+      await db.insert(leadTags).values(toTag.map((l) => ({ tenantId, leadId: l.id, tag })));
+      updated = toTag.length;
+    }
+  }
+
+  return c.json({ updated, skipped });
 });
 
 // ─── GET / — listă paginată ───────────────────────────────────────────────────
