@@ -92,7 +92,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | 39 | Export PDF | **Da** | |
 | 40 | Salvare automată în fișa clientului | **Da** | |
 | 41 | Transmitere către client din CRM | **Da** | Cu urmă în cronologie. |
-| 42 | Urmărire: transmisă, vizualizată, acceptată, respinsă | **Parțial** | Transmisă (se scrie singură la trimiterea pe e-mail), acceptată și respinsă (se marchează din fișa leadului, cu motiv obligatoriu la refuz) — da. „Vizualizată" rămâne descoperită: cere pixel de urmărire sau portal de client (portalul există pentru facturi; extinderea la oferte e ~2 zile). |
+| 42 | Urmărire: transmisă, vizualizată, acceptată, respinsă | **Da** | Toate patru. „Transmisă" se scrie singură la trimiterea pe e-mail; „acceptată"/„respinsă" le marchează omul care a vorbit cu clientul, cu motiv obligatoriu la refuz; **„vizualizată"** vine din linkul public al actului: actul pleacă la client ca adresă web, iar deschiderea ei e semnalul — se vede în lista de documente („Vizualizat 12.09" vs. „Link trimis, încă nedeschis") și intră în jurnalul actului. **Nu s-a folosit pixel de urmărire**, deși e metoda obișnuită: Gmail îl rutează prin proxy și raportează vizualizări care nu s-au întâmplat, Outlook îl blochează și le ascunde pe cele reale — semnalul ar fi ieșit fals în ambele sensuri. Linkul se revocă, poate expira, iar unul revocat răspunde identic cu unul inexistent. |
 
 ## 4.8 Generarea contractelor
 

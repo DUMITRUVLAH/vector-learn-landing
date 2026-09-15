@@ -90,6 +90,7 @@ const PlatformConsolePage = lazyWithTimeout(() => import("./pages/business/platf
 const InvitePage = lazyWithTimeout(() => import("./pages/business/InvitePage").then((m) => ({ default: m.InvitePage })));
 const WelcomePage = lazyWithTimeout(() => import("./pages/business/WelcomePage").then((m) => ({ default: m.WelcomePage })));
 const ParVerifyPage = lazyWithTimeout(() => import("./pages/par/ParVerifyPage").then((m) => ({ default: m.ParVerifyPage })));
+const DocSharePage = lazyWithTimeout(() => import("./pages/public/DocSharePage").then((m) => ({ default: m.DocSharePage })));
 // Pagini publice de feature — /business/features/<slug>. Un singur chunk pentru toate
 // (shell + conținut), încărcat doar când cineva chiar deschide o astfel de pagină.
 const FeatureRoute = lazyWithTimeout(() => import("./pages/business/features/FeatureRoute").then((m) => ({ default: m.FeatureRoute })));
@@ -200,6 +201,9 @@ function Routes() {
   // PUBLICĂ și ÎNAINTEA oricărei gărzi: cel care scanează e adesea un contabil sau un auditor fără
   // cont în platformă, iar un ecran de login aici ar face codul inutil exact pentru el.
   if (path.startsWith("/verificare")) return <ParVerifyPage />;
+  // Actul deschis de client dintr-un link. Public ca și verificarea PAR: cel care îl deschide nu
+  // are cont, iar un ecran de login ar face linkul inutil exact pentru el.
+  if (path.startsWith("/act/")) return <DocSharePage />;
 
   // SHELL-503: PAR invite acceptance page — PUBLIC (no BusinessGuard).
   // Must be before BusinessGuard so unauthenticated invitees can land here.

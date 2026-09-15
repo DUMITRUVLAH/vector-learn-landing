@@ -44,6 +44,8 @@ export interface CrmDocument {
   outcomeAt?: string | null;
   /** De ce a refuzat — obligatoriu la refuz. */
   outcomeReason?: string | null;
+  /** Linkul public activ al actului, dacă există — de aici iese semnalul „Vizualizat". */
+  share?: { token: string; firstViewedAt: string | null; viewCount: number } | null;
 }
 
 /**
@@ -88,4 +90,38 @@ export function createCrmDocument(body: CreateCrmDocumentBody): Promise<CrmDocum
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+// ─── Linkul public al actului (cerința 42: „vizualizată") ─────────────────────
+
+export interface DocShareLink {
+  id: string;
+  token: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  /** Când l-a deschis clientul PRIMA oară — momentul comercial. */
+  firstViewedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+  createdAt: string;
+}
+
+/** `null` = actul n-are încă link. */
+export function getDocShareLink(documentId: string): Promise<DocShareLink | null> {
+  return api<DocShareLink | null>(`/api/docs/${documentId}/share`);
+}
+
+/** Creează linkul sau îl reactivează, dacă exista revocat. Ciornele sunt refuzate (400). */
+export function createDocShareLink(documentId: string): Promise<DocShareLink> {
+  return api<DocShareLink>(`/api/docs/${documentId}/share`, { method: "POST" });
+}
+
+export function revokeDocShareLink(documentId: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/docs/${documentId}/share`, { method: "DELETE" });
+}
+
+/** Adresa pe care o primește clientul. Se compune aici, ca să nu fie scrisă în două ecrane. */
+export function docShareUrl(token: string): string {
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  return `${origin}/#/act/${token}`;
 }

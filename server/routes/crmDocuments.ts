@@ -25,12 +25,13 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads } from "../db/schema/leads";
 import { crmCompanies } from "../db/schema/crmCompanies";
 import { crmProducts } from "../db/schema/crmProducts";
 import { docDocuments } from "../db/schema/docs";
+import { docShareLinks } from "../db/schema/docShareLinks";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { createDocumentRecord } from "./docs";
 
@@ -114,7 +115,52 @@ crmDocumentsRoutes.get("/", async (c) => {
       .where(and(...filters))
       .orderBy(desc(docDocuments.createdAt))
       .limit(200);
-    return c.json({ items });
+
+    // Starea linkului public, pentru toată lista dintr-o interogare (cerința 42). Fără ea, ecranul
+    // ar cere linkul act cu act — 200 de cereri pentru o listă de 200 de rânduri.
+    let shareByDoc = new Map<string, { token: string; firstViewedAt: Date | null; viewCount: number }>();
+    if (items.length > 0) {
+      try {
+        const shares = await db
+          .select({
+            documentId: docShareLinks.documentId,
+            token: docShareLinks.token,
+            firstViewedAt: docShareLinks.firstViewedAt,
+            viewCount: docShareLinks.viewCount,
+          })
+          .from(docShareLinks)
+          .where(
+            and(
+              eq(docShareLinks.tenantId, user.tenantId),
+              isNull(docShareLinks.revokedAt),
+              inArray(
+                docShareLinks.documentId,
+                items.map((d) => d.id)
+              )
+            )
+          );
+        shareByDoc = new Map(shares.map((s) => [s.documentId, s]));
+      } catch (err) {
+        // Tabela lipsă (schemă în urma codului): lista se afișează fără coloana de link.
+        if (!isMissingSchemaError(err)) throw err;
+      }
+    }
+
+    return c.json({
+      items: items.map((d) => {
+        const share = shareByDoc.get(d.id);
+        return {
+          ...d,
+          share: share
+            ? {
+                token: share.token,
+                firstViewedAt: share.firstViewedAt ? share.firstViewedAt.toISOString() : null,
+                viewCount: share.viewCount,
+              }
+            : null,
+        };
+      }),
+    });
   } catch (err) {
     if (isMissingSchemaError(err)) return c.json({ items: [] });
     throw err;

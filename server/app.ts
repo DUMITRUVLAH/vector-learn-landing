@@ -82,6 +82,7 @@ import { parSettingsRoutes } from "./routes/parSettings";
 import { parDriveRoutes, parDriveCronRoutes } from "./routes/parDrive";
 import { parPublicVerifyRoutes } from "./routes/parPublicVerify";
 import { publicApiRoutes } from "./routes/publicApi";
+import { docShareRoutes, docPublicRoutes } from "./routes/docShare";
 import { apiKeysRoutes } from "./routes/apiKeys";
 import { parRoutes } from "./routes/par";
 import { parFxRoutes } from "./routes/parFx";
@@ -314,6 +315,10 @@ app.route("/api/public/par", parPublicVerifyRoutes);
 // API-ul public, doar de citire, cu chei de workspace (cerințele 64 și 71 din caietul de
 // sarcini). Montat sub /api/public ca să fie limpede, din cale, că nu cere sesiune.
 app.route("/api/public/v1", publicApiRoutes);
+// Actul deschis de client dintr-un link (cerința 42 „vizualizată"). Public prin definiție:
+// clientul nu are cont. Limitat la rată în rută.
+app.route("/api/public/doc", docPublicRoutes);
+app.route("/api/docs", docShareRoutes);
 app.route("/api/settings/api-keys", apiKeysRoutes);
 
 // FinDesk

@@ -10,7 +10,7 @@
  * se descarcă PDF și se trimite. CRM-ul nu rescrie ecranul acela.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Loader2, ExternalLink } from "lucide-react";
+import { Check, Copy, Eye, FileText, Link2, Loader2, ExternalLink } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import {
   Alert,
@@ -29,10 +29,13 @@ import { Link } from "@/router/HashRouter";
 import { docPath } from "@/lib/docs/paths";
 import {
   listCrmDocuments,
+  createDocShareLink,
+  docShareUrl,
   CRM_DOC_KIND_LABELS,
   CRM_DOC_STATUS_LABELS,
   type CrmDocument,
 } from "@/lib/api/crmDocuments";
+import { Button } from "@/components/ds";
 
 function money(cents: number, currency: string): string {
   return `${new Intl.NumberFormat("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
@@ -45,6 +48,71 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
   if (status === "rejected" || status === "cancelled") return "destructive";
   if (status === "draft") return "secondary";
   return "default";
+}
+
+/**
+ * Celula „Link client": creează linkul, îl copiază și arată dacă actul a fost deschis.
+ *
+ * De ce contează ordinea informației: pentru un agent, „a văzut oferta" e mai important decât
+ * „există un link". De-aceea, când actul a fost deschis, celula arată ÎNTÂI asta.
+ */
+function ShareCell({ doc, onChanged }: { doc: CrmDocument; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function copy(token: string) {
+    try {
+      await navigator.clipboard.writeText(docShareUrl(token));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocat: linkul rămâne accesibil din act, ecranul nu se strică.
+    }
+  }
+
+  async function create() {
+    setBusy(true);
+    try {
+      const link = await createDocShareLink(doc.id);
+      await copy(link.token);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Ciorna nu se trimite clientului: numărul nu e rezervat, corpul se mai schimbă.
+  if (doc.status === "draft") return <span className="text-xs text-muted-foreground">—</span>;
+
+  if (!doc.share) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => void create()} disabled={busy}>
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
+        Link client
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {doc.share.firstViewedAt ? (
+        <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-success">
+          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          Vizualizat {new Date(doc.share.firstViewedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit" })}
+        </span>
+      ) : (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">Link trimis, încă nedeschis</span>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={`Copiază linkul actului ${doc.docNumber ?? doc.title}`}
+        onClick={() => void copy(doc.share!.token)}
+      >
+        {copied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+      </Button>
+    </div>
+  );
 }
 
 export function CrmDocumentsPage() {
@@ -140,6 +208,7 @@ export function CrmDocumentsPage() {
                   <TableHead>Stare</TableHead>
                   <TableHead className="text-right">Valoare</TableHead>
                   <TableHead>Data</TableHead>
+                  <TableHead>Link client</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -161,6 +230,9 @@ export function CrmDocumentsPage() {
                     <TableCell className="text-right tabular-nums">{money(d.totalCents, d.currency)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(d.docDate).toLocaleDateString("ro-MD")}
+                    </TableCell>
+                    <TableCell>
+                      <ShareCell doc={d} onChanged={() => void load()} />
                     </TableCell>
                   </TableRow>
                 ))}
