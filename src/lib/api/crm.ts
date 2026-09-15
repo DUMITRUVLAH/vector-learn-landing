@@ -250,6 +250,54 @@ export function listCrmLeads(params: CrmLeadListParams = {}): Promise<CrmLeadLis
   return api<CrmLeadListResponse>(`/api/crm/leads${suffix ? `?${suffix}` : ""}`);
 }
 
+// ─── Export CSV al bazei filtrate ─────────────────────────────────────────────
+
+export interface CrmLeadsExport {
+  blob: Blob;
+  /** Câte rânduri are fișierul — nu câte leaduri are baza. */
+  count: number;
+  /** `true` când s-a atins plafonul serverului (10.000) și fișierul e o parte, nu tot. */
+  truncated: boolean;
+}
+
+/**
+ * Descarcă leadurile care trec de FILTRELE DATE, nu pagina afișată.
+ *
+ * Nu trece prin `api()`: acolo răspunsul se citește ca JSON, iar aici vrem octeții fișierului
+ * plus antetele (`x-export-count`, `x-export-truncated`) — fără ele, interfața n-ar putea spune
+ * omului că a primit doar o parte din bază.
+ */
+export async function downloadCrmLeadsCsv(params: CrmLeadListParams = {}): Promise<CrmLeadsExport> {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") qs.set(key, String(value));
+  }
+  const suffix = qs.toString();
+  const res = await fetch(`/api/crm/leads/export.csv${suffix ? `?${suffix}` : ""}`, { credentials: "include" });
+  if (!res.ok) {
+    // 403 = dreptul `leads.export` lipsește; mesajul trebuie să spună asta, nu „HTTP 403".
+    if (res.status === 403) throw new Error("Nu ai dreptul de a exporta leaduri.");
+    throw new Error(`Exportul a eșuat (HTTP ${res.status}).`);
+  }
+  return {
+    blob: await res.blob(),
+    count: Number(res.headers.get("x-export-count") ?? 0),
+    truncated: res.headers.get("x-export-truncated") === "true",
+  };
+}
+
+/** Pornește descărcarea în browser. Separat de cererea de mai sus, ca s-o poată testa cineva. */
+export function saveBlobAs(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Acțiuni în masă ──────────────────────────────────────────────────────────
 
 export type CrmBulkAction = "assign" | "auto-assign" | "stage" | "tag";

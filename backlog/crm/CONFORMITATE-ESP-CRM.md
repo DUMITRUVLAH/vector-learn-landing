@@ -123,7 +123,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | 55 | Motivele pierderii (agregat) | **Da** | Cu procent și valoare pierdută. |
 | 56 | Task-uri efectuate vs. restante | **Da** | |
 | 57 | Rapoarte zilnice, săptămânale, lunare, pe perioadă aleasă | **Da** | Preseturi + interval ales manual, cu ultima zi inclusă. |
-| 58 | Export Excel și PDF | **Da** | CSV pentru Excel (separator `;` + BOM, cum îl cere Excel-ul în română) și PDF cu perioada și agentul în antet. |
+| 58 | Export Excel și PDF | **Da** | Rapoartele: CSV pentru Excel (separator `;` + BOM, cum îl cere Excel-ul în română) și PDF cu perioada și agentul în antet. Baza de leaduri: „Exportă CSV" de pe tabla de leaduri scoate EXACT ce trece de filtrele de pe ecran (inclusiv segmentul firmografic), cu industria/regiunea/mărimea/consumul firmei în fișier. Cere dreptul `leads.export`, se scrie în jurnal (cine, câte rânduri, cu ce filtru) și duce cu el starea consimțământului — un lead cu consimțământul retras pleacă marcat „RETRAS", nu curat. Plafon 10.000 de rânduri per fișier, anunțat, nu tăiat în tăcere. |
 
 ## 4.11 Roluri și securitate
 
@@ -131,7 +131,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 |---|---|---|---|
 | 59 | Minimum 4 niveluri de acces | **Parțial** | Există patru roluri reale (administrator, manager, agent, recepție) peste care stă matricea CRM. Denumirile din caiet (Director Comercial, Team Leader, Sales Manager) se pot mapa 1:1, dar azi rolul „Team Leader" nu are o arie proprie de echipă — vede tot workspace-ul. |
 | 60 | Drepturi diferențiate, configurabile per rol/utilizator | **Da** | 14 drepturi, verificate pe server la fiecare cerere. Rolul dă temelia (rămâne cod: așa un rol nou nu primește din greșeală drepturi), iar excepțiile se scriu pe OM, din ecranul „Drepturi": acordat anume, sau retras deși rolul îl are. Un drept retras se aplică imediat — verificarea nu e memorată. |
-| 61 | Jurnalizare (audit log) | **Da** | Leaduri, pâlnii, etape, cadențe, reguli, câmpuri — cu cine, când și ce s-a schimbat. |
+| 61 | Jurnalizare (audit log) | **Da** | Leaduri, pâlnii, etape, cadențe, reguli, câmpuri — cu cine, când și ce s-a schimbat. Inclusiv acțiunile în masă și exportul bazei (cu numărul de rânduri și filtrul folosit): o bază de clienți care pleacă pe un stick e un eveniment, nu o descărcare oarecare. |
 | 62 | Backup periodic, cu restaurare | **Parțial** | Asigurat de furnizorul de bază de date (backup zilnic, restaurare punctuală). Nu e o funcție a aplicației; se documentează în oferta tehnică. |
 | 63 | Conformitate GDPR / legislația RM | **Da** | Pe fișa leadului: export JSON al tuturor datelor (acces + portabilitate), retragerea consimțământului (nu șterge nimic — e alt drept) și ștergerea datelor personale prin anonimizare. Anonimizarea scoate numele, telefonul, emailul, notele și contactele, dar păstrează valoarea, etapa și motivul pierderii: sunt fapte ale firmei, nu date ale persoanei — altfel rapoartele de anul trecut s-ar schimba retroactiv. |
 

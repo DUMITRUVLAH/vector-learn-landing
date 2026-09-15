@@ -10,6 +10,7 @@
  * GET    /api/crm/leads                   — listă paginată, cu căutare + filtre + sortare
  * GET    /api/crm/leads/segments          — valorile de segmentare care există în baza tenantului
  *                                            (industrie, regiune, mărime, consum, produse)
+ * GET    /api/crm/leads/export.csv        — exportul bazei FILTRATE (drept `leads.export`)
  * POST   /api/crm/leads/bulk              — acțiune în masă pe leadurile selectate (responsabil,
  *                                            repartizare automată, etapă, etichetă); răspunsul
  *                                            spune și ce NU s-a putut face, cu motivul
@@ -36,7 +37,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions, leadTags, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
 import { crmPipelineStages, type CrmPipelineStage } from "../db/schema/crmPipelineStages";
@@ -46,6 +47,9 @@ import { assignLeadAutomatically } from "./crmAssignment";
 import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
 import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
 import { crmPipelines, type CrmPipeline } from "../db/schema/crmPipelines";
+import { crmProducts } from "../db/schema/crmProducts";
+import { crmCompanies } from "../db/schema/crmCompanies";
+import { users } from "../db/schema/users";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { enrollByStage, stopCadencesOnReply } from "../lib/crm/cadences";
 import {
@@ -408,6 +412,190 @@ crmLeadsRoutes.get("/segments", async (c) => {
   }
 });
 
+// ─── GET /export.csv — exportul bazei filtrate (ÎNAINTE de /:id) ─────────────
+
+/**
+ * Dreptul „Exportă leaduri" (`leads.export`) exista în matricea de permisiuni, se vedea în
+ * ecranul „Drepturi"… și nu deschidea nimic: nu exista niciun export de leaduri. Un drept care
+ * nu dă nimic e mai rău decât unul care lipsește — administratorul crede că a acordat ceva.
+ *
+ * Patru decizii:
+ *
+ * 1. **Exportul e al FILTRULUI, nu al ecranului.** Aceleași condiții ca lista (`buildLeadFilters`,
+ *    un singur constructor pentru amândouă): cine a segmentat 60 de firme primește 60 de rânduri,
+ *    nu pagina de 20 de pe ecran și nici toată baza.
+ * 2. **Firmografia intră în fișier.** Industria, regiunea, mărimea și consumul sunt exact
+ *    coloanele după care s-a filtrat; un export fără ele ar obliga pe oricine la un VLOOKUP.
+ * 3. **Plafon de 10.000 de rânduri, spus în antet** (`X-Export-Truncated`), nu tăiat în tăcere.
+ * 4. **Se scrie în jurnal cine a exportat și ce filtru** — o bază de clienți care pleacă pe un
+ *    stick e un eveniment GDPR, nu o descărcare oarecare.
+ *
+ * Formatul e cel pe care îl cere Excel-ul în română (cerința 58): separator `;`, BOM UTF-8,
+ * linii CRLF. Fără BOM, „Preț" se deschide ca „PreÈ›".
+ */
+const EXPORT_LIMIT = 10_000;
+
+/** Un câmp CSV: ghilimelele se dublează, iar separatorul/linia nouă forțează încadrarea. */
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  return /[";\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+crmLeadsRoutes.get("/export.csv", requireCrmPermission("leads.export"), async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  const filters = await buildLeadFilters(tenantId, c.req.query());
+  if ("error" in filters) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      ...LEAD_COLS,
+      companyId: leads.companyId,
+      notes: leads.notes,
+      interestCourse: leads.interestCourse,
+    })
+    .from(leads)
+    .where(filters.where)
+    .orderBy(desc(leads.createdAt))
+    .limit(EXPORT_LIMIT + 1);
+
+  const truncated = rows.length > EXPORT_LIMIT;
+  const exported = truncated ? rows.slice(0, EXPORT_LIMIT) : rows;
+
+  // Numele oamenilor, produselor și firmelor — o dată, nu o dată per rând.
+  const memberIds = [...new Set(exported.map((l) => l.assignedTo).filter((v): v is string => !!v))];
+  const productIds = [...new Set(exported.map((l) => l.productId).filter((v): v is string => !!v))];
+  const companyIds = [...new Set(exported.map((l) => l.companyId).filter((v): v is string => !!v))];
+
+  const [memberRows, productRows, companyRows, stageRows] = await Promise.all([
+    memberIds.length
+      ? db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, memberIds))
+      : Promise.resolve([] as { id: string; name: string | null }[]),
+    productIds.length
+      ? db
+          .select({ id: crmProducts.id, name: crmProducts.name })
+          .from(crmProducts)
+          .where(and(eq(crmProducts.tenantId, tenantId), inArray(crmProducts.id, productIds)))
+      : Promise.resolve([] as { id: string; name: string }[]),
+    // Firmografia degradează singură: o bază fără `crm_companies` (migrare în urmă) exportă
+    // fișierul FĂRĂ coloanele de firmă, nu un 500 peste tot ecranul.
+    companyIds.length
+      ? db
+          .select({
+            id: crmCompanies.id,
+            name: crmCompanies.name,
+            industry: crmCompanies.industry,
+            region: crmCompanies.region,
+            companySize: crmCompanies.companySize,
+            annualConsumptionKwh: crmCompanies.annualConsumptionKwh,
+          })
+          .from(crmCompanies)
+          .where(and(eq(crmCompanies.tenantId, tenantId), inArray(crmCompanies.id, companyIds)))
+          .catch(() => [])
+      : Promise.resolve([] as unknown[]),
+    db
+      .select({ key: crmPipelineStages.key, label: crmPipelineStages.label })
+      .from(crmPipelineStages)
+      .where(eq(crmPipelineStages.tenantId, tenantId)),
+  ]);
+
+  const memberName = new Map(memberRows.map((m) => [m.id, m.name ?? ""]));
+  const productName = new Map(productRows.map((p) => [p.id, p.name]));
+  const stageLabel = new Map(stageRows.map((s) => [s.key, s.label]));
+  const company = new Map(
+    (companyRows as {
+      id: string;
+      name: string;
+      industry: string | null;
+      region: string | null;
+      companySize: string | null;
+      annualConsumptionKwh: string | null;
+    }[]).map((f) => [f.id, f])
+  );
+
+  const header = [
+    "Nume",
+    "Denumire oportunitate",
+    "Companie",
+    "Telefon",
+    "Email",
+    "Etapă",
+    "Sursă",
+    "Produs",
+    "Valoare",
+    "Probabilitate %",
+    "Responsabil",
+    "Motiv pierdere",
+    "Industrie",
+    "Regiune",
+    "Mărime firmă",
+    "Consum anual (kWh)",
+    "Interes / notă",
+    "Consimțământ",
+    "Creat la",
+    "Actualizat la",
+  ];
+
+  const lines = [header.map(csvCell).join(";")];
+  for (const lead of exported) {
+    const firma = lead.companyId ? company.get(lead.companyId) : undefined;
+    lines.push(
+      [
+        lead.fullName,
+        lead.dealName,
+        firma?.name ?? lead.company,
+        lead.phone,
+        lead.email,
+        stageLabel.get(lead.stage) ?? lead.stage,
+        lead.source,
+        lead.productId ? productName.get(lead.productId) ?? "" : "",
+        // Valoarea e în bani (cenți) în bază; în fișier merge în unități, cu virgulă zecimală —
+        // Excel-ul în română nu citește punctul ca separator zecimal.
+        ((lead.valueCents ?? 0) / 100).toFixed(2).replace(".", ","),
+        lead.probabilityPct ?? "",
+        lead.assignedTo ? memberName.get(lead.assignedTo) ?? "" : "",
+        lead.lostReason,
+        firma?.industry ?? "",
+        firma?.region ?? "",
+        firma?.companySize ?? "",
+        firma?.annualConsumptionKwh ?? "",
+        lead.interestCourse,
+        // Cerința 63: cine și-a retras consimțământul nu mai poate fi contactat comercial —
+        // informația trebuie să plece ÎMPREUNĂ cu datele, altfel fișierul devine o listă de apel
+        // care încalcă exact dreptul pe care omul l-a exercitat.
+        lead.consentRevokedAt ? "RETRAS" : lead.consentAt ? "da" : "",
+        lead.createdAt instanceof Date ? lead.createdAt.toISOString() : lead.createdAt,
+        lead.updatedAt instanceof Date ? lead.updatedAt.toISOString() : lead.updatedAt,
+      ]
+        .map(csvCell)
+        .join(";")
+    );
+  }
+
+  await logCrmAudit({
+    tenantId,
+    actorId: user.id,
+    action: "lead.exported",
+    target: "crm_lead",
+    targetId: null,
+    after: { count: exported.length, truncated, filters: c.req.query() },
+  });
+
+  // BOM + CRLF: convenția pe care o cere Excel-ul în română (aceeași ca la rapoarte).
+  const body = `﻿${lines.join("\r\n")}\r\n`;
+  const today = new Date().toISOString().slice(0, 10);
+  return new Response(body, {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="leaduri-${today}.csv"`,
+      "x-export-count": String(exported.length),
+      "x-export-truncated": truncated ? "true" : "false",
+    },
+  });
+});
+
 // ─── POST /bulk — acțiuni în masă pe leadurile selectate ─────────────────────
 
 /**
@@ -627,24 +815,23 @@ function isSortKey(value: string): value is keyof typeof SORTABLE_COLUMNS {
   return value in SORTABLE_COLUMNS;
 }
 
-crmLeadsRoutes.get("/", async (c) => {
-  const user = c.get("user");
-  const tenantId = user.tenantId;
-  const {
-    page: pageParam,
-    pageSize: pageSizeParam,
-    search,
-    stage,
-    source,
-    assignedTo,
-    pipelineId,
-    sort,
-    dir,
-  } = c.req.query();
-
-  const page = Math.max(parseInt(pageParam ?? "1", 10) || 1, 1);
-  const pageSize = Math.min(Math.max(parseInt(pageSizeParam ?? "20", 10) || 20, 1), 100);
-
+/**
+ * Filtrele listei, construite O SINGURĂ DATĂ pentru toți cei care citesc leaduri filtrate
+ * (lista paginată și exportul CSV).
+ *
+ * De ce nu le rescrie fiecare rută pe ale ei: un export care nu respectă EXACT filtrul de pe
+ * ecran e cel mai urât fel de minciună dintr-un CRM — omul filtrează 60 de firme dintr-o
+ * industrie, apasă „Exportă" și primește toată baza, fără niciun semn că s-a întâmplat asta.
+ * Cu un singur constructor, cele două nu pot diverge nici peste un an.
+ *
+ * `pipeline_not_found` = un `pipelineId` care nu e al workspace-ului: apelantul răspunde 404,
+ * nu cade tăcut pe pâlnia implicită (ar arăta alte date decât cele cerute).
+ */
+async function buildLeadFilters(
+  tenantId: string,
+  query: Record<string, string | undefined>
+): Promise<{ where: SQL | undefined } | { error: "pipeline_not_found" }> {
+  const { search, stage, source, assignedTo, pipelineId } = query;
   const conditions = [eq(leads.tenantId, tenantId)];
 
   if (search) {
@@ -668,7 +855,7 @@ crmLeadsRoutes.get("/", async (c) => {
   // Segmentarea firmografică (cerința 4): industrie, regiune, mărime, consum anual — prin firma
   // leadului — plus produsul din catalog. Când niciun filtru nu e activ, interogarea rămâne
   // exact cea de dinainte: nu atingem `crm_companies` degeaba.
-  conditions.push(...segmentConditions(tenantId, parseSegmentFilters(c.req.query())));
+  conditions.push(...segmentConditions(tenantId, parseSegmentFilters(query)));
 
   // Filtrul pe pâlnie e citit prin aceeași regulă ca pe kanban: pentru implicită intră și
   // leadurile fără `pipeline_id` (cele dinainte de migrarea 0166).
@@ -677,12 +864,25 @@ crmLeadsRoutes.get("/", async (c) => {
       .select({ id: crmPipelines.id, isDefault: crmPipelines.isDefault })
       .from(crmPipelines)
       .where(and(eq(crmPipelines.id, pipelineId), eq(crmPipelines.tenantId, tenantId)));
-    if (!p) return c.json({ error: "not_found" }, 404);
+    if (!p) return { error: "pipeline_not_found" };
     const cond = leadsInPipeline(p.id, p.isDefault);
     if (cond) conditions.push(cond);
   }
 
-  const where = and(...conditions);
+  return { where: and(...conditions) };
+}
+
+crmLeadsRoutes.get("/", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const { page: pageParam, pageSize: pageSizeParam, sort, dir } = c.req.query();
+
+  const page = Math.max(parseInt(pageParam ?? "1", 10) || 1, 1);
+  const pageSize = Math.min(Math.max(parseInt(pageSizeParam ?? "20", 10) || 20, 1), 100);
+
+  const filters = await buildLeadFilters(tenantId, c.req.query());
+  if ("error" in filters) return c.json({ error: "not_found" }, 404);
+  const { where } = filters;
 
   const sortKey = sort && isSortKey(sort) ? sort : "createdAt";
   const sortColumn = SORTABLE_COLUMNS[sortKey];

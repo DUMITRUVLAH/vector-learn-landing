@@ -18,7 +18,7 @@
  * `drop` citește o valoare învechită (stale closure).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, GitBranch, KanbanSquare, LayoutList } from "lucide-react";
+import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, GitBranch, KanbanSquare, LayoutList, Download } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,8 @@ import {
   getCrmPipeline,
   createCrmLead,
   moveCrmLeadStage,
+  downloadCrmLeadsCsv,
+  saveBlobAs,
   type CrmLead,
   type CrmLeadStage,
   type CrmLeadSource,
@@ -199,6 +201,34 @@ export function CrmPipelinePage() {
     segmentsRef.current = cleaned;
     setSegments(cleaned);
     void loadPipeline({ silent: true, segments: cleaned });
+  }
+
+  /** Exportul cere SERVERULUI leadurile care trec de filtrele de pe ecran — nu pagina afișată.
+   *  Kanbanul cerne în browser peste 50 de carduri pe coloană; un export din ce s-a încărcat ar
+   *  livra o felie tăcută din segment, care arată exact ca întregul. */
+  const [exporting, setExporting] = useState(false);
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const res = await downloadCrmLeadsCsv({
+        ...segments,
+        ...(activePipelineId ? { pipelineId: activePipelineId } : {}),
+        ...(search.trim() ? { search: search.trim() } : {}),
+        ...(sourceFilter !== "all" ? { source: sourceFilter } : {}),
+        ...(onlyMine && currentUserId ? { assignedTo: currentUserId } : {}),
+      });
+      saveBlobAs(res.blob, `leaduri-${new Date().toISOString().slice(0, 10)}.csv`);
+      setToast({
+        kind: "success",
+        message: res.truncated
+          ? `${res.count} leaduri exportate — plafonul unui fișier. Restrânge filtrul pentru restul.`
+          : `${res.count} ${res.count === 1 ? "lead exportat" : "leaduri exportate"}.`,
+      });
+    } catch (err) {
+      setToast({ kind: "error", message: err instanceof Error ? err.message : "Exportul a eșuat." });
+    } finally {
+      setExporting(false);
+    }
   }
 
   /** Comutarea pâlniei: ref-ul întâi (îl citește `loadPipeline`), apoi cererea explicită. */
@@ -471,7 +501,17 @@ export function CrmPipelinePage() {
                 Doar ale mele
               </label>
             )}
-            <div className="sm:ml-auto">
+            <div className="flex items-center gap-2 sm:ml-auto">
+              {can("leads.export") && (
+                <Button variant="outline" onClick={() => void exportCsv()} disabled={exporting}>
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  Exportă CSV
+                </Button>
+              )}
               <SavedViewsMenu currentFilters={currentFilters} onApply={applySavedView} onToast={setToast} />
             </div>
           </div>
