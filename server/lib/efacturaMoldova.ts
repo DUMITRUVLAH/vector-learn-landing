@@ -280,16 +280,19 @@ async function httpTransport(
   });
   const text = await res.text();
   if (!res.ok) {
-    // SFS întoarce uneori PAGINA HTML de eroare a portalului în loc de un SOAP fault — se întâmplă
-    // la indisponibilitate și, măsurat pe cont real (2026-08-28), după o rafală de cereri: aceleași
-    // credențiale care funcționau acum 10 minute primesc HTTP 500 la fiecare metodă. Mesajul trebuie
-    // să spună asta, altfel omul crede că i-au expirat credențialele și le tot reintroduce.
+    // SFS întoarce uneori PAGINA HTML de eroare a portalului în loc de un SOAP fault. Atunci cererea
+    // nici nu ajunge la stratul de autentificare, deci credențialele NU pot fi cauza — verificat pe
+    // 2026-09-15: o cerere cu parolă greșită și una fără niciun header de securitate primesc același
+    // răspuns, octet cu octet (`Server: nginx`, `text/html`, ETag fix = pagină statică de eroare).
+    // Mesajul trebuie să spună asta explicit: formularea veche punea „prea multe cereri" pe primul
+    // loc și trimitea omul să-și reintroducă parola degeaba, în timp ce serviciul lor era pur și
+    // simplu picat.
     const fault = xmlText(text, "faultstring");
     const looksHtml = /<!DOCTYPE html|<html/i.test(text.slice(0, 200));
     const message =
       fault ??
       (looksHtml && res.status >= 500
-        ? `HTTP ${res.status} — SFS a răspuns cu pagina lui de eroare (serviciu indisponibil sau prea multe cereri într-un timp scurt; încearcă din nou peste câteva minute)`
+        ? `HTTP ${res.status} — serviciul SFS nu răspunde: a întors pagina lui de eroare în loc de un răspuns SOAP. Nu ține de credențialele tale (cererea nu ajunge până la autentificare) și nu se rezolvă din aplicație; reîncearcă mai târziu`
         : `HTTP ${res.status}`);
     throw new EfacturaMdError(method, message);
   }

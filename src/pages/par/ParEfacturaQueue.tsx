@@ -90,6 +90,21 @@ function SfsSettingsPanel({ sfs, onSaved }: { sfs: Queue["sfs"]; onSaved: () => 
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
+  /**
+   * `useState` citește propul O SINGURĂ DATĂ, la montare. Dacă panoul s-a montat înainte ca setările
+   * să ajungă de la server — sau dacă altcineva le-a schimbat între timp — câmpurile rămâneau goale
+   * pentru totdeauna, fără nicio cale de a le reîncărca. Iar cu „Cont bancar" gol butonul Salvează e
+   * blocat (vezi `disabled` mai jos): panoul devenea imposibil de folosit până retastai un IBAN care
+   * exista deja în baza de date. Resincronizăm de câte ori serverul trimite altceva, dar NUMAI cu
+   * panoul închis, ca să nu ștergem ce tastează omul acum.
+   */
+  useEffect(() => {
+    if (open) return;
+    setIdno(sfs.idno ?? "");
+    setBankAccount(sfs.bankAccount ?? "");
+    setEnvironment(sfs.environment ?? "mock");
+  }, [open, sfs.idno, sfs.bankAccount, sfs.environment]);
+
   const save = async () => {
     setBusy(true);
     setMessage(null);

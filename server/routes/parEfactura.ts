@@ -122,7 +122,8 @@ async function sfsSummary(tenantId: string) {
     .from(finSfsSettings)
     .where(eq(finSfsSettings.tenantId, tenantId))
     .limit(1);
-  if (!row) return { configured: false, environment: null, idno: null, hasCredentials: false, lastTestedAt: null };
+  if (!row)
+    return { configured: false, environment: null, idno: null, bankAccount: null, hasCredentials: false, lastTestedAt: null };
   const hasCredentials = !!(row.usernameEncrypted && row.passwordEncrypted);
   return {
     configured: hasCredentials && row.environment !== "mock",

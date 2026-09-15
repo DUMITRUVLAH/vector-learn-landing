@@ -33,6 +33,7 @@ const SFS_OK: ParEfacturaQueue["sfs"] = {
   configured: true,
   environment: "prod",
   idno: "1003600009999",
+  bankAccount: "MD70ML000000000222440923",
   hasCredentials: true,
   lastTestedAt: null,
 };
@@ -171,5 +172,30 @@ describe("ParEfacturaQueue — taburi", () => {
     expect(await screen.findByText(/Nu putem citi facturile din SFS/i)).toBeInTheDocument();
     expect(screen.getByText(/nu este configurată pentru această organizație/i)).toBeInTheDocument();
     expect(screen.queryByText("fără cerere")).not.toBeInTheDocument();
+  });
+
+  it("panoul de configurare preia setările venite de la server după montare", async () => {
+    // Regresie: câmpurile se citeau O SINGURĂ DATĂ, la montare (`useState(sfs.idno ?? "")`). Dacă
+    // primul răspuns nu aducea setările — sau dacă altcineva le schimba între timp — panoul rămânea
+    // gol pentru totdeauna, fără nicio cale de reîncărcare. Iar cu „Cont bancar" gol butonul
+    // Salvează e blocat: configurarea devenea imposibil de salvat fără să retastezi un IBAN care
+    // exista deja pe server.
+    const fara = queue();
+    fara.sfs = { ...SFS_OK, idno: null, bankAccount: null };
+    const cu = queue();
+    vi.spyOn(api, "getParEfacturaQueue").mockResolvedValueOnce(fara).mockResolvedValue(cu);
+
+    render(<ParEfacturaQueuePage />);
+    await screen.findByText("PAR-2026-0025");
+
+    // A doua încărcare (schimbarea filtrului) aduce setările reale.
+    await userEvent.click(screen.getByRole("button", { name: "Toate" }));
+    await waitFor(() => expect(api.getParEfacturaQueue).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(screen.getByRole("button", { name: /Configurare SIA/i }));
+
+    expect(screen.getByLabelText(/IDNO organizație/i)).toHaveValue("1003600009999");
+    expect(screen.getByLabelText(/Cont bancar/i)).toHaveValue("MD70ML000000000222440923");
+    expect(screen.getByRole("button", { name: /Salvează/i })).toBeEnabled();
   });
 });

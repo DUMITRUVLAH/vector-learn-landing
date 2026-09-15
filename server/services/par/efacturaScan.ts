@@ -345,6 +345,34 @@ async function fetchBuyerInvoices(
 }
 
 /**
+ * Adună erorile parțiale într-o singură frază, grupând listele care au picat din ACELAȘI motiv.
+ *
+ * De ce: când SFS e picat, toate cele patru liste primesc identic „HTTP 500 — serviciul SFS nu
+ * răspunde", iar mesajul repeta aceeași propoziție de patru ori — un perete de text care nu spunea
+ * nimic în plus și ascundea singura informație utilă (care liste lipsesc). Acum: o cauză, listele
+ * afectate în față.
+ */
+export function formatSfsErrors(errors: string[]): string {
+  const byCause = new Map<string, string[]>();
+  for (const raw of errors) {
+    const sep = raw.indexOf(": ");
+    const label = sep > 0 ? raw.slice(0, sep) : "";
+    // `EfacturaMdError` prefixează cu numele metodei („e-Factura MD GetAcceptedInvoices: …"); fără
+    // să-l tăiem, două liste picate identic ar părea două probleme diferite.
+    const cause = (sep > 0 ? raw.slice(sep + 2) : raw).replace(/^e-Factura MD \w+: /, "");
+    const labels = byCause.get(cause);
+    if (labels) labels.push(label);
+    else byCause.set(cause, [label]);
+  }
+  return [...byCause.entries()]
+    .map(([cause, labels]) => {
+      const named = labels.filter(Boolean);
+      return named.length > 0 ? `${named.join(", ")}: ${cause}` : cause;
+    })
+    .join("; ");
+}
+
+/**
  * `fetchBuyerInvoices` + cache per workspace. `force` ocolește cache-ul (butonul „Reîncarcă din SFS"
  * și scanarea explicită), dar un rezultat NEREUȘIT nu se pune niciodată în cache — altfel o eroare
  * temporară ar îngheța ecranul pe „nu am putut citi" timp de cinci minute.
@@ -425,7 +453,7 @@ export async function scanEfacturasForTenant(
       found: 0,
       missing: 0,
       invoicesFetched: 0,
-      message: `Nu am putut interoga SFS: ${errors.join("; ") || "serviciul nu a răspuns"}.`,
+      message: `Nu am putut interoga SFS: ${formatSfsErrors(errors) || "serviciul nu a răspuns"}.`,
     };
   }
 
@@ -447,7 +475,7 @@ export async function scanEfacturasForTenant(
       found: 0,
       missing: 0,
       invoicesFetched: invoices.length,
-      message: errors.length ? `SFS a răspuns parțial: ${errors.join("; ")}` : "Nicio cerere în așteptare.",
+      message: errors.length ? `SFS a răspuns parțial: ${formatSfsErrors(errors)}` : "Nicio cerere în așteptare.",
     };
   }
 
@@ -546,7 +574,7 @@ export async function scanEfacturasForTenant(
     found,
     missing,
     invoicesFetched: invoices.length,
-    message: errors.length ? `${base} SFS a răspuns parțial: ${errors.join("; ")}` : base,
+    message: errors.length ? `${base} SFS a răspuns parțial: ${formatSfsErrors(errors)}` : base,
   };
 }
 
@@ -616,7 +644,7 @@ export async function listBuyerInvoicesForTenant(
     return {
       available: false,
       source: "sfs",
-      message: `Nu am putut citi facturile din SFS: ${errors.join("; ") || "serviciul nu a răspuns"}.`,
+      message: `Nu am putut citi facturile din SFS: ${formatSfsErrors(errors) || "serviciul nu a răspuns"}.`,
       invoices: [],
     };
   }
@@ -692,7 +720,7 @@ export async function listBuyerInvoicesForTenant(
   return {
     available: true,
     source: "sfs",
-    message: errors.length ? `${base} SFS a răspuns parțial: ${errors.join("; ")}` : base,
+    message: errors.length ? `${base} SFS a răspuns parțial: ${formatSfsErrors(errors)}` : base,
     invoices: items,
   };
 }

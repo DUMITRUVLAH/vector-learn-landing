@@ -396,3 +396,31 @@ describe("când SFS refuză toate listele", () => {
     expect(list.message).toMatch(/nu am putut citi/i);
   });
 });
+
+describe("mesajul de eroare când SFS e picat", () => {
+  it("nu repetă aceeași cauză o dată pentru fiecare listă", async () => {
+    const { formatSfsErrors } = await import("../services/par/efacturaScan");
+    const cauza = "HTTP 500 — serviciul SFS nu răspunde";
+    const out = formatSfsErrors([
+      `facturi de semnat: e-Factura MD GetInvoicesForSigning: ${cauza}`,
+      `facturi acceptate: e-Factura MD GetAcceptedInvoices: ${cauza}`,
+      `facturi arhivate: e-Factura MD GetArchivedInvoices: ${cauza}`,
+      `facturi respinse: e-Factura MD GetRejectedInvoices: ${cauza}`,
+    ]);
+
+    expect(out).toBe(`facturi de semnat, facturi acceptate, facturi arhivate, facturi respinse: ${cauza}`);
+    expect(out.match(/HTTP 500/g)).toHaveLength(1);
+  });
+
+  it("păstrează separat cauzele diferite", async () => {
+    const { formatSfsErrors } = await import("../services/par/efacturaScan");
+    const out = formatSfsErrors([
+      "facturi de semnat: e-Factura MD GetInvoicesForSigning: HTTP 500 — serviciul SFS nu răspunde",
+      "facturi arhivate: e-Factura MD GetArchivedInvoices: drepturi insuficiente",
+    ]);
+
+    expect(out).toBe(
+      "facturi de semnat: HTTP 500 — serviciul SFS nu răspunde; facturi arhivate: drepturi insuficiente"
+    );
+  });
+});
