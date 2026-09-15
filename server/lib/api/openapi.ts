@@ -173,6 +173,15 @@ export const OPENAPI_DOCUMENT = {
       get: {
         tags: ["Rapoarte"],
         summary: "Indicatorii comerciali, agregați",
+        parameters: [
+          {
+            name: "pipelineId",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+            description:
+              "Restrânge rezumatul la o pâlnie. Recomandat când workspace-ul ține și pâlnii care NU sunt oportunități (arhive de import, liste de nou-veniți): altfel valoarea lor intră în forecast.",
+          },
+        ],
         description:
           "Un obiect mic, calculat în bază. Rata de conversie se calculează pe afacerile ÎNCHISE (câștigate / (câștigate + pierdute)): leadurile încă deschise n-au pierdut nimic, iar împărțirea la tot ce există doar diluează cifra pe măsură ce intră leaduri noi.",
         responses: {
@@ -322,6 +331,7 @@ export const OPENAPI_DOCUMENT = {
         properties: {
           generatedAt: { type: "string", format: "date-time" },
           currency: { type: "string" },
+          pipelineId: { type: ["string", "null"], format: "uuid", description: "Pâlnia cerută, sau `null` pentru tot workspace-ul." },
           leads: {
             type: "object",
             properties: {

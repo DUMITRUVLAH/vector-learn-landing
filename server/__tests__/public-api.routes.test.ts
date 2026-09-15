@@ -269,6 +269,21 @@ describe("API-ul public", () => {
     expect(body.leads.weightedForecastCents).toBe(60_000);
   });
 
+  it("[blocant] rezumatul se poate restrânge la o pâlnie — o arhivă nu are ce căuta în forecast", async () => {
+    // Leadurile de mai sus n-au pâlnie (`pipeline_id` null). Cerut pe o pâlnie anume, rezumatul
+    // trebuie să fie gol — altfel filtrul e decorativ, iar tabloul de bord raportează bani
+    // dintr-o listă care nu e o pâlnie de vânzare.
+    const body = await (await api("/reports/summary?pipelineId=00000000-0000-0000-0000-000000000001", keyA)).json();
+    expect(body.pipelineId).toBe("00000000-0000-0000-0000-000000000001");
+    expect(body.leads.total).toBe(0);
+    expect(body.leads.weightedForecastCents).toBe(0);
+
+    // Fără filtru, rezumatul acoperă tot workspace-ul.
+    const all = await (await api("/reports/summary", keyA)).json();
+    expect(all.pipelineId).toBeNull();
+    expect(all.leads.total).toBeGreaterThan(0);
+  });
+
   it("[normal] paginarea are plafon — o cerere nu poate trage toată baza", async () => {
     const body = await (await api("/leads?pageSize=100000", keyA)).json();
     expect(body.pageSize).toBe(200);

@@ -414,6 +414,16 @@ publicApiRoutes.get("/users", async (c) => {
  */
 publicApiRoutes.get("/reports/summary", async (c) => {
   const tenantId = c.get("apiTenantId");
+  /**
+   * `pipelineId` restrânge rezumatul la o singură pâlnie. Contează mai mult decât pare: un
+   * workspace poate ține într-o pâlnie separată leaduri care NU sunt oportunități (o arhivă de
+   * import, o listă de nou-veniți). Fără filtru, valoarea lor intră în „forecast" și tabloul de
+   * bord raportează bani care nu există.
+   */
+  const pipelineId = c.req.query("pipelineId");
+  const scope = pipelineId
+    ? and(eq(leads.tenantId, tenantId), eq(leads.pipelineId, pipelineId))
+    : eq(leads.tenantId, tenantId);
 
   const [byStage, stages, bySource, docTotals] = await Promise.all([
     db
@@ -424,7 +434,7 @@ publicApiRoutes.get("/reports/summary", async (c) => {
         valueCents: sql<string>`coalesce(sum(${leads.valueCents}), 0)::bigint`,
       })
       .from(leads)
-      .where(eq(leads.tenantId, tenantId))
+      .where(scope)
       .groupBy(leads.stage, leads.pipelineId),
     db
       .select({ key: crmPipelineStages.key, isWon: crmPipelineStages.isWon, isLost: crmPipelineStages.isLost, probabilityPct: crmPipelineStages.probabilityPct })
@@ -433,7 +443,7 @@ publicApiRoutes.get("/reports/summary", async (c) => {
     db
       .select({ source: sql<string>`${leads.source}::text`, count: sql<number>`count(*)::int` })
       .from(leads)
-      .where(eq(leads.tenantId, tenantId))
+      .where(scope)
       .groupBy(leads.source),
     db
       .select({ status: docDocuments.status, count: sql<number>`count(*)::int`, totalCents: sql<string>`coalesce(sum(${docDocuments.totalCents}), 0)::bigint` })
@@ -468,6 +478,7 @@ publicApiRoutes.get("/reports/summary", async (c) => {
   return c.json({
     generatedAt: new Date().toISOString(),
     currency: "MDL",
+    pipelineId: pipelineId ?? null,
     leads: {
       total,
       open,
