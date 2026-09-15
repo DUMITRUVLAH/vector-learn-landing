@@ -174,7 +174,8 @@ describe("Selectorul de pâlnie", () => {
     render(<CrmPipelinePage />);
     await findLeadCards("Maria Popescu");
 
-    fireEvent.change(screen.getByLabelText("Pâlnie"), { target: { value: B2B.id } });
+    // Pâlniile sunt pastile, nu un select: se apasă pe cea dorită.
+    fireEvent.click(screen.getByRole("button", { name: "B2B" }));
 
     await findLeadCards("Corporate SRL");
     // Al doilea argument e segmentul firmografic (cerința 4): gol aici, dar trimis mereu, ca
@@ -206,7 +207,8 @@ describe("Administrarea pâlniilor", () => {
     render(<CrmPipelinePage />);
     await findLeadCards("Maria Popescu");
 
-    fireEvent.click(screen.getByRole("button", { name: "Pâlnii" }));
+    // Administrarea pâlniilor se deschide din „Pâlnie nouă", de lângă pastile.
+    fireEvent.click(screen.getByRole("button", { name: /Pâlnie nouă/ }));
     fireEvent.change(await screen.findByLabelText("Pâlnie nouă"), { target: { value: "B2B" } });
     fireEvent.click(screen.getByRole("button", { name: "Adaugă" }));
 
@@ -219,7 +221,8 @@ describe("Administrarea pâlniilor", () => {
 
     render(<CrmPipelinePage />);
     await findLeadCards("Maria Popescu");
-    fireEvent.click(screen.getByRole("button", { name: "Pâlnii" }));
+    // Administrarea pâlniilor se deschide din „Pâlnie nouă", de lângă pastile.
+    fireEvent.click(screen.getByRole("button", { name: /Pâlnie nouă/ }));
 
     expect(await screen.findByRole("button", { name: "Șterge pâlnia B2B" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Șterge pâlnia Vânzări" })).not.toBeInTheDocument();

@@ -41,6 +41,7 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, typ
 import { db } from "../db/client";
 import { leads, leadInteractions, leadTags, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
 import { crmPipelineStages, type CrmPipelineStage } from "../db/schema/crmPipelineStages";
+import { crmLeadTasks } from "../db/schema/crmTasks";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { runAutomations } from "./crmAutomations";
 import { assignLeadAutomatically } from "./crmAssignment";
@@ -304,7 +305,43 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       .orderBy(desc(leads.createdAt))
       .limit(500);
 
-    const grouped: Record<string, typeof recent> = {};
+    // Taskul următor al fiecărui card: o singură interogare pentru toată tabla, nu una per lead.
+    // Fără el, tabla nu spune ce ai de făcut — omul vede 40 de cartonașe identice și deschide
+    // fiecare fișă ca să afle care e restant. Cardul îl arată ca semnal roșu când a trecut
+    // scadența (același reflex ca la clopoțel).
+    const nextTaskByLead = new Map<string, { title: string; dueAt: string | null }>();
+    if (recent.length > 0) {
+      try {
+        const taskRows = await db
+          .select({ leadId: crmLeadTasks.leadId, title: crmLeadTasks.title, dueAt: crmLeadTasks.dueAt })
+          .from(crmLeadTasks)
+          .where(
+            and(
+              eq(crmLeadTasks.tenantId, tenantId),
+              eq(crmLeadTasks.status, "open"),
+              inArray(
+                crmLeadTasks.leadId,
+                recent.map((l) => l.id)
+              )
+            )
+          )
+          .orderBy(asc(crmLeadTasks.dueAt));
+        // Primul rând per lead e cel mai apropiat de scadență (interogarea vine sortată).
+        for (const t of taskRows) {
+          if (!nextTaskByLead.has(t.leadId)) {
+            nextTaskByLead.set(t.leadId, { title: t.title, dueAt: t.dueAt ? t.dueAt.toISOString() : null });
+          }
+        }
+      } catch (e) {
+        // Tabela de taskuri lipsă (schemă în urma codului) nu are voie să dărâme tabla: cardurile
+        // apar fără semnal, restul ecranului funcționează la fel.
+        if (!isMissingSchemaError(e)) throw e;
+      }
+    }
+
+    /** Cardul = leadul + semnalul lui de lucru. Tipul e explicit ca `nextTask` să nu se piardă. */
+    type BoardCard = (typeof recent)[number] & { nextTask: { title: string; dueAt: string | null } | null };
+    const grouped: Record<string, BoardCard[]> = {};
     const counts: Record<string, number> = {};
     const valueSums: Record<string, number> = {};
     for (const key of stageKeys) {
@@ -314,7 +351,7 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
     }
     for (const lead of recent) {
       const column = grouped[lead.stage];
-      if (column && column.length < 50) column.push(lead);
+      if (column && column.length < 50) column.push({ ...lead, nextTask: nextTaskByLead.get(lead.id) ?? null });
     }
 
     // IMPORTANT: numărătorile/sumele NU se calculează din `grouped` (plafonat la 50) — trebuie să

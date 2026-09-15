@@ -34,6 +34,7 @@ const getCrmTeamPermissions = vi.fn();
 const setCrmUserPermission = vi.fn();
 
 vi.mock("@/lib/api/crm", () => ({
+  getCrmPermissions: vi.fn().mockResolvedValue({ role: "admin", permissions: ["leads.view_all", "leads.view_own", "leads.edit", "leads.export", "reports.view_team", "documents.create", "products.manage", "pipelines.manage", "automations.manage", "assignment.manage", "cadences.manage", "audit.view"] }),
   getCrmTeamPermissions: (...a: unknown[]) => getCrmTeamPermissions(...a),
   setCrmUserPermission: (...a: unknown[]) => setCrmUserPermission(...a),
 }));

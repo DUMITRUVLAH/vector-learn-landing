@@ -18,7 +18,7 @@
  * `drop` citește o valoare învechită (stale closure).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, GitBranch, KanbanSquare, LayoutList, Download } from "lucide-react";
+import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, GitBranch, KanbanSquare, LayoutList, Download, Bell, Clock } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
@@ -375,33 +375,29 @@ export function CrmPipelinePage() {
   const wonCount = Object.entries(counts).reduce((sum, [key, n]) => (wonKeys.has(key) ? sum + n : sum), 0);
   const conversionRate = totalLeads > 0 ? Math.round((wonCount / totalLeads) * 100) : 0;
 
+  /**
+   * Forecastul ponderat: suma valorilor, fiecare înmulțită cu probabilitatea ETAPEI în care stă
+   * leadul. Etapele „pierdut" ies din calcul, iar cele „câștigat" intră cu 100%.
+   *
+   * De ce nu suma brută a pâlniei: aia spune „am 680.000 în discuție", ceea ce nu e o prognoză, ci
+   * o listă de dorințe. Ponderarea pe probabilitate e cifra pe care un director o poate pune
+   * într-un buget — și e calculată din configurația reală a etapelor, nu dintr-un procent inventat.
+   */
+  const weightedForecast = stages.reduce((sum, stage) => {
+    if (stage.isLost) return sum;
+    const value = valueSums[stage.key] ?? 0;
+    const probability = stage.isWon ? 100 : stage.probabilityPct ?? 0;
+    return sum + (value * probability) / 100;
+  }, 0);
+
   return (
     <BusinessShell
       pageTitle="Pipeline"
-      pageDescription={`${totalLeads} lead${totalLeads === 1 ? "" : "uri"} · conversie ${conversionRate}%`}
+      pageDescription={`Forecast ponderat: ${formatCents(Math.round(weightedForecast))} · ${totalLeads} lead${
+        totalLeads === 1 ? "" : "uri"
+      } · conversie ${conversionRate}%`}
       actions={
         <>
-          {/* Selectorul apare doar când chiar EXISTĂ mai multe pâlnii: un workspace cu una
-              singură n-are ce alege, iar un select cu o opțiune e doar zgomot. */}
-          {pipelines.length > 1 && (
-            <>
-              <Label htmlFor="crm-pipeline-select" className="sr-only">
-                Pâlnie
-              </Label>
-              <Select
-                id="crm-pipeline-select"
-                value={activePipelineId ?? ""}
-                onChange={(e) => switchPipeline(e.target.value)}
-                className="w-[180px]"
-              >
-                {pipelines.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </>
-          )}
           <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="Mod de vizualizare">
             <button
               type="button"
@@ -436,17 +432,13 @@ export function CrmPipelinePage() {
             onToast={setToast}
             refreshToken={listRefreshToken}
           />
+          {/* Butonul „Pâlnii" a plecat: pastilele de deasupra tablei fac același lucru, vizibil.
+              „Etape" rămâne — configurarea coloanelor e altă treabă decât alegerea pâlniei. */}
           {canManagePipelines && (
-            <>
-              <Button variant="outline" onClick={() => setShowPipelineManager(true)}>
-                <GitBranch className="h-4 w-4" aria-hidden="true" />
-                Pâlnii
-              </Button>
-              <Button variant="outline" onClick={() => setShowStageEditor(true)}>
-                <Settings className="h-4 w-4" aria-hidden="true" />
-                Etape
-              </Button>
-            </>
+            <Button variant="outline" onClick={() => setShowStageEditor(true)}>
+              <Settings className="h-4 w-4" aria-hidden="true" />
+              Etape
+            </Button>
           )}
           <Button onClick={() => setShowAddLead(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -482,7 +474,41 @@ export function CrmPipelinePage() {
         />
       ) : (
         <>
-          {/* Bara de filtre — client-side, peste datele deja încărcate din /pipeline. */}
+          {/* Pâlniile, ca pastile. Erau un `<select>` ascuns printre butoanele din colțul din
+              dreapta: nimeni nu-l vedea, deci pâlniile construite rămâneau nefolosite. Aici se
+              vede din prima câte linii de business ai și în care ești. */}
+          {pipelines.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Pâlnii">
+              {pipelines.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => switchPipeline(p.id)}
+                  aria-pressed={p.id === activePipelineId}
+                  className={cn(
+                    "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+                    p.id === activePipelineId
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-foreground hover:bg-muted"
+                  )}
+                >
+                  {p.name}
+                </button>
+              ))}
+              {canManagePipelines && (
+                <button
+                  type="button"
+                  onClick={() => setShowPipelineManager(true)}
+                  className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Pâlnie nouă
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Bara de filtre — se aplică PE SERVER, în ambele vederi. */}
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="sm:w-72">
               <Label htmlFor="crm-filter-search" className="sr-only">
@@ -768,6 +794,11 @@ function LeadCard({
 }) {
   const title = leadTitle(lead);
   const subtitle = lead.company || lead.interestCourse;
+  const task = lead.nextTask ?? null;
+  const dueAt = task?.dueAt ? new Date(task.dueAt) : null;
+  // „Restant" = scadența a trecut. Nu e o nuanță de stil: e singurul semnal de pe tablă care
+  // spune unde se pierde o vânzare chiar acum.
+  const overdue = dueAt !== null && dueAt.getTime() < Date.now();
   return (
     <div
       draggable
@@ -778,8 +809,10 @@ function LeadCard({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "cursor-move rounded-lg border border-border bg-card p-2.5 shadow-sm transition-all",
+        "group cursor-move rounded-lg border border-border bg-card p-2.5 shadow-sm transition-all",
         "hover:-translate-y-0.5 hover:shadow-md",
+        // Dunga roșie din stânga se vede din capătul celălalt al ecranului, fără să citești nimic.
+        overdue && "border-l-4 border-l-destructive",
         isDragging && "opacity-50"
       )}
     >
@@ -792,20 +825,44 @@ function LeadCard({
         className="w-full rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Deschide lead ${title}`}
       >
-        <p className="truncate text-xs font-semibold text-foreground">{title}</p>
-        {subtitle && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{subtitle}</p>}
+        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+        {/* Ce vinzi, nu doar cui: produsul/cursul e informația după care agentul recunoaște cardul
+            dintr-o privire, deci primește culoarea de accent, nu griul de subsol. */}
+        {subtitle && <p className="mt-0.5 truncate text-xs font-medium text-primary">{subtitle}</p>}
+        {lead.valueCents > 0 && (
+          <p className="mt-1 text-sm font-bold tabular-nums text-foreground">{formatCents(lead.valueCents)}</p>
+        )}
+        {task && (
+          <p
+            className={cn(
+              "mt-1.5 flex items-start gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium",
+              overdue ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
+            )}
+          >
+            <Bell className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">
+              {task.title}
+              {dueAt && ` · ${dueAt.toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit" })}`}
+            </span>
+          </p>
+        )}
         <div className="mt-1.5 flex items-center justify-between gap-2">
-          <span className="text-[10px] text-muted-foreground">{crmSourceLabel(lead.source)}</span>
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            {crmSourceLabel(lead.source)}
+            <span aria-hidden="true">·</span>
+            <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+            {new Date(lead.createdAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+          </span>
           <div className="flex items-center gap-1.5 text-muted-foreground">
             {lead.phone && <Phone className="h-3 w-3" aria-label="Are telefon" />}
             {lead.email && <Mail className="h-3 w-3" aria-label="Are email" />}
           </div>
         </div>
-        {lead.valueCents > 0 && (
-          <p className="mt-1 text-[11px] font-bold tabular-nums text-foreground">{formatCents(lead.valueCents)}</p>
-        )}
       </button>
-      <div className="mt-2">
+      {/* Mutarea din select rămâne calea de la tastatură și singura de pe telefon (unde nu există
+          drag). Pe desktop se arată la hover sau când primește focus: altfel fiecare card purta
+          permanent o casetă de formular, iar tabla arăta a formular, nu a tablă. */}
+      <div className="mt-2 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100 lg:focus-within:opacity-100">
         <Label htmlFor={`crm-stage-${lead.id}`} className="sr-only">
           Mutare stadiu pentru {title}
         </Label>

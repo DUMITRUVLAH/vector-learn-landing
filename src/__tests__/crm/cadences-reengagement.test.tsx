@@ -46,6 +46,7 @@ const runCrmCadencesNow = vi.fn();
 const getCrmStages = vi.fn();
 
 vi.mock("@/lib/api/crm", () => ({
+  getCrmPermissions: vi.fn().mockResolvedValue({ role: "admin", permissions: ["leads.view_all", "leads.view_own", "leads.edit", "leads.export", "reports.view_team", "documents.create", "products.manage", "pipelines.manage", "automations.manage", "assignment.manage", "cadences.manage", "audit.view"] }),
   listCrmCadences: (...a: unknown[]) => listCrmCadences(...a),
   createCrmCadence: (...a: unknown[]) => createCrmCadence(...a),
   updateCrmCadence: vi.fn(),

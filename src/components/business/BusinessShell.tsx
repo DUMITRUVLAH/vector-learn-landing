@@ -49,6 +49,7 @@ import {
   X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon} from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
+import { CrmTabs } from "@/components/crm/CrmTabs";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
@@ -708,6 +709,10 @@ export function BusinessShell({
           {pageTitle ? (
             <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} />
           ) : null}
+          {/* Sub-navigarea modulului, sub antetul paginii. Stă AICI, nu în fiecare ecran, din două
+              motive: apare la fel pe toate (douăsprezece copii ar diverge la prima grabă) și nu
+              obligă fiecare pagină nouă de CRM să-și amintească s-o adauge. */}
+          {path.startsWith("/business/crm") && <CrmTabs />}
           {children}
         </main>
       </div>

@@ -58,6 +58,9 @@ export interface CrmLead {
   assignedTo: string | null;
   /** Obligatoriu doar când `stage === "lost"` — serverul respinge altfel (400 `lost_reason_required`). */
   lostReason: string | null;
+  /** Taskul deschis cel mai apropiat de scadență, atașat de `/pipeline` la fiecare card.
+   *  Lipsește pe celelalte rute (lista îl ia din altă parte) — de-aia e opțional. */
+  nextTask?: { title: string; dueAt: string | null } | null;
   /** Când și-a dat consimțământul (formular web). */
   consentAt?: string | null;
   /** Când l-a retras. Nenul = leadul NU mai poate fi contactat comercial. */
