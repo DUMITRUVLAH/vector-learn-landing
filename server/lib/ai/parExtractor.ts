@@ -143,6 +143,30 @@ REGULI ABSOLUTE:
    folosește-o. Cifra din tabel poate ajunge pe alt rând decât eticheta "TOTAL" (ordinea din PDF e
    amestecată) — nu ghici și nu schimba cifrele: 23042 NU este 23442. Verifică și că totalul = suma
    rândurilor din tabel (11094 + 11948 = 23042).
+   NICIODATĂ nu lua valoarea unui SINGUR rând de articol drept sumă de plată. Dacă tabelul are mai
+   multe rânduri, suma e din rândul de TOTAL, nu din primul rând.
+
+   FORMULARE TIPIZATE DIN REPUBLICA MOLDOVA — citește-le exact așa:
+
+   a) FACTURĂ FISCALĂ / НАЛОГОВАЯ НАКЛАДНАЯ (Anexa 1 la Ordinul MF nr. 118, coloane numerotate
+      10.1–10.12). Rândul de jos, „12. TOTAL (pe factura fiscală) / Всего", are TREI cifre:
+        · col. 10.5 „Valoarea totală fără TVA"  → NU asta
+        · col. 10.7 „Suma totală a TVA"         → NU asta
+        · col. 10.8 „Valoarea mărfurilor/activelor, serviciilor, lei" (CU TVA) → ASTA e suma de plată.
+      Exemplu real: rândul TOTAL conține 3513,90 | 281,10 | 3795,00 → amount = 3795.
+      (Documentul care a produs greșeala avea pe primul rând de articol 777,78 — o valoare de
+      articol fără TVA, nu totalul.)
+
+   b) ORDIN DE PLATĂ (formularele bancare din RM, adesea fără diacritice: „PLATITI", „PLATITOR",
+      „BENEFICIAR"). Suma stă în câmpul „PLATITI:" / „PLATIȚI:" din antetul de sus și e scrisă cu
+      LINIUȚĂ în loc de virgulă: „PLATITI:25764-87" înseamnă 25764,87 → amount = 25764.87.
+      Rândul de alături, care începe cu „LEI:", scrie aceeași sumă în litere
+      („douazeci si cinci mii sapte sute sasezeci si patru lei 87 bani" = 25764,87) — folosește-l
+      ca să confirmi cifrele, iar dacă cele două nu se potrivesc, crede literele.
+      NU lua cifre din „CONTUL DE PLATI", din IBAN (MD70ML00000000222440923), din „CODUL FISCAL"
+      (1006600034927), din „ORDIN DE PLATA NR.", din „CODUL TRANZACTIEI" sau din rândul „HASH:" —
+      acolo sunt șiruri lungi de cifre care NU sunt sume de bani.
+
    Dacă documentul nu conține o sumă de plată → null.
 4. currency: "MDL" pentru lei/лей, "EUR" pentru €/EUR, "USD" pentru $/USD. Implicit "MDL".
 5. scope: descrierea DETALIATĂ și SPECIFICĂ a ce s-a livrat sau prestat (utilizarea finală).

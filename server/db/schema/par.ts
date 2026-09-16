@@ -126,6 +126,16 @@ export const parPayers = pgTable(
     tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 300 }).notNull(),
     legalName: varchar("legal_name", { length: 300 }),
+    /**
+     * Celelalte denumiri sub care organizația apare pe documente — acronim, denumire prescurtată,
+     * varianta din alt alfabet. Separate prin virgulă sau linie nouă.
+     *
+     * Verificarea „plătitorul e altul" compară numele de pe act cu entitatea noastră; pe ATIC,
+     * unde `name` e acronimul iar actele poartă denumirea juridică completă, comparația nu avea
+     * pe ce se sprijini și raporta nepotrivire pe documente perfect corecte. Vezi
+     * `server/lib/par/sameParty.ts`.
+     */
+    aliases: text("aliases"),
     idno: varchar("idno", { length: 32 }),
     /** Nr. de înregistrare ca plătitor de TVA (separat de IDNO — pe acte apar amândouă). */
     vatCode: varchar("vat_code", { length: 50 }),

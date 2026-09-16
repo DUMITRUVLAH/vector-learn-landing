@@ -7,6 +7,7 @@
  * T-PAR-118-3 [blocant] Action buttons have aria-labels (a11y)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CURRENT_ANALYSIS_VERSION } from "@/lib/par/attachmentWarnings";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ParDetail } from "@/lib/api/par";
 
@@ -301,7 +302,7 @@ describe("ParDetailPage — PAR-118", () => {
           fileName: "factura-45.pdf",
           analysis: JSON.stringify({
             // Verdict făcut cu regulile curente — cele vechi nu blochează o semnătură.
-            version: 2,
+            version: CURRENT_ANALYSIS_VERSION,
             status: "warning",
             warnings: 2,
             checks: [

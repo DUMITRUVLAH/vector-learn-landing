@@ -240,6 +240,8 @@ export interface ParPayer {
   id: string;
   name: string;
   legalName: string | null;
+  /** Acronimul și celelalte denumiri de pe documente, separate prin virgulă. */
+  aliases?: string | null;
   idno: string | null;
   vatCode?: string | null;
   address?: string | null;
@@ -258,6 +260,7 @@ export interface ParPayer {
 /** Câmpurile de identitate acceptate de API (snake_case, ca pe server). */
 export interface ParPayerDetailsInput {
   legal_name?: string | null;
+  aliases?: string | null;
   idno?: string | null;
   vat_code?: string | null;
   address?: string | null;

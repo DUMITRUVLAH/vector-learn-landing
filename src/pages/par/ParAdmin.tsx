@@ -3694,10 +3694,16 @@ interface PayerFieldDef {
 const PAYER_FIELD_GROUPS: Array<{ title: string; hint?: string; fields: PayerFieldDef[] }> = [
   {
     title: "Identitate",
-    hint: "Denumirea juridică și IDNO apar pe fișa aprobărilor și feresc organizația de a fi propusă drept beneficiar.",
+    hint: "Denumirea juridică și IDNO apar pe fișa aprobărilor și feresc organizația de a fi propusă drept beneficiar. Completează IDNO și acronimul: pe ele se sprijină verificarea documentelor atașate.",
     fields: [
       { id: "name", label: "Denumire scurtă", placeholder: "ex. ATIC", required: true },
       { id: "legalName", label: "Denumire juridică", placeholder: "Denumirea completă din acte" },
+      {
+        id: "aliases",
+        label: "Alte denumiri (acronim, prescurtări)",
+        placeholder: "ex. ATIC, Asociația Națională a Companiilor din Domeniul TIC",
+        wide: true,
+      },
       { id: "idno", label: "IDNO / cod fiscal", placeholder: "ex. 1012600000000" },
       { id: "vatCode", label: "Cod TVA", placeholder: "ex. 0301234" },
       { id: "address", label: "Adresa juridică", placeholder: "str. …, mun. Chișinău, MD-2001", wide: true },
@@ -3738,6 +3744,7 @@ const PAYER_FIELD_GROUPS: Array<{ title: string; hint?: string; fields: PayerFie
 /** camelCase din formular → cheile snake_case ale API-ului. */
 const PAYER_API_KEYS: Record<string, keyof ParPayerDetailsInput> = {
   legalName: "legal_name",
+  aliases: "aliases",
   idno: "idno",
   vatCode: "vat_code",
   address: "address",

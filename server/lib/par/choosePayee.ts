@@ -55,6 +55,18 @@ function normOrg(s: string): string {
     .trim();
 }
 
+/**
+ * Cuvintele care nu identifică pe nimeni.
+ *
+ * Formele juridice stau aici de la 16.09.2026, cu un motiv măsurat: „Societatea cu Răspundere
+ * Limitată NEW TRADE" și „Societatea cu Răspundere Limitată «VECTOR ACADEMY»" împărtășeau trei
+ * cuvinte, iar regula „overlap ≥ 2" le declara aceeași organizație. Adică verificarea
+ * „plătitorul e altul" TĂCEA exact pe cazul pentru care a fost scrisă — o factură emisă pe altă
+ * firmă trecea drept a noastră.
+ *
+ * Variantele cu diacritice sunt scrise explicit fiindcă `normOrg` NU pliază diacriticele:
+ * „asociația" nu se potrivea niciodată cu „asociatia" din listă, deci filtrul nu se aplica.
+ */
 const STOPWORDS = new Set([
   "de",
   "la",
@@ -69,7 +81,33 @@ const STOPWORDS = new Set([
   "centrul",
   "centru",
   "asociatia",
+  "asociația",
   "obsteasca",
+  "obștească",
+  "nationala",
+  "națională",
+  "societatea",
+  "societate",
+  "raspundere",
+  "răspundere",
+  "limitata",
+  "limitată",
+  "firma",
+  "intreprinderea",
+  "întreprinderea",
+  "individuala",
+  "individuală",
+  "fundatia",
+  "fundația",
+  "organizatia",
+  "organizația",
+  "banca",
+  "bank",
+  "filiala",
+  "filiala",
+  "sucursala",
+  "group",
+  "holding",
 ]);
 
 function distinctTokens(norm: string): string[] {

@@ -18,6 +18,8 @@ const optionalText = (max: number) => z.string().max(max).optional().nullable();
 const payerSchema = z.object({
   name: z.string().min(1).max(300),
   legal_name: optionalText(300),
+  /** Acronimul și celelalte denumiri de pe documente, separate prin virgulă. */
+  aliases: optionalText(1000),
   idno: optionalText(32),
   vat_code: optionalText(50),
   address: optionalText(500),
@@ -36,6 +38,7 @@ const payerSchema = z.object({
 /** Câmpurile de identitate, în ordinea din formular — o singură listă pentru select + update. */
 const PAYER_DETAIL_FIELDS = [
   ["legal_name", "legalName"],
+  ["aliases", "aliases"],
   ["idno", "idno"],
   ["vat_code", "vatCode"],
   ["address", "address"],
@@ -95,6 +98,7 @@ parPayersRoutes.get("/", async (c) => {
     tenantId: parPayers.tenantId,
     name: parPayers.name,
     legalName: parPayers.legalName,
+    aliases: parPayers.aliases,
     idno: parPayers.idno,
     vatCode: parPayers.vatCode,
     address: parPayers.address,

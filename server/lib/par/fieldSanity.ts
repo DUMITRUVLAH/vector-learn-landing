@@ -103,3 +103,32 @@ export function sanitizeRequisites(p: {
 
   return { bank, legalAddress, administratorName, recoveredIdno, recoveredIban };
 }
+
+/**
+ * Curăță un câmp de identitate lipit dintr-un PDF.
+ *
+ * Pe producție (16.09.2026) o cerere avea în `payee_bank` textul
+ * „iciară: VictoriaBank S.A. fil. Nr. 17 Codul Băncii: VICBMD2X457 Codul IBAN: MD80VI…
+ * Preşedinte, Ilie CHIRTOACĂ S.C." — o selecție din PDF care a început la mijlocul cuvântului
+ * „Beneficiară" și a înghițit trei etichete următoare. Nimic din asta nu e un nume de bancă, dar
+ * a ajuns în baza de date și de acolo în comparații, ca „neconcordanță".
+ *
+ * Taie la prima etichetă de rechizit care începe după text, scoate rândurile multiple și
+ * limitează lungimea. Nu ghicește valoarea corectă — doar refuză să stocheze un paragraf acolo
+ * unde încape un nume.
+ */
+const REQUISITE_LABEL_RE =
+  /\s*\b(cod(ul)?\s+(b[ăa]ncii|iban|fiscal)|iban|idno|idnp|c\/f|c\/b|pre[sșş]edinte|director|administrator|semn[ăa]tur|[îi]n\s+persoana)\b\s*:?.*$/iu;
+
+export function cleanPastedIdentityField(raw: string | null | undefined, maxLen = 200): string | null {
+  if (raw == null) return null;
+  let v = String(raw).replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
+  if (!v) return null;
+  v = v.replace(REQUISITE_LABEL_RE, "").trim();
+  // O selecție începută la mijlocul unei etichete („…iciară: X") lasă gunoi înainte de „:".
+  const afterLabel = v.match(/^[^:]{0,30}:\s*(.+)$/);
+  if (afterLabel && afterLabel[1].trim()) v = afterLabel[1].trim();
+  v = v.replace(/[\s,;.]+$/, "").trim();
+  if (!v) return null;
+  return v.length > maxLen ? v.slice(0, maxLen).trim() : v;
+}

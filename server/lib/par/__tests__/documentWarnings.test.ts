@@ -7,8 +7,12 @@
  */
 import { describe, it, expect } from "vitest";
 import { countAnalysisMismatches, countMismatchesByPar } from "../documentWarnings";
+import { ANALYSIS_VERSION } from "../reconcileScope";
 
-const analysis = (matches: (boolean | null)[], version: number | null = 2) =>
+// Versiunea curentă se ia din sursă, nu se scrie cu mâna: fixture-urile nu au voie să devină
+// „vechi" la fiecare ridicare de reguli — altfel testele pică fără ca vreun comportament să fi
+// stricat ceva (s-a întâmplat la trecerea 2 → 3, pe 16.09.2026).
+const analysis = (matches: (boolean | null)[], version: number | null = ANALYSIS_VERSION) =>
   JSON.stringify({
     ...(version === null ? {} : { version }),
     status: matches.includes(false) ? "warning" : "match",

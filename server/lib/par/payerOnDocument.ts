@@ -10,17 +10,28 @@
  * a workspace-ului (sau pe o firmă din afara lui) trecea fără o vorbă. Într-un workspace cu două
  * entități, exact asta se întâmplă des: omul atașează factura firmei-soră.
  *
- * Regula, construită să NU producă alarme false — ele sunt mai scumpe decât lipsa verificării,
- * pentru că omul învață să dea click pe „aprob" fără să citească:
+ * ── Ce s-a schimbat pe 16.09.2026 (măsurat pe producție) ──────────────────────────────────────
  *
- *   - fără o entitate plătitoare cu identificator (IDNO / denumire) → `null` (neverificat);
- *   - dacă documentul numește O SINGURĂ parte, nu are „latura plătitoare" de verificat → `null`
- *     (o factură simplă poate lista doar furnizorul);
- *   - dacă vreo parte se potrivește cu entitatea noastră (IDNO exact, IBAN exact sau denumire
- *     fuzzy, care taie „SRL", punctuația și diacriticele) → potrivire;
- *   - altfel → NEPOTRIVIRE, cu numele găsit pe document, ca omul să vadă pe cine e emis.
+ * Verificarea asta a devenit singura cea mai mare sursă de alarme false: 17 din cele 59 de
+ * „neconcordanțe" ale ultimelor 10 zile. Două cauze, amândouă reparate aici:
+ *
+ *  1. **Entitatea plătitoare n-avea pe ce fi recunoscută.** La clientul ATIC, `par_payers` avea
+ *     `name` = `legal_name` = „ATIC", fără IDNO și fără IBAN, în timp ce actele poartă denumirea
+ *     juridică întreagă. Acum comparația folosește aliasurile declarate pe organizație
+ *     (`sameParty`), iar dacă organizația n-are NICIUN identificator utilizabil, verificarea
+ *     spune cinstit „neverificat" în loc să inventeze o nepotrivire.
+ *
+ *  2. **Se raporta o parte la întâmplare.** Când documentul n-avea latură plătitoare, funcția
+ *     întorcea `others[0].name` — așa a ajuns să scrie „plătitorul e Mariana Alexei" pe o listă de
+ *     participanți la workshop și „plătitorul e Mailchimp" pe o chitanță de card. Garda
+ *     `parties.length < 2` nu prindea documentele pline de oameni care nu sunt părți contractante.
+ *     Acum întrebarea se pune doar pe tipurile de document care CHIAR au un emitent și un
+ *     destinatar (`carriesPayerSide`).
+ *
+ * Regula rămâne construită să NU producă alarme false — ele sunt mai scumpe decât lipsa
+ * verificării, pentru că omul învață să dea click pe „aprob" fără să citească.
  */
-import { fuzzyOrgMatchAny } from "./choosePayee";
+import { partyAliases, sameParty } from "./sameParty";
 
 /**
  * Minimul de care are nevoie verificarea. Structural, nu nominal: primește la fel de bine părțile
@@ -36,6 +47,8 @@ export interface DocumentParty {
 export interface PayerIdentity {
   name: string | null;
   legalName: string | null;
+  /** Acronimul și celelalte denumiri de pe documente (`par_payers.aliases`). */
+  aliases?: string | null;
   idno: string | null;
   iban: string | null;
 }
@@ -56,16 +69,22 @@ const compact = (v: string | null | undefined) => (v ?? "").replace(/\s/g, "").t
  * `beneficiary` e partea deja identificată drept beneficiar al cererii — ea nu poate fi și
  * plătitorul, deci se scoate din căutare (altfel un document cu două părți ar „confirma" plătitorul
  * folosind chiar beneficiarul).
+ *
+ * `carriesPayerSide` spune dacă TIPUL documentului are în general un emitent și un destinatar. Pe
+ * `false` (o chitanță de card, un pontaj, o listă de participanți) întrebarea nu se pune deloc.
  */
 export function checkPayerOnDocument(
   parties: readonly DocumentParty[],
   payer: PayerIdentity | null,
-  beneficiary: { name?: string | null; idno?: string | null } | null | undefined
+  beneficiary: { name?: string | null; idno?: string | null } | null | undefined,
+  options: { carriesPayerSide?: boolean } = {}
 ): PayerOnDocument {
-  const names = [payer?.name, payer?.legalName].filter((v): v is string => !!v && v.trim().length > 0);
+  if (options.carriesPayerSide === false) return { matches: null, found: null };
+
+  const aliases = partyAliases(payer);
   const payerIdno = digits(payer?.idno);
   const payerIban = compact(payer?.iban);
-  if (!names.length && !payerIdno && !payerIban) return { matches: null, found: null };
+  if (!aliases.length && !payerIdno && !payerIban) return { matches: null, found: null };
 
   const others = parties.filter((p) => {
     if (!p?.name) return false;
@@ -80,9 +99,24 @@ export function checkPayerOnDocument(
     (p) =>
       (payerIdno && p.idno && digits(p.idno) === payerIdno) ||
       (payerIban && p.iban && compact(p.iban) === payerIban) ||
-      (names.length > 0 && fuzzyOrgMatchAny(p.name, names))
+      aliases.some((alias) => sameParty(p.name, alias, { aliases }) === true)
   );
   if (hit) return { matches: true, found: hit.name };
 
-  return { matches: false, found: others[0]?.name ?? null };
+  // Fără identificator tare (IDNO/IBAN) pe entitatea noastră, „nu l-am găsit după nume" nu e o
+  // dovadă că documentul e emis pe altcineva: poate fi doar o denumire pe care n-o cunoaștem.
+  // Diferența dintre „plătitorul e altul" și „n-am putut verifica" se decide pe identificator.
+  if (!payerIdno && !payerIban) return { matches: null, found: null };
+
+  // „Plătitorul e altul" e o ACUZAȚIE — cere dovadă, nu doar absența noastră. Dovada e o parte care
+  // poartă un identificator fiscal: o entitate reală, nu un nume citit de pe pagină.
+  //
+  // Fără condiția asta (măsurat pe producție, 16.09.2026, după ce organizația a primit IDNO),
+  // verificarea începea să acuze pe documente unde nu are ce căuta: „plătitorul e Mariana Alexei"
+  // pe o listă de participanți încărcată cu tipul greșit, „plătitorul e ANA BALAMATU" pe o factură
+  // fotografiată, „plătitorul e Ana Chirita" pe un dosar scanat. Completarea corectă a datelor
+  // organizației făcea rezultatul MAI prost — semn sigur că regula, nu datele, era greșită.
+  const named = others.find((p) => digits(p.idno).length >= 8 || compact(p.iban).length >= 15);
+  if (!named) return { matches: null, found: null };
+  return { matches: false, found: named.name };
 }

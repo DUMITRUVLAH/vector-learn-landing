@@ -52,8 +52,14 @@ export function parseAttachmentAnalysis(raw: string | null | undefined): Attachm
   }
 }
 
-/** Regulile curente de reconciliere; ține pas cu `ANALYSIS_VERSION` de pe server. */
-export const CURRENT_ANALYSIS_VERSION = 2;
+/**
+ * Regulile curente de reconciliere; ține pas cu `ANALYSIS_VERSION` de pe server.
+ *
+ * v3 (16.09.2026): comparatorul de nume nu mai confundă diacriticele, ordinea numelui și forma
+ * juridică cu o nepotrivire; banca a ieșit dintre avertismente; decontul nu se mai compară pe
+ * beneficiar. Analizele v2 rămân vizibile, dar nu mai blochează o semnătură.
+ */
+export const CURRENT_ANALYSIS_VERSION = 3;
 
 /**
  * Toate nepotrivirile cererii, în ordinea documentelor.

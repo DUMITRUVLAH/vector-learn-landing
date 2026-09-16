@@ -20,6 +20,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { cleanPastedIdentityField } from "../lib/par/fieldSanity";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 import { and, eq, ne, ilike, desc, asc, inArray, isNull, or, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client";
@@ -131,12 +132,14 @@ const updateParSchema = z.object({
   // PAR-103: end-use + payee
   end_use: z.string().max(5000).optional().nullable(),
   vendor_id: z.string().uuid().optional().nullable(),
-  payee_name: z.string().max(300).optional().nullable(),
+  payee_name: z.string().max(300).optional().nullable().transform((v) => cleanPastedIdentityField(v, 300)),
   // Cod fiscal: 13 cifre pentru MD, dar un beneficiar străin are alt format (VAT DE…,
   // personal code EE de 11 cifre). Lățimea o dă validateFiscalId, nu zod-ul.
   payee_idnp: z.string().max(50).optional().nullable(),
   payee_iban: z.string().max(34).optional().nullable(),
-  payee_bank: z.string().max(300).optional().nullable(),
+  // Curățat la intrare: un câmp lipit dintr-un PDF aduce cu el etichetele următoare, iar de acolo
+  // ajunge în reconcilierea documentelor ca „neconcordanță". Vezi `cleanPastedIdentityField`.
+  payee_bank: z.string().max(300).optional().nullable().transform((v) => cleanPastedIdentityField(v, 150)),
   /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică) */
   payee_type: z.enum(["fizic", "juridic"]).optional().nullable(),
   /**
