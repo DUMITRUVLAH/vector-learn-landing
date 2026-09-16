@@ -107,6 +107,12 @@ interface NavItem {
    */
   roles?: ParNavRole[];
   /**
+   * Rândul se deschide ȘI pre-aprobatorilor de proiect, care semnează pe nume fără să aibă rolul
+   * `approver`. Doar pe rândul de inbox: pre-aprobarea e autoritate pe o cerere, nu acces la
+   * rapoartele și folderele organizației.
+   */
+  alsoPreApprover?: boolean;
+  /**
    * CRM-SIDEBAR: dreptul CRM necesar ca să VEZI rândul. Undefined = orice membru CRM.
    * Oglindește `requireCrmPermission` de pe server — ascunderea e curtoazie, nu apărare.
    */
@@ -128,7 +134,7 @@ const NAV_GROUPS: NavGroup[] = [
     prefix: "/business/par",
     items: [
       { label: "Cereri", href: "/business/par", icon: ClipboardList, tone: "indigo" },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"] },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"], alsoPreApprover: true },
       { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, tone: "sky", roles: ["approver", "finance", "par_admin"] },
       { label: "Curs valutar", href: "/business/par/exchange", icon: ArrowLeftRight, tone: "teal" },
       { label: "Google Drive", href: "/business/par/drive", icon: CloudUpload, tone: "violet", roles: ["par_admin"] },
@@ -196,7 +202,7 @@ const PAR_NAV_GROUPS: NavGroup[] = [
     section: null,
     items: [
       { label: "Cereri de plată", href: "/business/par", icon: ClipboardList, tone: "indigo" },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"] },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"], alsoPreApprover: true },
       { label: "Coadă finanțe", href: "/business/par/finance", icon: Banknote, tone: "amber", roles: ["finance", "par_admin"] },
       { label: "Dovezi de plată", href: "/business/par/dovezi", icon: FileCheck2, tone: "teal", roles: ["finance", "par_admin"] },
       { label: "e-Factura prestatori", href: "/business/par/efactura", icon: ReceiptText, tone: "violet", roles: ["finance", "par_admin"] },
@@ -554,7 +560,7 @@ export function BusinessShell({
   }, [pageTitle]);
 
   // VM1-01: fetch PAR roles to gate the PAR navigation section.
-  const { roles: parRoles, status: parRolesStatus } = useParRoles();
+  const { roles: parRoles, status: parRolesStatus, preApprover } = useParRoles();
   // PLATFORM-001: modulele dezactivate din Consola Platformă dispar din meniu.
   const { isEnabled, enabled: enabledModules } = useEnabledModules();
   const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1 && isEnabled("par");
@@ -576,7 +582,7 @@ export function BusinessShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Notification badges
-  const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r));
+  const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r)) || preApprover;
   const canFinanceNav = parRoles.some((r) => ["finance", "par_admin"].includes(r));
   // Seed from the module cache so a remount shows the last counts instantly (no flash), then
   // refresh. `path` is intentionally NOT a dependency — badges don't change per navigation, so
@@ -629,7 +635,7 @@ export function BusinessShell({
     .map((g) => ({
       ...g,
       items: g.items.filter((it) => {
-        if (it.roles && !it.roles.some((r) => parRoles.includes(r))) return false;
+        if (it.roles && !it.roles.some((r) => parRoles.includes(r)) && !(it.alsoPreApprover && preApprover)) return false;
         if (it.crmPermission && !crmCan(it.crmPermission)) return false;
         // Rândul ITPark trăiește sub FinDesk, dar e un modul separat în catalog.
         if (it.href.startsWith("/business/fin/itpark")) return isEnabled("itpark");
@@ -774,7 +780,7 @@ export function BusinessShell({
       >
         {(() => {
           // SHELL-502: mobile PAR tabs also gated by role (requestor sees only "Cereri").
-          const canApprove = parRoles.some((r) => ["approver", "par_admin"].includes(r));
+          const canApprove = parRoles.some((r) => ["approver", "par_admin"].includes(r)) || preApprover;
           const canAnalyse = parRoles.some((r) => ["approver", "finance", "par_admin"].includes(r));
           const isParAdmin = parRoles.includes("par_admin");
           const mobileItems = isCrmModule

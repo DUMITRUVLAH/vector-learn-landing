@@ -665,8 +665,10 @@ parApprovalsRoutes.get("/inbox", async (c) => {
   // Roles inherited through an active delegation — the inbox must show what approve/reject accept.
   const { roles: inboxDelegatedRoles } = await getDelegatedAuthority(delegators, tenantId, null);
 
-  // Non-approvers with no incoming delegations get an empty inbox (role-aware UI hides the tab anyway).
-  if (!isApprover && delegators.size === 0) {
+  // Cine n-are NICIUN rol PAR și nicio delegare n-are ce vedea aici. Nu se cere `approver`: un pas
+  // pus pe NUME (pre-aprobator de proiect, ori un om fixat în matricea DOA) e propria lui autoritate
+  // — vezi `filterStepsForUser`, care aplică aceeași regulă ca approve/reject.
+  if (roles.length === 0 && delegators.size === 0) {
     return c.json({ inbox: [], total: 0 });
   }
 

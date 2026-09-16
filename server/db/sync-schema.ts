@@ -175,6 +175,19 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_project_idx" ON "par_project_approvers" ("project_id")`,
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_tenant_idx" ON "par_project_approvers" ("tenant_id")`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "par_project_approvers_project_user_uniq" ON "par_project_approvers" ("project_id","user_id")`,
+    // Pre-aprobatorii de proiect (migrarea 0178). `submitPAR` citește tabela la FIECARE depunere,
+    // deci fără ea nu s-ar mai putea trimite nicio cerere de pe un proiect. Helperul tolerează
+    // lipsa tabelei, dar plasa asta o creează oricum în fereastra de deploy-lag.
+    `CREATE TABLE IF NOT EXISTS "par_project_pre_approvers" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "project_id" uuid NOT NULL REFERENCES "par_projects"("id") ON DELETE cascade,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_project_pre_approvers_project_idx" ON "par_project_pre_approvers" ("project_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_project_pre_approvers_tenant_idx" ON "par_project_pre_approvers" ("tenant_id")`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "par_project_pre_approvers_project_user_uniq" ON "par_project_pre_approvers" ("project_id","user_id")`,
     // PAR-MOD-03/04/16 (migration 0136): the payer hierarchy + scope + platform-admin tables are
     // queried on EVERY /api/par request (requireModuleEntitlement reads platform_admins +
     // par_payer_modules, with no try/catch). Prod does NOT auto-apply drizzle migrations

@@ -102,8 +102,19 @@ export async function filterStepsForUser(params: {
 
   const roles = await getUserPARRoles(userId, tenantId);
   const delegators = await getActiveDelegators(userId, tenantId);
-  const isApprover = roles.includes("approver") || roles.includes("par_admin");
-  if (!isApprover && delegators.size === 0) return [];
+  /*
+   * Poarta grosieră lăsa să treacă doar `approver`/`par_admin` — și tăia exact oamenii pe care
+   * VF-002 îi declară îndreptățiți: cine e pus PE NUME pe un pas (o directoare financiară fixată în
+   * matricea DOA, un pre-aprobator de proiect) putea semna, dar pasul nu-i apărea niciodată în
+   * inbox și nici în digest. Autoritatea lui era reală și invizibilă: o găsea doar căutând cererea
+   * de mână.
+   *
+   * Regula de fond n-a fost niciodată aici, ci în `stepMatchesViewer` de mai jos, care cere fix
+   * același lucru ca `approve`/`reject`: pas pe numele meu, ori pas pe rol + rolul meu + aria mea,
+   * ori delegare. Poarta rămâne doar ca scurtătură ieftină pentru cine n-are deloc ce căuta în
+   * cereri.
+   */
+  if (roles.length === 0 && delegators.size === 0) return [];
 
   const { roles: delegatedRoles } = await getDelegatedAuthority(delegators, tenantId, null);
   const { projects: accessibleProjects, payers: accessiblePayers } = await accessibleScopes(

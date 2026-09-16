@@ -18,6 +18,15 @@ type ParRolesStatus = "loading" | "resolved";
 export interface UseParRolesResult {
   status: ParRolesStatus;
   roles: string[];
+  /**
+   * Pre-aprobator pe cel puțin un proiect. Semnează pe NUME, deci nu are neapărat rolul
+   * `approver` — dar inboxul de aprobare trebuie să i se deschidă, altfel pasul lui e o
+   * autoritate pe care n-o poate exercita de nicăieri.
+   *
+   * Opțional ca să nu ceară nimic de la apelanții care doar simulează hook-ul în teste; lipsa lui
+   * înseamnă „nu e pre-aprobator", adică exact comportamentul de dinainte.
+   */
+  preApprover?: boolean;
 }
 
 // Session cache: the shell remounts on every navigation, so without this the roles were
@@ -30,20 +39,21 @@ export function useParRoles(): UseParRolesResult {
   // promisiune deja rezolvată, dar rezolvarea vine abia după prima randare — deci fiecare
   // navigare desena întâi un sidebar FĂRĂ secțiunea PAR și abia apoi o adăuga. De aici
   // senzația că „sare toată pagina" la fiecare click.
-  const cached = peekResolved<{ roles: string[] }>(CACHE_KEY);
+  const cached = peekResolved<{ roles: string[]; preApprover?: boolean }>(CACHE_KEY);
   const [state, setState] = useState<UseParRolesResult>({
     status: cached ? "resolved" : "loading",
     roles: cached?.roles ?? [],
+    preApprover: cached?.preApprover ?? false,
   });
 
   const fetchRoles = useCallback(async () => {
     try {
-      const { roles } = await parMeCached();
-      setState({ status: "resolved", roles });
+      const { roles, preApprover } = await parMeCached();
+      setState({ status: "resolved", roles, preApprover: preApprover ?? false });
     } catch {
       // 401, 403, network error, or any other failure → treat as no PAR roles.
       // Fail-closed: if we can't verify, don't show the section.
-      setState({ status: "resolved", roles: [] });
+      setState({ status: "resolved", roles: [], preApprover: false });
     }
   }, []);
 

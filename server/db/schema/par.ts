@@ -287,6 +287,44 @@ export const parProjectApprovers = pgTable(
   })
 );
 
+/**
+ * Pre-aprobatorii proiectului — semnătura care se cere ÎNAINTEA lanțului DOA.
+ *
+ * Cererea owner-ului (Iulian + Cristina, proiectul LED 3/Youth Maker club, 16.09.2026): cererile
+ * făcute de asistentul de proiect ajungeau direct la finanțe, iar managerul de proiect le vedea
+ * abia în listă, „plătite sau respinse". O linie de buget greșită se descoperea, deci, după plată.
+ *
+ * Diferența față de `par_project_approvers`, care se cheamă la fel dar face altceva:
+ *   - `par_project_approvers` RESTRÂNGE cine poate decide pașii existenți (filtru, nu pas nou);
+ *   - tabela asta ADAUGĂ un pas la începutul lanțului, pe numele fiecărui pre-aprobator.
+ *
+ * Rândurile de aici formează un singur NIVEL (toate pe pasul 1, paralel): ecranul de administrare
+ * bifează oameni, nu ordonează, deci lanțul nu inventează o ordine pe care nimeni n-a scris-o.
+ * Rolul PAR nu contează — un pas pe nume e propria lui autoritate (VF-002), așa că un om cu rol
+ * `finance` poate fi pre-aprobator fără să primească dreptul general de aprobare.
+ */
+export const parProjectPreApprovers = pgTable(
+  "par_project_pre_approvers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => parProjects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    projectIdx: index("par_project_pre_approvers_project_idx").on(t.projectId),
+    tenantIdx: index("par_project_pre_approvers_tenant_idx").on(t.tenantId),
+    uniqProjectUser: uniqueIndex("par_project_pre_approvers_project_user_uniq").on(t.projectId, t.userId),
+  })
+);
+
 /** Budget codes (section 7) */
 export const parBudgetCodes = pgTable(
   "par_budget_codes",

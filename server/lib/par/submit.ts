@@ -29,6 +29,7 @@ import { resolveApprovalChain, type ApprovalStep } from "./doa";
 import { toMdlCents } from "../fx";
 import { computeParBodyHash, type ParBodyForHash } from "./integrity";
 import { notifySubmitted } from "../../services/par/notify";
+import { getProjectPreApprovers, withProjectPreApproval } from "./preApprovers";
 import { archiveApprovalsBeforeReset } from "./approvalArchive";
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -188,7 +189,15 @@ export async function submitPAR(params: {
     projectId: par.projectId ?? undefined,
   });
 
-  const sanitizedChain = chainWithoutSelfApproval(chain, actorUserId);
+  // Pre-aprobarea proiectului se pune ÎNAINTEA lanțului DOA: cererea asistentului trece întâi pe la
+  // managerul de proiect și abia apoi la finanțe (lib/par/preApprovers.ts). Proiect fără
+  // pre-aprobatori — sau cerere fără proiect — înseamnă lanțul de până acum, neatins.
+  const preApprovers = par.projectId ? await getProjectPreApprovers(tenantId, par.projectId) : [];
+  const sanitizedChain = withProjectPreApproval(
+    chainWithoutSelfApproval(chain, actorUserId),
+    preApprovers,
+    actorUserId
+  );
 
   // Compute body hash for immutability (PAR-109)
   const bodyForHash: ParBodyForHash = {
@@ -293,12 +302,19 @@ export async function submitPAR(params: {
     detail: `PAR ${par.requestNo} submitted; ${sanitizedChain.length} approval step(s) generated. Body hash: ${bodyHash.slice(0, 8)}…`,
   });
 
-  // PAR-111: notify first approver (best-effort — never throws)
-  const firstStep = sanitizedChain.find((s) => s.step === 1);
-  await notifySubmitted(
-    { tenantId, parId, requestNo: par.requestNo },
-    firstStep?.approverUserId ?? null
-  );
+  // PAR-111: notify first approver (best-effort — never throws).
+  //
+  // Primul NIVEL, nu „rândul cu step === 1": un nivel paralel (două semnături pe aceeași treaptă —
+  // și nivelul de pre-aprobare e exact așa) anunța un singur om, iar ceilalți aflau abia din
+  // digest. Când nivelul e pe rol (fără nume), rămâne rutarea pe rol de dinainte.
+  const firstLevel = Math.min(...sanitizedChain.map((s) => s.step));
+  const firstRows = sanitizedChain.filter((s) => s.step === firstLevel);
+  const firstNamed = [...new Set(firstRows.map((s) => s.approverUserId).filter((id): id is string => !!id))];
+  const ctx = { tenantId, parId, requestNo: par.requestNo };
+  for (const userId of firstNamed) await notifySubmitted(ctx, userId);
+  // Un nivel poate amesteca rânduri pe nume cu rânduri pe rol; rutarea pe rol se face o singură
+  // dată, pentru toate rândurile fără nume, și rămâne cea de dinainte.
+  if (firstRows.some((s) => !s.approverUserId)) await notifySubmitted(ctx, null);
 
   return {
     ok: true,

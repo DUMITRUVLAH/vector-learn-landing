@@ -311,7 +311,7 @@ function Routes() {
   // cheie distinctă, React îl reconciliază ca aceeași instanță, iar formularul (care își citește
   // id-ul o singură dată, la montare) rămâne pe ciorna veche după „pornește din șablon / repetă".
   if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParGuardPage><ParCreateForm key={path} /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "par_admin"]}><ParInbox /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "par_admin"]} allowPreApprover><ParInbox /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/efactura")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParEfacturaQueue /></ParGuardPage></BusinessGuardPage>;

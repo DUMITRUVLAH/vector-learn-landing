@@ -12,6 +12,9 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { getProjectApproverMap, setProjectApprovers } from "../lib/par/projectApprovers";
+import { getPreApproverMap, setProjectPreApprovers } from "../lib/par/preApprovers";
+import { getUserPARRoles } from "../middleware/requirePARRole";
+import { users } from "../db/schema/users";
 import { accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 
@@ -45,9 +48,17 @@ parProjectsRoutes.get("/", async (c) => {
     .from(parProjects)
     .where(and(...conditions))
     .orderBy(asc(parProjects.name));
-  // Attach the designated approver user-ids per project ([] = unrestricted → any approver).
-  const approverMap = await getProjectApproverMap(tenantId);
-  const projects = rows.map((p) => ({ ...p, approverUserIds: [...(approverMap.get(p.id) ?? [])] }));
+  // Attach the designated approver user-ids per project ([] = unrestricted → any approver) and the
+  // pre-approvers ([] = no pre-approval level; the chain starts at the DOA matrix as before).
+  const [approverMap, preApproverMap] = await Promise.all([
+    getProjectApproverMap(tenantId),
+    getPreApproverMap(tenantId),
+  ]);
+  const projects = rows.map((p) => ({
+    ...p,
+    approverUserIds: [...(approverMap.get(p.id) ?? [])],
+    preApproverUserIds: [...(preApproverMap.get(p.id) ?? [])],
+  }));
   return c.json({ projects });
 });
 
@@ -73,6 +84,55 @@ parProjectsRoutes.put(
     await setProjectApprovers(tenantId, id, c.req.valid("json").userIds);
     const approverMap = await getProjectApproverMap(tenantId);
     return c.json({ ok: true, approverUserIds: [...(approverMap.get(id) ?? [])] });
+  }
+);
+
+/**
+ * PUT /api/par/projects/:id/pre-approvers — cine semnează ÎNAINTEA lanțului DOA (par_admin).
+ *
+ * Verificarea celor două condiții se face AICI, la configurare, nu la aprobare. Un pre-aprobator
+ * fără rol PAR sau fără acces la proiect ar produce o cerere blocată: pasul e al lui, dar ecranul
+ * i-ar răspunde 404. Greșeala de configurare se vede mai bine pe ecranul de administrare, în
+ * secunda în care se face, decât peste o săptămână, pe o plată care nu mai avansează.
+ */
+parProjectsRoutes.put(
+  "/:id/pre-approvers",
+  requirePARRole("par_admin"),
+  zValidator("json", approversSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const id = c.req.param("id");
+    const [proj] = await db
+      .select({ id: parProjects.id, payerId: parProjects.payerId })
+      .from(parProjects)
+      .where(and(eq(parProjects.id, id), eq(parProjects.tenantId, tenantId)));
+    if (!proj) return c.json({ error: "not_found" }, 404);
+    if (!(await mayAccessProject(user.id, tenantId, id, user.role)) || !(await mayAccessPayer(user.id, tenantId, proj.payerId, user.role))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    const userIds = [...new Set(c.req.valid("json").userIds)];
+    const unusable: Array<{ userId: string; reason: "no_par_role" | "no_project_access" }> = [];
+    for (const userId of userIds) {
+      const [target] = await db
+        .select({ role: users.role })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.tenantId, tenantId)));
+      if (!target) { unusable.push({ userId, reason: "no_par_role" }); continue; }
+      const roles = await getUserPARRoles(userId, tenantId, target.role);
+      if (roles.length === 0) { unusable.push({ userId, reason: "no_par_role" }); continue; }
+      if (!(await mayAccessProject(userId, tenantId, id, target.role))) {
+        unusable.push({ userId, reason: "no_project_access" });
+      }
+    }
+    if (unusable.length > 0) {
+      return c.json({ error: "pre_approver_unusable", unusable }, 400);
+    }
+
+    await setProjectPreApprovers(tenantId, id, userIds);
+    const preApproverMap = await getPreApproverMap(tenantId);
+    return c.json({ ok: true, preApproverUserIds: [...(preApproverMap.get(id) ?? [])] });
   }
 );
 

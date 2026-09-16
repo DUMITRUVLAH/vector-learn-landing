@@ -714,6 +714,10 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
               <TableHead scope="col">Nr. cerere</TableHead>
               {authorsMap && <TableHead scope="col">Cine a făcut-o</TableHead>}
               <TableHead scope="col" className="hidden sm:table-cell">Proiect</TableHead>
+              {/* Cererea Cristinei (16.09.2026): „să putem vedea și denumirea/numele cui facem
+                  transferul" — fără ea, cele 14 cereri din listă se deosebeau doar prin număr, așa
+                  că fiecare trebuia deschisă pe rând ca să-ți amintești care e care. */}
+              <TableHead scope="col" className="hidden md:table-cell">Beneficiar</TableHead>
               <TableHead scope="col" className="text-right">Total (MDL)</TableHead>
               <TableHead scope="col">Status</TableHead>
               <TableHead scope="col" className="hidden md:table-cell">Data</TableHead>
@@ -728,7 +732,7 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
                 onClick={() => onRowClick(r.id)}
                 onKeyDown={(e) => e.key === "Enter" && onRowClick(r.id)}
                 tabIndex={0}
-                aria-label={`PAR ${r.requestNo}, ${PAR_STATUS_LABELS[r.status]}, ${formatCurrency(r.totalEstimatedCents, r.currency)}`}
+                aria-label={`PAR ${r.requestNo}${r.payeeName ? `, ${r.payeeName}` : ""}, ${PAR_STATUS_LABELS[r.status]}, ${formatCurrency(r.totalEstimatedCents, r.currency)}`}
               >
                 <TableCell className="font-medium text-foreground">{r.requestNo}</TableCell>
                 {authorsMap && (
@@ -747,6 +751,11 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
                       "—"
                     );
                   })()}
+                </TableCell>
+                <TableCell className="hidden max-w-[16rem] truncate text-muted-foreground md:table-cell" title={r.payeeName ?? undefined}>
+                  {/* Pe cererea altcuiva rechizitele beneficiarului sunt ascunse (GDPR, VM5-02),
+                      dar DENUMIREA rămâne — ea e tot ce cere recunoașterea rândului. */}
+                  {r.payeeName?.trim() || "—"}
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
                   {/* Suma cererii se scrie în moneda ei — „1.500,00 USD", nu „1.500,00 L". */}

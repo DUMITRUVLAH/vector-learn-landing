@@ -28,9 +28,15 @@ interface ParGuardPageProps {
    * role (the default — e.g. the requester's own dashboard / new-request form).
    */
   requiredRoles?: ParRole[];
+  /**
+   * Lasă înăuntru și pre-aprobatorii de proiect, care semnează pe NUME fără să aibă rolul
+   * `approver`. Se pune doar pe inboxul de aprobare: fără el, un pre-aprobator ar avea un pas al
+   * lui pe care nu-l poate deschide de nicăieri.
+   */
+  allowPreApprover?: boolean;
 }
 
-export function ParGuardPage({ children, requiredRoles }: ParGuardPageProps) {
+export function ParGuardPage({ children, requiredRoles, allowPreApprover }: ParGuardPageProps) {
   const { navigate } = useRouter();
   const [state, setState] = useState<"loading" | "allowed" | "denied">("loading");
   // Stable dependency: an inline array prop changes reference every render, which would re-fetch.
@@ -46,7 +52,10 @@ export function ParGuardPage({ children, requiredRoles }: ParGuardPageProps) {
         if (roles.length === 0) { setState("denied"); return; }
         // requiredRoles narrows past "has any PAR role": a requestor must not see the
         // approver/finance/admin/onboarding power UI even by direct URL.
-        const ok = !required || required.some((r) => roles.includes(r));
+        const ok =
+          !required ||
+          required.some((r) => roles.includes(r)) ||
+          (allowPreApprover === true && me.preApprover === true);
         setState(ok ? "allowed" : "denied");
       })
       .catch(() => {
@@ -56,7 +65,7 @@ export function ParGuardPage({ children, requiredRoles }: ParGuardPageProps) {
     return () => {
       alive = false;
     };
-  }, [roleKey]);
+  }, [roleKey, allowPreApprover]);
 
   if (state === "loading") {
     return (

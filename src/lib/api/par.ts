@@ -271,7 +271,9 @@ export interface ParPayerDetailsInput {
   logo_url?: string | null;
   notes?: string | null;
 }
-export interface ParProject { id: string; payerId: string | null; name: string; donor: string | null; active: boolean; approverUserIds?: string[]; }
+export interface ParProject { id: string; payerId: string | null; name: string; donor: string | null; active: boolean; approverUserIds?: string[];
+  /** Cine semnează ÎNAINTEA lanțului DOA. Gol = fără pre-aprobare (lanțul începe la matrice). */
+  preApproverUserIds?: string[]; }
 export type ParCurrency = "MDL" | "EUR" | "USD";
 /** `currency` = moneda alocării; lipsă pe rândurile create înainte de migrarea 0147 ⇒ MDL. */
 export interface ParBudgetCode { id: string; payerId: string | null; projectId: string | null; code: string; name: string; active: boolean; allocatedCents?: number; currency?: ParCurrency; }
@@ -1250,6 +1252,18 @@ export async function setProjectApprovers(projectId: string, userIds: string[]):
   });
 }
 
+/**
+ * Înlocuiește lista de pre-aprobatori a proiectului (par_admin). Gol = fără pas de pre-aprobare.
+ * Serverul refuză (400 `pre_approver_unusable`) pe cine n-are rol PAR sau acces la proiect — o
+ * bifă din care ar ieși o cerere blocată nu se salvează deloc.
+ */
+export async function setProjectPreApprovers(projectId: string, userIds: string[]): Promise<{ ok: boolean; preApproverUserIds: string[] }> {
+  return api<{ ok: boolean; preApproverUserIds: string[] }>(`/api/par/projects/${projectId}/pre-approvers`, {
+    method: "PUT",
+    body: JSON.stringify({ userIds }),
+  });
+}
+
 export async function listBudgetCodes(filters: { payerId?: string | null; projectId?: string | null } = {}): Promise<{ items: ParBudgetCode[] }> {
   const params = new URLSearchParams();
   if (filters.payerId) params.set("payer_id", filters.payerId);
@@ -1317,7 +1331,7 @@ export async function deleteEvent(id: string): Promise<{ ok: boolean }> {
 
 // ─── PAR me — current user's PAR roles ───────────────────────────────────────
 
-export async function getParMe(): Promise<{ roles: string[]; userId: string; tenantId: string }> {
+export async function getParMe(): Promise<{ roles: string[]; preApprover?: boolean; userId: string; tenantId: string }> {
   return api("/api/par/me");
 }
 

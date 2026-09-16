@@ -100,6 +100,7 @@ import {
   deleteDepartment,
   createProject,
   setProjectApprovers,
+  setProjectPreApprovers,
   updateProject,
   deleteProject,
   createBudgetCode,
@@ -2674,6 +2675,7 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
             ]}
           />
           <ProjectApproversSection projects={projects} onReload={load} />
+          <ProjectPreApproversSection projects={projects} onReload={load} />
         </div>
       )}
 
@@ -2781,6 +2783,131 @@ function ProjectApproversSection({
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {approvers.map((a) => {
+                    const on = selected.has(a.userId);
+                    return (
+                      <button
+                        key={a.userId}
+                        type="button"
+                        onClick={() => toggle(p, a.userId)}
+                        disabled={savingId === p.id}
+                        aria-pressed={on}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors min-h-[32px] disabled:opacity-50",
+                          on
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-input hover:border-primary/50"
+                        )}
+                      >
+                        {a.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Pre-aprobatori pe proiect ───────────────────────────────────────────────
+/**
+ * Cine semnează ÎNAINTEA lanțului DOA. Cererea owner-ului (16.09.2026): PAR-urile depuse de
+ * asistentul de proiect ajungeau direct la finanțe, iar managerul de proiect le vedea abia
+ * „plătite sau respinse".
+ *
+ * Lista de candidați e mai largă decât la „Aprobatori pe proiect" — intră și rolul `finance`,
+ * pentru că pre-aprobarea e un pas pe NUME, nu dreptul general de a aproba. Așa poate fi
+ * pre-aprobator un om din finanțe (cazul Cristinei) fără să capete semnătură pe toate cererile.
+ */
+function ProjectPreApproversSection({
+  projects,
+  onReload,
+}: {
+  projects: import("@/lib/api/par").ParProject[];
+  onReload: () => Promise<void>;
+}) {
+  const [candidates, setCandidates] = useState<Array<{ userId: string; name: string }>>([]);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    listParMembers()
+      .then(({ members }) => {
+        const seen = new Set<string>();
+        const list: Array<{ userId: string; name: string }> = [];
+        for (const m of members) {
+          if (m.role !== "approver" && m.role !== "par_admin" && m.role !== "finance") continue;
+          if (seen.has(m.userId)) continue;
+          seen.add(m.userId);
+          list.push({ userId: m.userId, name: m.userName || m.userEmail || m.userId.slice(0, 8) });
+        }
+        setCandidates(list);
+      })
+      .catch(() => setErr("Nu am putut încărca membrii."));
+  }, []);
+
+  const toggle = async (project: import("@/lib/api/par").ParProject, userId: string) => {
+    const current = new Set(project.preApproverUserIds ?? []);
+    if (current.has(userId)) current.delete(userId);
+    else current.add(userId);
+    setSavingId(project.id);
+    setErr(null);
+    try {
+      await setProjectPreApprovers(project.id, [...current]);
+      await onReload();
+    } catch (e) {
+      // Serverul refuză bifa din care ar ieși o cerere blocată (fără rol PAR / fără acces la
+      // proiect). Mesajul spune ce e de reparat, nu doar că n-a mers.
+      const reason = (e as { code?: string })?.code;
+      setErr(
+        reason === "pre_approver_unusable"
+          ? "Persoana nu poate fi pre-aprobator pe acest proiect: îi lipsește rolul PAR sau accesul la proiect (tab Membri)."
+          : "Nu am putut salva pre-aprobatorii proiectului."
+      );
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" aria-hidden />
+          Pre-aprobatori pe proiect
+        </h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Cine semnează <strong>înaintea</strong> lanțului obișnuit de aprobare. Cererile proiectului
+          ajung întâi la ei și abia apoi la aprobatorii din matricea DOA și la finanțe. Fără nicio
+          bifă = fără pas de pre-aprobare. Cine depune cererea nu se pre-aprobă singur.
+        </p>
+      </div>
+
+      {err && <p className="text-xs text-destructive">{err}</p>}
+
+      {candidates.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Niciun membru cu rol de aprobator, finanțe sau administrator încă (tab Membri).
+        </p>
+      ) : projects.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Niciun proiect încă.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {projects.map((p) => {
+            const selected = new Set(p.preApproverUserIds ?? []);
+            return (
+              <li key={p.id} className="py-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="sm:w-48 shrink-0">
+                  <p className="text-sm font-medium text-foreground">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selected.size === 0 ? "Fără pre-aprobare" : `${selected.size} pre-aprobator(i)`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {candidates.map((a) => {
                     const on = selected.has(a.userId);
                     return (
                       <button
