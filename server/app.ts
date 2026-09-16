@@ -99,7 +99,7 @@ import { parActivityRoutes } from "./routes/parActivity";
 import { parDelegationsRoutes } from "./routes/parDelegations";
 import { parTeamsRoutes } from "./routes/parTeams";
 import { parTenderRoutes } from "./routes/parTender";
-import { parCronRoutes } from "./routes/parCron";
+import { parCronRoutes, parCronPublicRoutes } from "./routes/parCron";
 import { parPurchaseOrderRoutes } from "./routes/parPurchaseOrders";
 import { parReceiptsRoutes } from "./routes/parReceipts";
 
@@ -306,6 +306,10 @@ app.route("/api/fin/cron", finCronRoutes);
 // PAR-DRIVE: ÎN AFARA lui /api/par — acolo `app.use("/api/par/*", requireAuth)` ar da 401 unui
 // cron care nu are (și nu poate avea) sesiune de browser. Apărarea lui e CRON_SECRET.
 app.route("/api/cron/par-drive", parDriveCronRoutes);
+// VM5-11: digestul de aprobări de la 09:00 / 16:00. Aceeași regulă ca mai sus — a stat sub
+// /api/par de pe 12.09 până pe 16.09.2026 și fiecare lovitură de cron a primit 401
+// `unauthenticated`, deci digestul n-a plecat niciodată. Apărarea lui e CRON_SECRET.
+app.route("/api/cron/par-digest", parCronPublicRoutes);
 
 // PARVERIFY-001: verificarea unui formular PAR tipărit, prin codul QR de pe hârtie. Ca și cronul
 // de mai sus, stă ÎN AFARA lui /api/par — acolo `app.use("/api/par/*", requireAuth)` i-ar da 401
@@ -410,7 +414,8 @@ app.route("/api/par/delegations", parDelegationsRoutes);
 app.route("/api/par/teams", parTeamsRoutes);
 // VM5-19: pragul anual per prestator + bifa de tender a finanțelor.
 app.route("/api/par/tender", parTenderRoutes);
-// VM5-11: digestul de aprobări (Vercel Cron + declanșare manuală).
+// VM5-11: butonul „trimite-mi acum digestul". Doar el stă aici — intrarea de cron e montată
+// mai sus, în afara lui /api/par (vezi parCron.ts).
 app.route("/api/par/cron", parCronRoutes);
 app.route("/api/par", parPaymentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
