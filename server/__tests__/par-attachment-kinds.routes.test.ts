@@ -213,6 +213,71 @@ describe("Anexele standard din formularul PAR", () => {
     expect(((await res.json()) as UploadedAttachment).kindOther).toBeNull();
   });
 
+  it("[blocant] PATCH schimbă tipul unui fișier deja urcat (lotul urcat ca „Contract” se îndreaptă)", async () => {
+    // Tipul din capul secțiunii se aplică la TOT ce urci într-o singură fereastră: contractul,
+    // actul de primire și buletinul ajungeau toate „Contract", fără nicio cale de îndreptare.
+    const up = await upload({ file_name: "act-primire.pdf", kind: "contract" });
+    const att = (await up.json()) as UploadedAttachment;
+
+    const res = await app.request(`/api/par/${parId}/attachments/${att.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "act_of_receipt" }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as UploadedAttachment).kind).toBe("act_of_receipt");
+
+    const list = await app.request(`/api/par/${parId}/attachments`);
+    const { items } = (await list.json()) as { items: UploadedAttachment[] };
+    expect(items.find((i) => i.id === att.id)?.kind).toBe("act_of_receipt");
+  });
+
+  it("[blocant] PATCH kind='other' + kind_other → eticheta liberă ajunge în dosar", async () => {
+    const up = await upload({ file_name: "buletin.pdf", kind: "contract" });
+    const att = (await up.json()) as UploadedAttachment;
+
+    const res = await app.request(`/api/par/${parId}/attachments/${att.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "other", kind_other: "Buletin de identitate" }),
+    });
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as UploadedAttachment;
+    expect(updated.kind).toBe("other");
+    expect(updated.kindOther).toBe("Buletin de identitate");
+  });
+
+  it("PATCH kind='other' fără nume → 400, rândul rămâne neschimbat", async () => {
+    const up = await upload({ file_name: "scan-2.pdf", kind: "invoice" });
+    const att = (await up.json()) as UploadedAttachment;
+
+    const res = await app.request(`/api/par/${parId}/attachments/${att.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "other" }),
+    });
+    expect(res.status).toBe(400);
+
+    const list = await app.request(`/api/par/${parId}/attachments`);
+    const { items } = (await list.json()) as { items: UploadedAttachment[] };
+    expect(items.find((i) => i.id === att.id)?.kind).toBe("invoice");
+  });
+
+  it("PATCH pe un alt tip golește numele liber (nu rămâne eticheta veche)", async () => {
+    const up = await upload({ file_name: "oferta.pdf", kind: "other", kind_other: "Ceva scris de mână" });
+    const att = (await up.json()) as UploadedAttachment;
+
+    const res = await app.request(`/api/par/${parId}/attachments/${att.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "quotation" }),
+    });
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as UploadedAttachment;
+    expect(updated.kind).toBe("quotation");
+    expect(updated.kindOther).toBeNull();
+  });
+
   it("[blocant] GET /api/par/:id/dosar → 200 PDF cu tipurile noi + „Altul” numit", async () => {
     const res = await app.request(`/api/par/${parId}/dosar`);
     expect(res.status).toBe(200);

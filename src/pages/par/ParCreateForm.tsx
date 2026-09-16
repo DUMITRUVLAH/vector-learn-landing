@@ -25,7 +25,7 @@ import { backdatedDays, backdatedLabel } from "@/lib/par/backdated";
 import { validateIban, validateFiscalId, isValidBic, type IbanValidation } from "@/lib/par/iban";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
 import {
-  ATTACHMENT_KIND_ORDER, ATTACHMENT_KIND_LABELS, attachmentKindLabel, KIND_OTHER_MAX_LEN,
+  ATTACHMENT_KIND_ORDER, ATTACHMENT_KIND_LABELS, KIND_OTHER_MAX_LEN,
 } from "@/lib/par/attachmentKinds";
 import type { ParPayeeCandidate, ParPayeeOption } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
@@ -33,7 +33,7 @@ import { ApiError } from "@/lib/api";
 import { PAR_FIELD_MESSAGES } from "@/lib/par/submitErrors";
 import {
   createPar, getPar, updatePar, submitPar,
-  addLineItem, deleteLineItem,
+  addLineItem, deleteLineItem, updateAttachmentKind,
   uploadAttachmentDirect, deleteAttachment,
   reconcileAttachment,
   listDepartments, listPayers, listProjects, listEvents, listBudgetCodes, listVendors, createVendor,
@@ -390,6 +390,8 @@ export function ParCreateForm() {
   const [par, setPar] = useState<ParRequest | null>(null);
   const [lineItems, setLineItems] = useState<ParLineItem[]>([]);
   const [attachments, setAttachments] = useState<ParAttachment[]>([]);
+  /** Numele scris pentru documentele „Altul", cât timp nu e încă salvat pe server. */
+  const [kindOtherDraft, setKindOtherDraft] = useState<Record<string, string>>({});
   const [totalCents, setTotalCents] = useState(0);
   const [aboveThreshold, setAboveThreshold] = useState(false);
 
@@ -1305,10 +1307,56 @@ export function ParCreateForm() {
     if (!parId) return;
     try {
       const res = await deleteLineItem(parId, lineId);
-      setLineItems((p) => p.filter((l) => l.id !== lineId));
+      // Serverul renumerotează rândurile rămase (1..n) — fără pozițiile lui, tabelul ar rămâne cu
+      // numerele vechi, cu lacune, până la un reload.
+      const positions = new Map((res.line_items ?? []).map((l) => [l.id, l.position]));
+      setLineItems((p) => p
+        .filter((l) => l.id !== lineId)
+        .map((l) => positions.has(l.id) ? { ...l, position: positions.get(l.id)! } : l));
       setTotalCents(res.par_total_estimated_cents);
       setAboveThreshold(res.above_micro_threshold);
     } catch { /* non-blocking */ }
+  };
+
+  /**
+   * Schimbă eticheta unui fișier DEJA urcat.
+   *
+   * Tipul din capul secțiunii se aplică la tot ce alegi într-o singură fereastră: cine urcă
+   * dintr-o dată contractul, actul de primire și buletinul primea trei rânduri „Contract", fără
+   * nicio cale de a le îndrepta (Cristina, 16.09.2026). Aici se îndreaptă, pe loc, rând cu rând.
+   */
+  const changeAttachmentKind = async (att: ParAttachment, kind: ParAttachmentKind) => {
+    if (!parId) return;
+    const before = attachments;
+    setAttachments((p) => p.map((x) => x.id === att.id ? { ...x, kind } : x));
+    const name = (kindOtherDraft[att.id] ?? att.kindOther ?? "").trim();
+    // „Altul" fără nume n-are ce scrie în dosar — se salvează când omul scrie numele (la blur).
+    if (kind === "other" && !name) return;
+    try {
+      const updated = await updateAttachmentKind(parId, att.id, {
+        kind,
+        ...(kind === "other" ? { kind_other: name } : {}),
+      });
+      setAttachments((p) => p.map((x) => x.id === att.id ? { ...x, kind: updated.kind, kindOther: updated.kindOther } : x));
+      if (kind !== "other") setKindOtherDraft((p) => { const next = { ...p }; delete next[att.id]; return next; });
+    } catch (e) {
+      setAttachments(before);
+      setError(e instanceof Error ? e.message : "Tipul documentului nu a putut fi schimbat.");
+    }
+  };
+
+  /** Numele liber al unui document „Altul", salvat când câmpul își pierde focusul. */
+  const saveAttachmentKindOther = async (att: ParAttachment, value: string) => {
+    if (!parId) return;
+    const name = value.trim();
+    if (!name || name === (att.kindOther ?? "").trim()) return;
+    try {
+      const updated = await updateAttachmentKind(parId, att.id, { kind: "other", kind_other: name });
+      setAttachments((p) => p.map((x) => x.id === att.id ? { ...x, kind: updated.kind, kindOther: updated.kindOther } : x));
+      setKindOtherDraft((p) => { const next = { ...p }; delete next[att.id]; return next; });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Numele documentului nu a putut fi salvat.");
+    }
   };
 
   /** „Altul" fără nume = upload blocat (butonul rămâne inert până se completează). */
@@ -2871,9 +2919,9 @@ export function ParCreateForm() {
         </Section>
 
         {/* 13 Attachments */}
-        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează actele care justifică plata; tipul se alege la fiecare fișier.">
+        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează actele care justifică plata; tipul se poate schimba la fiecare fișier, după încărcare.">
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Tip document" htmlFor="uk">
+            <Field label="Tip document" htmlFor="uk" hint="Se aplică fișierelor alese acum; îl schimbi apoi la fiecare în listă.">
               <Select id="uk" className="w-full" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
                 {ATTACHMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{ATTACHMENT_KIND_LABELS[k]}</option>)}
               </Select>
@@ -2920,7 +2968,26 @@ export function ParCreateForm() {
                     <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground truncate">{a.fileName}</span>
-                      <span className="block text-xs text-muted-foreground">{attachmentKindLabel(a.kind, a.kindOther)}</span>
+                      {/* Eticheta e editabilă fișier cu fișier: tipul ales la upload e doar o
+                          propunere pentru tot lotul, iar un lot are rareori un singur tip. */}
+                      <span className="mt-1 flex flex-wrap items-center gap-2">
+                        {/* `select` nativ, nu `<Select>` din ds: acela se învelește într-un `div`,
+                            iar rândul e construit din `span`-uri (un `div` în `span` e markup invalid). */}
+                        <select className={cn(inputCls, "h-8 w-auto min-w-[11rem] cursor-pointer text-xs")}
+                          value={a.kind}
+                          aria-label={`Tip document pentru ${a.fileName}`}
+                          onChange={(e) => changeAttachmentKind(a, e.target.value as ParAttachmentKind)}>
+                          {ATTACHMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{ATTACHMENT_KIND_LABELS[k]}</option>)}
+                        </select>
+                        {a.kind === "other" && (
+                          <input type="text" className={cn(inputCls, "h-8 w-48 text-xs")} maxLength={KIND_OTHER_MAX_LEN}
+                            placeholder="ex. Buletin de identitate"
+                            aria-label={`Ce document este ${a.fileName}`}
+                            value={kindOtherDraft[a.id] ?? a.kindOther ?? ""}
+                            onChange={(e) => setKindOtherDraft((p) => ({ ...p, [a.id]: e.target.value }))}
+                            onBlur={(e) => saveAttachmentKindOther(a, e.target.value)} />
+                        )}
+                      </span>
                       {analysisState[a.id] === "pending" && (
                         <span role="status" className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" aria-hidden />

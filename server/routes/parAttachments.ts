@@ -7,6 +7,7 @@
  * Routes:
  *   POST   /api/par/:id/attachments            → upload attachment (base64 data URL)
  *   GET    /api/par/:id/attachments            → list attachments for PAR
+ *   PATCH  /api/par/:id/attachments/:attId     → change a file's kind (author, draft/changes_requested only)
  *   DELETE /api/par/:id/attachments/:attId     → delete attachment (author, draft/changes_requested only)
  *
  * Conținutul fișierelor stă în Supabase Storage (bucket `par-attachments`), nu în Postgres.
@@ -720,6 +721,88 @@ parAttachmentsRoutes.post(
     // suprascria rezultatul primului, deci primul era plătit degeaba — la fel și pentru dovezile
     // de plată, unde verdictul nici nu se afișează nicăieri.
     return c.json(attachment, 201);
+  }
+);
+
+// ─── PATCH /:parId/attachments/:attId ────────────────────────────────────────
+//
+// Tipul se alege o dată, în capul secțiunii, pentru TOT ce urci în acel moment. Cine alege
+// „Contract" și apoi urcă din aceeași fereastră contractul, actul de primire și buletinul se
+// trezește cu trei rânduri etichetate „Contract" și fără nicio cale de a le îndrepta: eticheta
+// se putea da numai la upload, iar corectarea însemna ștergere + reîncărcare fișier cu fișier
+// (Cristina, 16.09.2026). De aici ruta asta: eticheta fiecărui fișier se schimbă pe loc, după
+// ce fișierele sunt deja în dosar.
+
+const patchAttachmentSchema = z.object({
+  kind: z.enum(parAttachmentKindValues),
+  /** Doar pentru kind='other': ce document e, în clar. Ignorat pentru celelalte tipuri. */
+  kind_other: z.string().trim().max(200).optional(),
+});
+
+parAttachmentsRoutes.patch(
+  "/:parId/attachments/:attId",
+  zValidator("json", patchAttachmentSchema),
+  async (c) => {
+    const { parId, attId } = c.req.param();
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const body = c.req.valid("json");
+
+    const [par] = await db
+      .select()
+      .from(parRequests)
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+
+    if (!par) return c.json({ error: "not_found" }, 404);
+    if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
+
+    const [att] = await db
+      .select({ id: parAttachments.id, uploadedBy: parAttachments.uploadedBy })
+      .from(parAttachments)
+      .where(
+        and(
+          eq(parAttachments.id, attId),
+          eq(parAttachments.parId, parId),
+          eq(parAttachments.tenantId, tenantId)
+        )
+      );
+    if (!att) return c.json({ error: "not_found" }, 404);
+
+    // Aceleași reguli ca la ștergere: autorul cât timp cererea e editabilă, plus finanțele pe
+    // propriile încărcări din etapa lor. Cine n-are voie să scoată un document n-are voie nici
+    // să-i schimbe eticheta — în dosar, eticheta e tot conținut.
+    const roles = await getUserPARRoles(user.id, tenantId);
+    const isFinance = roles.includes("finance") || roles.includes("par_admin");
+    const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
+    const authorCanEdit =
+      par.requestedByUserId === user.id &&
+      EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
+    const financeCanEdit =
+      isFinance && att.uploadedBy === user.id && FINANCE_STAGE_STATUSES.includes(par.status);
+    if (!authorCanEdit && !financeCanEdit) {
+      return c.json({ error: "forbidden: not allowed to edit this attachment" }, 403);
+    }
+
+    const kindOther = body.kind === "other" ? (body.kind_other?.trim() || null) : null;
+    // „Altul" fără nume ar ajunge în dosar ca „Alt document" — exact eticheta goală din care a
+    // pornit reclamația.
+    if (body.kind === "other" && !kindOther) {
+      return c.json({ error: "kind_other_required", detail: "Scrie ce document este." }, 400);
+    }
+
+    const [updated] = await db
+      .update(parAttachments)
+      .set({ kind: body.kind, kindOther })
+      .where(
+        and(
+          eq(parAttachments.id, attId),
+          eq(parAttachments.parId, parId),
+          eq(parAttachments.tenantId, tenantId)
+        )
+      )
+      .returning();
+
+    return c.json(updated);
   }
 );
 

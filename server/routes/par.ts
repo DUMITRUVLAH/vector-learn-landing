@@ -2221,6 +2221,29 @@ parRoutes.delete("/:id/line-items/:lineId", async (c) => {
 
   if (deleted.length === 0) return c.json({ error: "not_found" }, 404);
 
+  // Poziția e numărul de ordine al rândului, nu identitatea lui: după ștergere, rândurile rămase
+  // se renumerotează 1..n. Altfel tabelul arăta „4, 5, 8, 9" — lacunele rămâneau și în formularul
+  // tipărit și în dosar, unde un „nr. crt." cu găuri citește ca un document din care lipsesc
+  // poziții (Cristina, 16.09.2026).
+  const remaining = await db
+    .select({ id: parLineItems.id, position: parLineItems.position })
+    .from(parLineItems)
+    .where(and(eq(parLineItems.parId, parId), eq(parLineItems.tenantId, tenantId)))
+    .orderBy(asc(parLineItems.position));
+  const renumbered = remaining
+    .map((line, idx) => ({ id: line.id, position: idx + 1 }))
+    .filter((line, idx) => line.position !== remaining[idx].position);
+  if (renumbered.length > 0) {
+    await db.transaction(async (tx) => {
+      for (const line of renumbered) {
+        await tx
+          .update(parLineItems)
+          .set({ position: line.position })
+          .where(and(eq(parLineItems.id, line.id), eq(parLineItems.tenantId, tenantId)));
+      }
+    });
+  }
+
   const newTotal = await recalcParTotal(parId, tenantId);
 
   const [settings] = await db
@@ -2233,5 +2256,8 @@ parRoutes.delete("/:id/line-items/:lineId", async (c) => {
     ok: true,
     par_total_estimated_cents: newTotal,
     above_micro_threshold: newTotal > threshold,
+    // Clientul ține lista în state: fără pozițiile noi ar afișa mai departe numerele vechi până
+    // la un reload.
+    line_items: remaining.map((line, idx) => ({ id: line.id, position: idx + 1 })),
   });
 });

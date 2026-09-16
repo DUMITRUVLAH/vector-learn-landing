@@ -794,7 +794,13 @@ export async function updateLineItem(
 export async function deleteLineItem(
   parId: string,
   lineId: string
-): Promise<{ ok: boolean; par_total_estimated_cents: number; above_micro_threshold: boolean }> {
+): Promise<{
+  ok: boolean;
+  par_total_estimated_cents: number;
+  above_micro_threshold: boolean;
+  /** Rândurile rămase, renumerotate 1..n de server. */
+  line_items?: { id: string; position: number }[];
+}> {
   return api(`/api/par/${parId}/line-items/${lineId}`, { method: "DELETE" });
 }
 
@@ -912,6 +918,18 @@ export async function listAttachments(parId: string): Promise<{ items: ParAttach
 
 export async function deleteAttachment(parId: string, attId: string): Promise<{ deleted: boolean }> {
   return api(`/api/par/${parId}/attachments/${attId}`, { method: "DELETE" });
+}
+
+/** Schimbă eticheta unui fișier deja urcat (tipul se alegea o singură dată, la upload). */
+export async function updateAttachmentKind(
+  parId: string,
+  attId: string,
+  payload: { kind: ParAttachmentKind; kind_other?: string }
+): Promise<ParAttachment> {
+  return api(`/api/par/${parId}/attachments/${attId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export interface ParAttachmentAnalysis {
