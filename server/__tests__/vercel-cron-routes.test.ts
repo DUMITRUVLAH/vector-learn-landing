@@ -20,6 +20,7 @@
 import { describe, it, expect, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { DIGEST_HOURS, inDigestWindow } from "../services/par/digestRunner";
 
 // Rutele se montează la import; nicio cerere din testul ăsta nu trece de poarta de autorizare,
 // deci baza de date nu e atinsă. Stub-ul ține importul lui `server/app.ts` fără PGlite/Postgres.
@@ -58,5 +59,47 @@ describe("crons din vercel.json", () => {
       `${cronPath} a răspuns ${res.status} ${JSON.stringify(body)} — așteptam refuzul ` +
         `handlerului de cron (CRON_SECRET), semn că cererea a ajuns până la el.`
     ).toBe(true);
+  });
+});
+
+/**
+ * A doua față a aceleiași greșeli: ruta e corectă, dar cronul lovește lângă fereastră.
+ *
+ * `digestRunner.inDigestWindow` acceptă doar orele LOCALE 09:00 și 16:00 (Europe/Chișinău), iar
+ * Vercel Cron programează în UTC. Un cron fixat pe orele care ies bine vara (06:00 → 09:00,
+ * 13:00 → 16:00) cade lângă fereastră iarna, când Moldova trece pe UTC+2: 06:00 UTC devine 08:00
+ * local, 13:00 UTC devine 15:00, ambele respinse — digestul s-ar opri singur pe 25.10.2026, la fel
+ * de tăcut ca incidentul pe care testul de mai sus îl apără.
+ *
+ * Testul verifică pe zile reale de o parte și de alta a schimbării de oră, nu pe un offset presupus.
+ */
+describe("fereastra digestului peste schimbarea de oră", () => {
+  const CRONS: { path: string; schedule: string }[] = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, "../../vercel.json"), "utf8")
+  ).crons;
+  const digestHoursUtc = CRONS.filter((c) => c.path.includes("par-digest")).flatMap((c) => {
+    const field = c.schedule.split(" ")[1];
+    return field === "*" ? Array.from({ length: 24 }, (_, h) => h) : field.split(",").map(Number);
+  });
+
+  it("cronul de digest e programat în vercel.json", () => {
+    expect(digestHoursUtc.length).toBeGreaterThan(0);
+  });
+
+  // Vara (EEST, UTC+3) și iarna (EET, UTC+2) — zile reale, de o parte și de alta a lui 25.10.2026.
+  it.each([
+    ["oră de vară", "2026-09-17"],
+    ["oră de iarnă", "2026-11-03"],
+  ])("%s: fiecare fereastră locală e acoperită de o lovitură de cron", (_label, day) => {
+    for (const localHour of DIGEST_HOURS) {
+      const covered = digestHoursUtc.some((utcHour) =>
+        inDigestWindow(new Date(`${day}T${String(utcHour).padStart(2, "0")}:00:00Z`))
+      );
+      expect(
+        covered,
+        `nicio intrare de cron din vercel.json nu cade în fereastra locală de ${localHour}:00 pe ${day} — ` +
+          `digestul s-ar opri în tăcere. Orele UTC programate: ${digestHoursUtc.join(", ")}.`
+      ).toBe(true);
+    }
   });
 });
