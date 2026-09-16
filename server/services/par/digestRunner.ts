@@ -2,15 +2,21 @@
  * VM5-11: rularea digestului de aprobări — cine primește ce, și o singură dată.
  *
  * Fereastra: owner-ul a confirmat 09:00 și 16:00, ora Chișinăului. Vercel Cron programează în UTC,
- * deci cronul lovește DIN ORĂ ÎN ORĂ (`"0 * * * *"` în vercel.json) și ACEST cod decide dacă e ora
- * potrivită local. Așa, trecerea la ora de iarnă nu mută digestul cu o oră fără ca cineva să observe.
+ * deci cronul lovește de câteva ori și ACEST cod decide dacă e ora potrivită local. Așa, trecerea la
+ * ora de iarnă nu mută digestul cu o oră fără ca cineva să observe.
  *
- * ATENȚIE la cine schimbă `vercel.json` (capcană verificată 16.09.2026): un cron fixat pe orele UTC
- * care ies bine VARA (06:00 → 09:00, 13:00 → 16:00) cade lângă fereastră IARNA, când Moldova trece
- * pe UTC+2 — 06:00 UTC devine 08:00 local, 13:00 UTC devine 15:00, `inDigestWindow` le respinge pe
- * amândouă și digestul se oprește în tăcere pe 25.10, fără nicio eroare. Rularea orară e ieftină:
- * `runApprovalDigest` iese pe `inDigestWindow` ÎNAINTE de orice interogare, deci 22 din 24 de
- * loviri nu ating deloc baza de date.
+ * DE CE PATRU INTRĂRI ÎN `vercel.json` PENTRU DOUĂ FERESTRE (capcană verificată 16.09.2026): orele
+ * UTC care nimeresc ferestrele VARA (06:00 → 09:00, 13:00 → 16:00) cad LÂNGĂ ele IARNA, când Moldova
+ * trece pe UTC+2 — 06:00 UTC devine 08:00 local, 13:00 devine 15:00, `inDigestWindow` le respinge pe
+ * amândouă și digestul s-ar opri în tăcere pe 25.10, fără nicio eroare. Se adaugă 07:00 și 14:00
+ * UTC, care nimeresc ferestrele iarna și sunt ignorate vara. O lovitură fără treabă e gratis:
+ * `runApprovalDigest` iese pe `inDigestWindow` ÎNAINTE de orice interogare.
+ *
+ * NU comasa cele patru intrări într-un `"0 * * * *"`. Contul e pe planul **Hobby**, unde intervalul
+ * minim al unui cron e O DATĂ PE ZI: un cron orar face deployment-ul să PICE la validare, și pică
+ * urât — niciun deployment în listă, doar un status roșu pe commit și `main` care nu se mai
+ * deployează până la revenire (pățit pe f63da728, 16.09.2026). Tot Hobby dă și precizie de ±59 min,
+ * de aceea `WINDOW_MINUTES` acceptă tot minutul din ora fixată.
  *
  * Anti-dublură: nu ținem un tabel nou de „ce am trimis". Jurnalul de mesaje există deja
  * (`messages`), iar un digest trimis aceluiași om în ultimele `MIN_GAP_HOURS` ore oprește al doilea.

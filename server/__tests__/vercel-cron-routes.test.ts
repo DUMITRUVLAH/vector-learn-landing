@@ -86,6 +86,22 @@ describe("fereastra digestului peste schimbarea de oră", () => {
     expect(digestHoursUtc.length).toBeGreaterThan(0);
   });
 
+  /**
+   * Contul e pe planul Hobby, unde intervalul minim al unui cron e O DATĂ PE ZI. Un `"0 * * * *"`
+   * nu produce o eroare de rulare, ci un deployment RESPINS la validare: niciun deployment în
+   * listă, doar un status roșu pe commit — și `main` nu se mai deployează deloc până la revenire
+   * (pățit pe f63da728, 16.09.2026). Deci minutul și ora trebuie să fie FIXE, nu joker.
+   */
+  it.each(CRONS.map((c) => [c.path, c.schedule]))(
+    "%s (%s) e un cron zilnic — planul Hobby refuză sub-zilnic",
+    (cronPath, schedule) => {
+      const [minute, hour] = schedule.split(" ");
+      expect(minute, `${cronPath}: minutul trebuie fixat, nu ${minute}`).toMatch(/^\d+$/);
+      expect(hour, `${cronPath}: ora trebuie fixată, nu ${hour} — sub-zilnic pică deployment-ul`)
+        .toMatch(/^\d+$/);
+    }
+  );
+
   // Vara (EEST, UTC+3) și iarna (EET, UTC+2) — zile reale, de o parte și de alta a lui 25.10.2026.
   it.each([
     ["oră de vară", "2026-09-17"],
