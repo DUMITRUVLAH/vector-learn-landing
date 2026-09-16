@@ -103,6 +103,16 @@ describe("Secțiunea 13 — tipul se schimbă la fiecare fișier", () => {
     expect((await screen.findByLabelText("Tip document pentru contract.pdf") as HTMLSelectElement).value).toBe("contract");
   });
 
+  it("cu fișiere în dosar, cutia de adăugare spune „Adaugă încă un document”", async () => {
+    render(<ParCreateForm />);
+    // Butonul de sus arăta ca antetul secțiunii: nu se vedea cum adaugi AL DOILEA document.
+    expect(await screen.findByText("Adaugă încă un document")).toBeInTheDocument();
+    // …și stă SUB lista de fișiere, nu deasupra ei.
+    const list = screen.getByLabelText("Fișiere atașate");
+    const box = screen.getByText("Adaugă încă un document").closest("div")!;
+    expect(list.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("[blocant] „Altul” cere numele documentului și îl salvează la ieșirea din câmp", async () => {
     const spy = vi.spyOn(parApi, "updateAttachmentKind").mockResolvedValue({
       ...attachments[2], kind: "other", kindOther: "Buletin de identitate",

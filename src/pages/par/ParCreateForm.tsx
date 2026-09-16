@@ -2919,32 +2919,7 @@ export function ParCreateForm() {
         </Section>
 
         {/* 13 Attachments */}
-        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează actele care justifică plata; tipul se poate schimba la fiecare fișier, după încărcare.">
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Tip document" htmlFor="uk" hint="Se aplică fișierelor alese acum; îl schimbi apoi la fiecare în listă.">
-              <Select id="uk" className="w-full" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
-                {ATTACHMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{ATTACHMENT_KIND_LABELS[k]}</option>)}
-              </Select>
-            </Field>
-            {uploadKind === "other" && (
-              <Field label="Ce document este?" htmlFor="ukother" required>
-                <input id="ukother" type="text" className={inputCls} maxLength={KIND_OTHER_MAX_LEN}
-                  placeholder="ex. Certificat de conformitate"
-                  value={uploadKindOther} onChange={(e) => setUploadKindOther(e.target.value)} />
-              </Field>
-            )}
-            <label className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]",
-              (uploadingFile || attachments.length >= 10 || uploadKindOtherMissing) && "opacity-50 cursor-not-allowed"
-            )}>
-              {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
-              <span>Încarcă fișiere</span>
-              <input type="file" multiple className="sr-only"
-                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.rtf,.zip"
-                onChange={onUpload} disabled={uploadingFile || attachments.length >= 10 || uploadKindOtherMissing} aria-label="Alege fișierele" />
-            </label>
-            <span className="text-xs text-muted-foreground">PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max {MAX_ATTACHMENT_LABEL} · {attachments.length}/10 fișiere</span>
-          </div>
+        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează actele care justifică plata.">
           {(attachments.length > 0 || uploadingNames.length > 0) && (
             <ul className="space-y-2" aria-label="Fișiere atașate">
               {/* Fișierele aflate în urcare au rândul lor: altfel, între „am ales fișierul" și
@@ -3010,6 +2985,45 @@ export function ParCreateForm() {
               );})}
             </ul>
           )}
+          {/* Cutia de adăugare stă SUB listă și e delimitată ca în secțiunea 10 („adaugă încă un
+              rând"): cu fișierele deja urcate deasupra, butonul de sus arăta ca antetul secțiunii,
+              nu ca „mai adaug unul", iar textul de lângă el rupea rândul în două (Cristina,
+              16.09.2026). Cu dosarul gol lista nu se randează, deci cutia rămâne prima pe ecran. */}
+          <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
+            <p className="text-sm font-medium text-foreground">
+              {attachments.length > 0 ? "Adaugă încă un document" : "Adaugă documente"}
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Tip document" htmlFor="uk">
+                <Select id="uk" className="w-full" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
+                  {ATTACHMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{ATTACHMENT_KIND_LABELS[k]}</option>)}
+                </Select>
+              </Field>
+              {uploadKind === "other" && (
+                <Field label="Ce document este?" htmlFor="ukother" required>
+                  <input id="ukother" type="text" className={inputCls} maxLength={KIND_OTHER_MAX_LEN}
+                    placeholder="ex. Certificat de conformitate"
+                    value={uploadKindOther} onChange={(e) => setUploadKindOther(e.target.value)} />
+                </Field>
+              )}
+              <label className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]",
+                (uploadingFile || attachments.length >= 10 || uploadKindOtherMissing) && "opacity-50 cursor-not-allowed"
+              )}>
+                {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
+                <span>{attachments.length > 0 ? "Alege fișierele" : "Încarcă fișiere"}</span>
+                <input type="file" multiple className="sr-only"
+                  accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.rtf,.zip"
+                  onChange={onUpload} disabled={uploadingFile || attachments.length >= 10 || uploadKindOtherMissing} aria-label="Alege fișierele" />
+              </label>
+            </div>
+            {/* O singură linie de sub-text, sub tot rândul: două texte scurte, unul sub selector și
+                unul lângă buton, se citeau ca o propoziție tăiată în două. */}
+            <p className="text-xs text-muted-foreground">
+              Tipul ales se aplică fișierelor alese acum — îl poți schimba după aceea la fiecare fișier din listă.
+              PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max {MAX_ATTACHMENT_LABEL} · {attachments.length}/10 fișiere.
+            </p>
+          </div>
           <Field label="Descriere atașamente (opțional)" htmlFor="anote">
             <input id="anote" type="text" placeholder="ex. Contract + act de primire" className={inputCls} value={attachmentsNote} onChange={(e) => setAttachmentsNote(e.target.value)} />
           </Field>
