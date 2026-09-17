@@ -201,3 +201,46 @@ describe("POST /api/par/:id/verify-code", () => {
     expect(res.status).toBe(400);
   });
 });
+
+/**
+ * Previzualizarea dinaintea trimiterii (feedback Iulian, 17.09.2026) trece prin ACEEAȘI rută ca
+ * descărcarea. Fără regula de mai jos, fiecare ciornă previzualizată — inclusiv cele abandonate —
+ * ar fi lăsat în urmă un token: un link public valid pentru un document care nu există ca cerere.
+ */
+describe("GET /api/par/:id/form.pdf — ciorna previzualizată nu emite cod", () => {
+  let draftId: string;
+
+  beforeAll(async () => {
+    const [payer] = await testDb.select().from(parPayers).where(eq(parPayers.tenantId, tenantId));
+    const [draft] = await testDb
+      .insert(parRequests)
+      .values({
+        tenantId,
+        requestNo: "PAR-2026-0301",
+        requestedByUserId: adminId,
+        purpose: "execute_payment",
+        chargeTo: "program",
+        status: "draft",
+        payerId: payer.id,
+        currency: "MDL",
+        totalEstimatedCents: 500000,
+        dateOfRequest: new Date("2026-09-17T00:00:00Z"),
+      })
+      .returning();
+    draftId = draft.id;
+  });
+
+  it("dă formularul, dar nu scrie niciun token", async () => {
+    const res = await app.request(`/api/par/${draftId}/form.pdf?inline=1`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    // `inline`, nu `attachment`: previzualizarea se CITEȘTE în aplicație, nu ajunge în Downloads.
+    expect(res.headers.get("content-disposition")).toMatch(/^inline/);
+
+    const rows = await testDb
+      .select()
+      .from(parVerifyTokens)
+      .where(and(eq(parVerifyTokens.parId, draftId), eq(parVerifyTokens.tenantId, tenantId)));
+    expect(rows).toHaveLength(0);
+  });
+});

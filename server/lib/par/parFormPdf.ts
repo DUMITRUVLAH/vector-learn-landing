@@ -221,6 +221,29 @@ function verifyBlock(token: string, fingerprint: string, requestOrigin?: string 
 }
 
 /**
+ * Ce se pune în locul blocului de verificare pe o CIORNĂ.
+ *
+ * Ciorna nu primește cod: codul e dovada că hârtia corespunde unei cereri depuse, iar o ciornă se
+ * mai schimbă de zece ori după ce a fost previzualizată. Golul rămâne însă ocupat, cu același
+ * spațiu, ca formularul să nu se rearanjeze între previzualizare și hârtia finală — omul verifică
+ * tocmai așezarea.
+ */
+function draftNote(): PdfNode {
+  return {
+    stack: [
+      { text: "DRAFT — not submitted for approval", bold: true, fontSize: 7.5, color: RED },
+      {
+        text: "A verification code and QR are issued when the request is sent for approval.",
+        fontSize: 6.5,
+        color: FAINT,
+        margin: [0, 1, 0, 0],
+      },
+    ],
+    margin: [0, 10, 0, 0],
+  };
+}
+
+/**
  * Ce se tipărește ca dovadă verificabilă. `token` lipsă (ori nescris din cauza unei erori de bază
  * de date) înseamnă doar formular fără QR — niciodată un buton de descărcare care eșuează.
  */
@@ -233,6 +256,14 @@ export interface ParFormVerifyOptions {
 /** Documentul pdfmake al formularului. */
 export function buildParFormDefinition(d: ParFormData, verify?: ParFormVerifyOptions | null): PdfNode {
   const cur = d.currency || "MDL";
+  /**
+   * Feedback Iulian (17.09.2026): „ar fi comod, după ce completezi toate celulele, să fie posibil
+   * să vezi documentul în formatul de PAR înainte de a trimite spre semnare." Previzualizarea iese
+   * pe ACEEAȘI cale ca hârtia finală — altfel ar arăta altceva decât ce se semnează, adică exact
+   * problema mutată cu un pas mai încolo. Diferența o spune documentul, nu ruta: ciorna poartă
+   * filigran și nu poartă cod de verificare, oriunde ar fi generată.
+   */
+  const isDraft = d.status === "draft";
   // Amprenta a ceea ce iese acum pe hârtie, pusă în URL-ul din QR. Fiecare exemplar tipărit își
   // poartă astfel propria versiune, deci pagina publică poate spune „hârtia din mâna ta
   // corespunde" sau „între timp a mai semnat cineva" — fără istoric de tipăriri în bază.
@@ -443,7 +474,11 @@ export function buildParFormDefinition(d: ParFormData, verify?: ParFormVerifyOpt
           {
             stack: [
               signatureCell([num(14), { text: " Requestor Signature:", bold: true, fontSize: 8.5 }], sig14, d.parId),
-              ...(verify ? [verifyBlock(verify.token, fingerprint, verify.requestOrigin)] : []),
+              ...(isDraft
+                ? [draftNote()]
+                : verify
+                  ? [verifyBlock(verify.token, fingerprint, verify.requestOrigin)]
+                  : []),
             ],
           },
           {
@@ -539,6 +574,13 @@ export function buildParFormDefinition(d: ParFormData, verify?: ParFormVerifyOpt
     pageMargins: [30, 28, 30, 28],
     info: { title: d.requestNo ?? "PAR", creator: "FinFlow" },
     defaultStyle: { font: DOC_FONT_FAMILY, fontSize: 8.5, lineHeight: 1.15 },
+    // Filigran, nu o bandă în plus: o bandă ar fi împins formularul pe a DOUA pagină (vezi
+    // `verifyBlock`), iar previzualizarea ar fi arătat un document cu altă așezare decât cel
+    // tipărit. Filigranul nu ocupă niciun rând. Rămâne palid ca să nu acopere cifrele, dar e
+    // singurul semn roșu de pe o foaie altfel alb-negru.
+    ...(isDraft
+      ? { watermark: { text: "DRAFT", color: RED, opacity: 0.09, bold: true } }
+      : {}),
     content,
   };
 }

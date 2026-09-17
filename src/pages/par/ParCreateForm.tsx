@@ -12,7 +12,7 @@ import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
   Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
   ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe, AlertTriangle,
-  IdCard, Landmark, ScrollText, CalendarClock, Copy, FilePlus2,
+  IdCard, Landmark, ScrollText, CalendarClock, Copy, FilePlus2, Eye,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -28,6 +28,7 @@ import {
   ATTACHMENT_KIND_ORDER, ATTACHMENT_KIND_LABELS, KIND_OTHER_MAX_LEN,
 } from "@/lib/par/attachmentKinds";
 import type { ParPayeeCandidate, ParPayeeOption } from "@/lib/par/parCandidateTypes";
+import { openParAttachmentViewer, parFormViewerTarget } from "@/lib/par/attachmentViewerBus";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
 import { PAR_FIELD_MESSAGES } from "@/lib/par/submitErrors";
@@ -622,6 +623,8 @@ export function ParCreateForm() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  /** Stare separată de `busy`: doar butonul de previzualizare se învârte, restul barei rămâne viu. */
+  const [previewing, setPreviewing] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
 
   // Load config. A new PAR is persisted only when the user explicitly saves, adds persisted
@@ -1587,6 +1590,68 @@ export function ParCreateForm() {
     return true;
   }
 
+  /**
+   * Erorile de salvare, arătate la fel de cele trei butoane care scriu ciorna (salvare,
+   * previzualizare, trimitere). A treia copie a mapării ar fi însemnat al treilea loc unde se uită
+   * un cod de eroare nou.
+   */
+  const showWriteError = (e: unknown, fieldsMessage: string, fallback: string) => {
+    if (e instanceof ApiError && e.details.length) {
+      const mapped: Record<string, string> = {};
+      for (const d of e.details) mapped[d.field] = FIELD_MESSAGES[d.field] ?? d.message;
+      setFieldErrors(mapped);
+      setError(fieldsMessage);
+      return;
+    }
+    if (e instanceof ApiError && URGENT_ERROR_MESSAGES[e.code]) {
+      const { field, message } = URGENT_ERROR_MESSAGES[e.code];
+      setFieldErrors((p) => ({ ...p, [field]: message }));
+      setError(fieldsMessage);
+      return;
+    }
+    setError(e instanceof Error ? e.message : fallback);
+  };
+
+  /**
+   * „Vezi cum arată" — formularul oficial, exact hârtia care pleacă la semnat, citit peste pagină
+   * înainte de trimitere.
+   *
+   * Feedback Iulian (17.09.2026): „ar fi comod, după ce completezi toate celulele, să fie posibil
+   * să vezi documentul în formatul de PAR, înainte de a trimite spre semnare. Acum nu e posibil de
+   * vizualizat." Până acum „Vezi PDF" exista doar pe fișa cererii (`ParDetail`) — adică DUPĂ
+   * trimitere, când corectura costă o retragere din aprobare.
+   *
+   * Documentul vine de pe server, de pe ACEEAȘI rută ca descărcarea (`/api/par/:id/form.pdf`), nu
+   * dintr-o a doua randare în browser: o previzualizare care arată altceva decât hârtia semnată ar
+   * muta problema, nu ar rezolva-o. Fiind încă ciornă, formularul iese cu filigran „DRAFT" și fără
+   * cod de verificare (vezi `server/lib/par/parFormPdf.ts`).
+   *
+   * Ciorna se scrie pe server înainte: altfel s-ar previzualiza starea de la ultima salvare, adică
+   * exact câmpurile pe care omul tocmai le-a schimbat ar lipsi din ce vede.
+   */
+  const previewForm = async () => {
+    if (busy || previewing) return;
+    setPreviewing(true); setError(null); setFieldErrors({});
+    try {
+      const draftId = await ensureDraft();
+      await patchHeader(draftId);
+      const fresh = await updatePar(draftId, {});
+      setPar(fresh);
+      const target = parFormViewerTarget(draftId, fresh.requestNo);
+      // Fără vizualizator montat (o pagină randată izolat, într-un test) butonul n-are voie să
+      // rămână mut — cade pe filă nouă, ca pe fișa cererii.
+      if (!openParAttachmentViewer(target) && target.url) {
+        window.open(target.url, "_blank", "noopener,noreferrer");
+      }
+    } catch (e) {
+      showWriteError(
+        e,
+        "Formularul nu a putut fi generat — vezi câmpurile marcate mai jos.",
+        "Eroare la generarea formularului"
+      );
+    } finally { setPreviewing(false); }
+  };
+
   const saveDraft = async () => {
     setBusy(true); setError(null); setFieldErrors({});
     try {
@@ -1597,18 +1662,7 @@ export function ParCreateForm() {
       setDraftSavedMessage(`Ciorna ${fresh.requestNo} a fost salvată în Cererile mele → Ciorne.`);
     }
     catch (e) {
-      if (e instanceof ApiError && e.details.length) {
-        const mapped: Record<string, string> = {};
-        for (const d of e.details) mapped[d.field] = FIELD_MESSAGES[d.field] ?? d.message;
-        setFieldErrors(mapped);
-        setError("Ciorna nu a putut fi salvată — vezi câmpurile marcate mai jos.");
-      } else if (e instanceof ApiError && URGENT_ERROR_MESSAGES[e.code]) {
-        const { field, message } = URGENT_ERROR_MESSAGES[e.code];
-        setFieldErrors((p) => ({ ...p, [field]: message }));
-        setError("Ciorna nu a putut fi salvată — vezi câmpurile marcate mai jos.");
-      } else {
-        setError(e instanceof Error ? e.message : "Eroare la salvare");
-      }
+      showWriteError(e, "Ciorna nu a putut fi salvată — vezi câmpurile marcate mai jos.", "Eroare la salvare");
     }
     finally { setBusy(false); }
   };
@@ -1658,18 +1712,7 @@ export function ParCreateForm() {
       }
       navigate(`/business/par/${submitted.id}`);
     } catch (e) {
-      if (e instanceof ApiError && e.details.length) {
-        const mapped: Record<string, string> = {};
-        for (const d of e.details) mapped[d.field] = FIELD_MESSAGES[d.field] ?? d.message;
-        setFieldErrors(mapped);
-        setError("Cererea nu a putut fi trimisă — vezi câmpurile marcate mai jos.");
-      } else if (e instanceof ApiError && URGENT_ERROR_MESSAGES[e.code]) {
-        const { field, message } = URGENT_ERROR_MESSAGES[e.code];
-        setFieldErrors((p) => ({ ...p, [field]: message }));
-        setError("Cererea nu a putut fi trimisă — vezi câmpurile marcate mai jos.");
-      } else {
-        setError(e instanceof Error ? e.message : "Eroare la trimitere");
-      }
+      showWriteError(e, "Cererea nu a putut fi trimisă — vezi câmpurile marcate mai jos.", "Eroare la trimitere");
       summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     } finally { setBusy(false); }
   };
@@ -3109,12 +3152,21 @@ export function ParCreateForm() {
                   </button>
                 )
               )}
-              <button type="button" onClick={saveDraft} disabled={busy}
+              <button type="button" onClick={saveDraft} disabled={busy || previewing}
                 aria-label="Salvează ciornă" title="Salvează ciornă"
                 className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px] min-w-[44px] justify-center">
                 <Save className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Salvează ciornă</span>
               </button>
-              <button type="button" onClick={submit} disabled={busy || !parId} aria-label="Trimite cererea pentru aprobare"
+              {/* Ultimul pas înainte de „Trimite", și așezat exact acolo: hârtia se citește înainte
+                  de a pleca la semnat, nu după, când corectura cere retragerea din aprobare. */}
+              <button type="button" onClick={previewForm} disabled={busy || previewing}
+                aria-label="Vezi cum arată formularul PAR înainte de trimitere"
+                title="Vezi cum arată formularul PAR înainte de trimitere"
+                className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px] min-w-[44px] justify-center">
+                {previewing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+                <span className="hidden sm:inline">Vezi cum arată</span>
+              </button>
+              <button type="button" onClick={submit} disabled={busy || previewing || !parId} aria-label="Trimite cererea pentru aprobare"
                 className="flex items-center gap-2 whitespace-nowrap px-4 sm:px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}Trimite<span className="hidden sm:inline">&nbsp;pentru aprobare</span>
               </button>

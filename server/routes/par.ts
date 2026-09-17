@@ -2056,7 +2056,11 @@ parRoutes.get("/:id/form.pdf", async (c) => {
   const data = await loadParFormData(parId, tenantId);
   if (!data) return c.json({ error: "not_found" }, 404);
 
-  const token = await ensureVerifyToken(parId, tenantId);
+  // Ciorna nu primește token: tokenul e un rând STOCAT, retractabil, care înseamnă „hârtia asta a
+  // fost tipărită dintr-o cerere depusă". Previzualizarea dinaintea trimiterii l-ar fi creat pe
+  // toate ciornele, inclusiv pe cele abandonate. Formularul ei poartă filigran, nu cod — vezi
+  // `buildParFormDefinition`, care aplică aceeași regulă și dacă tokenul i-ar fi dat oricum.
+  const token = par.status === "draft" ? null : await ensureVerifyToken(parId, tenantId);
   // Originea de pe care tocmai s-a descărcat formularul e adresa la care omul se poate întoarce
   // scanând codul — o certitudine, spre deosebire de o variabilă de mediu pe care n-o poate citi
   // nimeni (vezi `verifyUrl`).
