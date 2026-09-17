@@ -230,3 +230,40 @@ describe("suma care nu se împacă cu rândurile documentului", () => {
     expect(amountIsUnreliable(null, deeaHouse)).toBe(false);
   });
 });
+
+/**
+ * Regula „o acuzație cere dovadă", aplicată și la beneficiar (producție, 17.09.2026).
+ *
+ * Pe factura fiscală Moldcell — unde rubrica 1 scrie „MOLDCELL S.A., c.f. 1002600046027", exact
+ * codul din cerere — extractorul a întors o SINGURĂ parte: „Carolina Bugaian", semnatara de la
+ * rubrica 14. Furnizorul și cumpărătorul n-au fost extrase deloc. Din asta a ieșit „beneficiarul
+ * e altul" pe patru cereri corecte.
+ *
+ * Condiția trăiește în `analyzeAttachmentAgainstPar`; aici e fixată ca regulă, ca să nu se piardă.
+ */
+describe("beneficiarul se acuză doar dacă documentul a fost chiar citit", () => {
+  const hasEvidence = (
+    payee: { idno?: string | null; iban?: string | null } | null,
+    par: { payeeIdnp: string | null; payeeIban: string | null },
+    partyCount: number
+  ) => !!payee?.idno || !!payee?.iban || (!par.payeeIdnp && !par.payeeIban) || partyCount >= 2;
+
+  const cerereCuIdno = { payeeIdnp: "1002600046027", payeeIban: null };
+
+  it("un singur nume gol, când cererea știe IDNO-ul, nu e dovadă", () => {
+    expect(hasEvidence({ idno: null, iban: null }, cerereCuIdno, 1)).toBe(false);
+  });
+
+  it("dovadă e un identificator pe partea găsită…", () => {
+    expect(hasEvidence({ idno: "1014600006741", iban: null }, cerereCuIdno, 1)).toBe(true);
+    expect(hasEvidence({ idno: null, iban: "MD03MO2224ASV71447007100" }, cerereCuIdno, 1)).toBe(true);
+  });
+
+  it("…sau un document cu structură de părți, chiar fără rechizite", () => {
+    expect(hasEvidence({ idno: null, iban: null }, cerereCuIdno, 2)).toBe(true);
+  });
+
+  it("când nici cererea n-are identificator, numele e tot ce avem — și rămâne verificat", () => {
+    expect(hasEvidence({ idno: null, iban: null }, { payeeIdnp: null, payeeIban: null }, 1)).toBe(true);
+  });
+});

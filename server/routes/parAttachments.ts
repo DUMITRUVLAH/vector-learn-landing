@@ -368,6 +368,8 @@ async function analyzeAttachmentAgainstPar(
     imageDataUrl, fileDataUrl, tenantId: par.tenantId, userId: actorUserId, prefillId: randomUUID(),
   });
   const choice = choosePayee(extraction, null);
+  /** Părțile pe care extractorul chiar le-a găsit pe document (aceeași listă la ambele verificări). */
+  const docParties = choice.options.length ? choice.options : choice.payee ? [choice.payee] : [];
   // Compare against the party the PAR actually names, not the one the extractor would recommend.
   // A contract names both sides; `choosePayee` picks the one it thinks is paid, which on a
   // document where the tenant is the provider is the OTHER party — so every requisite check came
@@ -396,7 +398,7 @@ async function analyzeAttachmentAgainstPar(
   // Centrul de Resurse Juridice" tocmai fiindcă ATIC fusese deja consumat ca beneficiar.
   const weArePayee = ourAliases.some((alias) => sameParty(par.payeeName, alias, { aliases: ourAliases }) === true);
   const payerCheck = checkPayerOnDocument(
-    choice.options.length ? choice.options : choice.payee ? [choice.payee] : [],
+    docParties,
     payerRow ?? null,
     payee ?? null,
     { carriesPayerSide: comparesPayee(attachment.kind) && !weArePayee },
@@ -420,7 +422,18 @@ async function analyzeAttachmentAgainstPar(
   // comparația lor e o alarmă falsă prin construcție. Regula trebuie să fie aceeași pentru tot
   // grupul — altfel numele tace, dar IDNO-ul acuză pe același document (pe producție, extrasul din
   // Registrul de stat raporta IDNO-ul ATIC față de IDNP-ul persoanei plătite).
-  const aboutPayee = comparesPayee(attachment.kind);
+  // …și doar când citirea documentului e destul de bună ca să susțină o acuzație. Cererea știe pe
+  // cine plătește, cu IDNO și IBAN; dacă din tot documentul a ieșit un singur nume gol, fără niciun
+  // identificator, atunci n-am citit documentul — l-am răsfoit.
+  //
+  // Cazul care a cerut regula (producție, 17.09.2026): pe factura fiscală Moldcell, unde rubrica 1
+  // scrie „MOLDCELL S.A., c.f. 1002600046027" — exact codul din cerere — extractorul a întors o
+  // SINGURĂ parte: „Carolina Bugaian", semnatara de la rubrica 14 („Director General"). Furnizorul
+  // și cumpărătorul n-au fost extrase deloc. Din asta a ieșit „beneficiarul e altul" pe patru
+  // cereri corecte. Aceeași regulă ca la plătitor: o acuzație cere dovadă, nu doar un nume.
+  const payeeEvidence =
+    !!payee?.idno || !!payee?.iban || (!par.payeeIdnp && !par.payeeIban) || docParties.length >= 2;
+  const aboutPayee = comparesPayee(attachment.kind) && payeeEvidence;
   const checks: ReconcileCheck[] = [
     ...amountChecks,
     // Aliasurile intră și aici: cererea poate purta denumirea juridică întreagă, iar documentul
