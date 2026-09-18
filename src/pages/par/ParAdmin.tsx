@@ -709,8 +709,16 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
       setLogoBroken(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      setError("Logoul nu a putut fi încărcat. Acceptăm PNG sau JPG, până în 1 MB.");
+    } catch (err) {
+      // Serverul spune EXACT de ce a refuzat (format, mărime, storage indisponibil). Un mesaj
+      // unic pentru toate cazurile ascunde motivul: la prima încărcare picată, „acceptăm PNG sau
+      // JPG" arăta spre fișier, deși vina era a cererii, nu a lui.
+      const reason = err instanceof ApiError ? err.message : "";
+      setError(
+        reason && !/^http_\d+$/.test(reason)
+          ? `Logoul nu a putut fi încărcat: ${reason}`
+          : "Logoul nu a putut fi încărcat. Încearcă din nou.",
+      );
     } finally {
       setLogoUploading(false);
     }

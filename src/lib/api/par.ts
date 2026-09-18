@@ -2,7 +2,7 @@
  * PAR-105: Client-side API helpers for the PAR (Payment Action Request) module
  * Covers: create/get/patch/submit, line items, attachments, config lookups
  */
-import { api } from "../api";
+import { api, apiUpload } from "../api";
 import { fileNameFromDisposition, saveBlob } from "@/lib/par/downloadName";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1463,12 +1463,16 @@ export async function updateParSettings(payload: Partial<Omit<ParSettings, "id" 
 /**
  * Încarcă logoul organizației (PNG/JPG, max 1 MB). Serverul îl pune într-un bucket public și
  * scrie singur URL-ul în setări — de aceea răspunsul e chiar URL-ul, gata de pus în formular.
- * FormData, nu JSON: fără header de Content-Type, ca browserul să-și pună singur boundary-ul.
+ *
+ * `apiUpload`, NU `api`: `api()` pune întotdeauna `Content-Type: application/json`, iar un header
+ * de tip pus de noi îl împiedică pe browser să scrie boundary-ul de multipart. Corpul pleca atunci
+ * ca „JSON" fără boundary, `c.req.formData()` nu-l putea citi și orice încărcare pica cu „Se aștepta
+ * un fișier" — inclusiv un PNG de 3 KB, perfect valid.
  */
 export async function uploadParLogo(file: File): Promise<{ logoUrl: string }> {
   const form = new FormData();
   form.append("file", file);
-  return api("/api/par/settings/logo", { method: "POST", body: form });
+  return apiUpload("/api/par/settings/logo", form);
 }
 
 export async function listParMembers(): Promise<{ members: ParMember[] }> {
