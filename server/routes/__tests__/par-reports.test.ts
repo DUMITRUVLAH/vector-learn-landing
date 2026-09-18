@@ -11,6 +11,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from "vitest";
+import { effectiveReportStatuses } from "../parReports";
 
 // ─── Helpers (mirroring server-side logic) ────────────────────────────────────
 
@@ -193,5 +194,31 @@ describe("PAR-117 — cycle-time result shape", () => {
       avgSubmitToPaidDays: null,
     };
     expect(result.avgSubmitToPaidDays).toBeNull();
+  });
+});
+
+// ─── Statusurile implicite ale rapoartelor ────────────────────────────────────
+//
+// Owner, 18 sept. 2026: „trebuie doar cele plătite, cele anulate, ciornele nu trebuie să intre
+// aici." Până atunci, un raport fără status bifat număra TOT — ciorne, anulate, respinse — deci
+// „Cheltuieli pe departament" arăta bani care nu ieșiseră niciodată din cont.
+
+describe("rapoartele numără implicit doar cererile plătite", () => {
+  it("fără status cerut → doar `paid`", () => {
+    expect(effectiveReportStatuses(undefined)).toEqual(["paid"]);
+    expect(effectiveReportStatuses("")).toEqual(["paid"]);
+  });
+
+  it("o selecție explicită bate implicitul", () => {
+    expect(effectiveReportStatuses("approved,in_finance")).toEqual(["approved", "in_finance"]);
+  });
+
+  it("ciornele și anulatele intră doar dacă sunt cerute pe nume", () => {
+    expect(effectiveReportStatuses("draft,cancelled")).toEqual(["draft", "cancelled"]);
+  });
+
+  it("statusurile inventate sunt ignorate, nu ajung în SQL", () => {
+    expect(effectiveReportStatuses("'; drop table par_requests; --")).toEqual(["paid"]);
+    expect(effectiveReportStatuses("paid,nuexista")).toEqual(["paid"]);
   });
 });

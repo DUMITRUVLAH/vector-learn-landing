@@ -115,6 +115,32 @@ const STATUS_VALUES = [
   "approved", "in_finance", "reapproval_required", "paid", "cancelled",
 ] as const;
 
+/**
+ * Ce intră în rapoarte când nimeni n-a bifat un status: DOAR cererile plătite.
+ *
+ * Până acum implicitul era „tot", deci în „Cheltuieli pe departament" intrau și ciornele
+ * nesalvate de nimeni, și cererile anulate, și cele respinse — bani care n-au ieșit niciodată din
+ * cont. Owner-ul a citit 437.972,28 L pe 59 de cereri și a spus scurt: „trebuie doar cele plătite,
+ * cele anulate, ciornele nu trebuie să intre aici". Un raport de cheltuieli care numără intenții
+ * alături de plăți e mai rău decât niciun raport: arată corect și nu e.
+ *
+ * Filtrul de statusuri rămâne: cine vrea și angajamentele în curs bifează explicit
+ * „Aprobat"/„La finanțe" din „Statusuri incluse".
+ */
+const DEFAULT_REPORT_STATUSES = ["paid"] as const;
+
+/**
+ * Stările pe care le numără raportul: cele cerute explicit, altfel implicitul.
+ * Doar valorile cunoscute ajung mai departe — un `status=;drop` nu are ce filtra.
+ */
+export function effectiveReportStatuses(raw?: string): readonly string[] {
+  const picked = (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => (STATUS_VALUES as readonly string[]).includes(s));
+  return picked.length ? picked : DEFAULT_REPORT_STATUSES;
+}
+
 function buildReportWhere(tenantId: string, q: ReportQuery, scope?: SQL) {
   const conditions: SQL[] = [eq(parRequests.tenantId, tenantId)];
   if (scope) conditions.push(scope);
@@ -126,9 +152,8 @@ function buildReportWhere(tenantId: string, q: ReportQuery, scope?: SQL) {
   if (fromDate && !isNaN(fromDate.getTime())) conditions.push(gte(parRequests.dateOfRequest, fromDate));
   if (toDate && !isNaN(toDate.getTime())) conditions.push(lte(parRequests.dateOfRequest, toDate));
 
-  // Statusuri: doar valorile cunoscute ajung în SQL — un `status=;drop` nu are ce filtra.
-  const statuses = (q.status ?? "").split(",").map((s) => s.trim()).filter((s) => (STATUS_VALUES as readonly string[]).includes(s));
-  if (statuses.length) conditions.push(sql`${parRequests.status}::text in (${sql.join(statuses.map((s) => sql`${s}`), sql`, `)})`);
+  const statuses = effectiveReportStatuses(q.status);
+  conditions.push(sql`${parRequests.status}::text in (${sql.join(statuses.map((s) => sql`${s}`), sql`, `)})`);
 
   if (q.payer_id) conditions.push(eq(parRequests.payerId, q.payer_id));
   if (q.project_id) conditions.push(eq(parRequests.projectId, q.project_id));

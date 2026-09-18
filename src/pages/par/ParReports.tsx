@@ -819,7 +819,8 @@ export function ParReports() {
                   })}
                 </div>
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  Niciun status selectat = toate cererile, inclusiv ciornele și cele anulate.
+                  Niciun status selectat = doar cererile plătite. Ciornele, cele anulate și cele
+                  respinse intră în raport numai dacă le bifezi tu aici.
                 </p>
               </fieldset>
             </div>

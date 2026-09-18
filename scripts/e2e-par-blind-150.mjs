@@ -1246,18 +1246,22 @@ await T("reports export to xlsx", async () => {
   eq(r.status, 200);
   assert(/spreadsheet|octet-stream/.test(r.ct), `wrong content-type: ${r.ct}`);
 });
+// Rapoartele arată IMPLICIT doar cererile plătite. Testele de mai jos verifică ARIA omului (ce
+// rânduri vede), nu implicitul — de aceea cer explicit și stările din flux; altfel ar pica pe o
+// cerere abia trimisă, care corect nu apare într-un raport de cheltuieli.
+const IN_FLIGHT = "status=pending_approval,changes_requested,approved,in_finance,reapproval_required,paid";
 await T("an approver's own reports are not silently empty", async () => {
   const { par } = await submitPar("requestor", { amount: 250000 });
-  const rows = coll((await GET("approver", "/api/par/reports/by-vendor")).body);
+  const rows = coll((await GET("approver", `/api/par/reports/by-vendor?${IN_FLIGHT}`)).body);
   assert(rows.length > 0, "approver sees an empty spend report");
   const total = rows.reduce((sum, r) => sum + Number(r.totalCents ?? 0), 0);
   assert(total >= 250000, `approver's report total too low (${total}) for ${par.requestNo}`);
 });
 await T("a payer-level request without a project still counts in the reports", async () => {
-  const before = coll((await GET("approver", "/api/par/reports/by-charge-to")).body)
+  const before = coll((await GET("approver", `/api/par/reports/by-charge-to?${IN_FLIGHT}`)).body)
     .reduce((s, r) => s + Number(r.totalCents ?? 0), 0);
   await submitPar("requestor", { amount: 300000 }); // no project_id — payer-level
-  const after = coll((await GET("approver", "/api/par/reports/by-charge-to")).body)
+  const after = coll((await GET("approver", `/api/par/reports/by-charge-to?${IN_FLIGHT}`)).body)
     .reduce((s, r) => s + Number(r.totalCents ?? 0), 0);
   eq(after - before, 300000, "delta reported to the approver");
 });
@@ -1267,6 +1271,22 @@ await T("finance sees the same spend totals as the admin", async () => {
   const financeTotal = coll((await GET("finance", "/api/par/reports/by-charge-to")).body)
     .reduce((s, r) => s + Number(r.totalCents ?? 0), 0);
   eq(financeTotal, adminTotal, "finance vs admin report total");
+});
+await T("a request that was never paid stays out of the spend report", async () => {
+  // Owner, 18 sept. 2026: „trebuie doar cele plătite, cele anulate, ciornele nu trebuie să intre
+  // aici." Fără status cerut explicit, raportul numără DOAR plățile — o cerere abia trimisă nu
+  // mișcă totalul.
+  const before = coll((await GET("admin", "/api/par/reports/by-charge-to")).body)
+    .reduce((s, r) => s + Number(r.totalCents ?? 0), 0);
+  await submitPar("requestor", { amount: 410000 });
+  const after = coll((await GET("admin", "/api/par/reports/by-charge-to")).body)
+    .reduce((s, r) => s + Number(r.totalCents ?? 0), 0);
+  eq(after, before, "spend total moved on an unpaid request");
+});
+await T("the default spend report counts only paid requests", async () => {
+  const rows = coll((await GET("admin", "/api/par/reports/aging")).body);
+  assert(rows.length > 0 && rows.every((r) => r.status === "paid"),
+    `non-paid buckets in the default report: ${JSON.stringify(rows).slice(0, 200)}`);
 });
 await T("an anonymous user cannot export reports", async () => {
   eq((await GET("anon", "/api/par/reports/export.csv")).status, 401);
@@ -1717,11 +1737,11 @@ await T("a EUR request keeps its own currency", async () => {
   eq((await detail("requestor", p.id)).currency, "EUR", "currency");
 });
 await T("the currency breakdown separates EUR from MDL", async () => {
-  const rows = coll((await GET("admin", "/api/par/reports/currency-breakdown")).body);
+  const rows = coll((await GET("admin", `/api/par/reports/currency-breakdown?${IN_FLIGHT}`)).body);
   assert(rows.some((r) => (r.currency ?? r.id ?? r.label) === "EUR"), `no EUR row: ${JSON.stringify(rows).slice(0, 200)}`);
 });
 await T("a EUR request is converted to an MDL figure for the DOA bands", async () => {
-  const rows = coll((await GET("admin", "/api/par/reports/currency-breakdown")).body);
+  const rows = coll((await GET("admin", `/api/par/reports/currency-breakdown?${IN_FLIGHT}`)).body);
   const eur = rows.find((r) => (r.currency ?? r.id ?? r.label) === "EUR");
   assert(Number(eur.mdlTotalCents ?? 0) > 0, `no MDL equivalent: ${JSON.stringify(eur)}`);
 });
