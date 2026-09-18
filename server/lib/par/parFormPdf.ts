@@ -254,7 +254,21 @@ export interface ParFormVerifyOptions {
 }
 
 /** Documentul pdfmake al formularului. */
-export function buildParFormDefinition(d: ParFormData, verify?: ParFormVerifyOptions | null): PdfNode {
+/**
+ * Identitatea organizației pe formular: logoul (ca data-URL, vezi `orgLogo.ts`) și denumirea
+ * legală. Ambele opționale — formularul oficial al donatorului arată exact ca până acum dacă
+ * organizația n-a pus nimic în setări.
+ */
+export interface ParFormOrg {
+  logoDataUrl?: string | null;
+  legalName?: string | null;
+}
+
+export function buildParFormDefinition(
+  d: ParFormData,
+  verify?: ParFormVerifyOptions | null,
+  org?: ParFormOrg | null,
+): PdfNode {
   const cur = d.currency || "MDL";
   /**
    * Feedback Iulian (17.09.2026): „ar fi comod, după ce completezi toate celulele, să fie posibil
@@ -307,7 +321,32 @@ export function buildParFormDefinition(d: ParFormData, verify?: ParFormVerifyOpt
   const total =
     d.totalEstimatedCents ?? d.lineItems.reduce((s, i) => s + i.lineTotalCents, 0);
 
+  // Antetul organizației, DEASUPRA benzii de titlu. Formularul rămâne al donatorului — aceleași
+  // secțiuni, aceleași etichete în engleză; se adaugă doar cine îl emite, pe un singur rând, așa
+  // cum arată orice formular pe hârtie cu antet. Fără logo și fără denumire, rândul nu se scrie
+  // deloc: o bandă goală ar fi împins formularul spre a doua pagină degeaba.
+  const orgHead: PdfNode[] =
+    org?.logoDataUrl || org?.legalName
+      ? [{
+          columns: [
+            ...(org.logoDataUrl
+              ? [{ width: "auto", image: org.logoDataUrl, fit: [110, 34], margin: [0, 0, 8, 0] }]
+              : []),
+            {
+              width: "*",
+              text: org.legalName ?? "",
+              fontSize: 9,
+              bold: true,
+              alignment: org.logoDataUrl ? "left" : "center",
+              margin: [0, 10, 0, 0],
+            },
+          ],
+          margin: [0, 0, 0, 6],
+        }]
+      : [];
+
   const content: PdfNode[] = [
+    ...orgHead,
     // Banda de titlu — singura pată de culoare a formularului oficial.
     {
       table: { widths: ["*"], body: [[{ text: "Payment Action Request (PAR) Form", bold: true, fontSize: 13, alignment: "center", fillColor: TITLE_BG, margin: [0, 4, 0, 4] }]] },

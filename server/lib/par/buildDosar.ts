@@ -29,6 +29,7 @@ import type { ApprovalSheetData } from "./approvalSheet";
 import { loadAttachmentBytes } from "./attachmentStore";
 import { buildDosarPagesDefinition, renderDosarPagesPdf, type DosarSeparator } from "./dosarPdf";
 import { buildParFormDefinition } from "./parFormPdf";
+import { loadOrgIdentity } from "./orgLogo";
 import { ensureVerifyToken } from "./verifyToken";
 import { loadParFormData } from "./parFormData";
 
@@ -139,6 +140,10 @@ export async function buildDosar(
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return null;
+
+  // Cine emite dosarul: logo + denumire legală, citite o dată și folosite de ambele pagini
+  // generate (fișa aprobărilor și formularul PAR), ca dosarul să nu poarte două antete diferite.
+  const org = await loadOrgIdentity(tenantId);
 
   // Fetch attachments sorted by our deterministic order
   const attachments = await db
@@ -419,7 +424,11 @@ export async function buildDosar(
         // cel mai mult ca hârtia să poată fi verificată ani mai târziu.
         const token = await ensureVerifyToken(parId, tenantId);
         const formBytes = await renderDosarPagesPdf(
-          buildParFormDefinition(formData, token ? { token, requestOrigin: opts?.requestOrigin } : null)
+          buildParFormDefinition(
+            formData,
+            token ? { token, requestOrigin: opts?.requestOrigin } : null,
+            { logoDataUrl: org.logoDataUrl, legalName: org.legalName }
+          )
         );
         plan.push({
           separator: { title: "Formularul PAR" },
@@ -443,7 +452,12 @@ export async function buildDosar(
   const separators = plan.filter((e): e is PlanEntry & { separator: DosarSeparator } => !!e.separator)
     .map((e) => e.separator);
   const generatedBytes = await renderDosarPagesPdf(
-    buildDosarPagesDefinition({ data: sheetData, generatedAt: new Date() }, separators, par.requestNo),
+    buildDosarPagesDefinition(
+      { data: sheetData, generatedAt: new Date() },
+      separators,
+      par.requestNo,
+      { logoDataUrl: org.logoDataUrl, legalName: org.legalName },
+    ),
   );
   const generatedDoc = await PDFDocument.load(generatedBytes);
   const sheetPageCount = generatedDoc.getPageCount() - separators.length;

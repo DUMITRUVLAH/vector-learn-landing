@@ -57,6 +57,7 @@ import { verifyParBodyHash } from "../lib/par/integrity";
 import { renderDosarPagesPdf } from "../lib/par/dosarPdf";
 import { buildDosar } from "../lib/par/buildDosar";
 import { buildParFormDefinition, parFormFileName } from "../lib/par/parFormPdf";
+import { loadOrgIdentity } from "../lib/par/orgLogo";
 import { ensureVerifyToken } from "../lib/par/verifyToken";
 import { formatToken, newVerifyToken, stateFingerprint, verifyUrl } from "../lib/par/verifyCodes";
 import { parVerifyTokens } from "../db/schema/parVerifyTokens";
@@ -2065,8 +2066,14 @@ parRoutes.get("/:id/form.pdf", async (c) => {
   // scanând codul — o certitudine, spre deosebire de o variabilă de mediu pe care n-o poate citi
   // nimeni (vezi `verifyUrl`).
   const origin = new URL(c.req.url).origin;
+  // Antetul organizației (logo + denumire legală) vine din setări; lipsa lui nu schimbă formularul.
+  const org = await loadOrgIdentity(tenantId);
   const bytes = await renderDosarPagesPdf(
-    buildParFormDefinition(data, token ? { token, requestOrigin: origin } : null)
+    buildParFormDefinition(
+      data,
+      token ? { token, requestOrigin: origin } : null,
+      { logoDataUrl: org.logoDataUrl, legalName: org.legalName }
+    )
   );
   c.header("Content-Type", "application/pdf");
   // `?inline=1` = formularul se CITEȘTE în aplicație (vizualizatorul îl pune într-un `<iframe>`),

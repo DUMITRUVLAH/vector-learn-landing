@@ -41,6 +41,7 @@ import {
   getParReportCurrencyBreakdown,
   getParReportByEvent,
   getParReportBreakdown,
+  getParSettings,
   listPayers,
   listProjects,
   listDepartments,
@@ -402,6 +403,11 @@ export function ParReports() {
   // să spună A CUI e, altfel două organizații nu-și mai deosebesc fișierele.
   const session = useBusinessSession();
   const orgName = session.data?.tenant?.name ?? "Organizație";
+  // Logoul din setările PAR ajunge în antetul PDF-ului exportat, ca pe actele și pe dosarele
+  // aceleiași organizații. `GET /api/par/settings` e citibil de orice utilizator al workspace-ului,
+  // deci și un om de la finanțe care exportă raportul primește antetul complet; dacă citirea pică,
+  // raportul iese fără logo, nu deloc.
+  const [orgLogoUrl, setOrgLogoUrl] = useKeepAliveState<string | null>("par.reports.orgLogo", null);
   const [cfg, setCfgState] = useKeepAliveState<ReportConfig>("par.reports.cfg", loadReportConfig);
   const setCfg = (patch: Partial<ReportConfig>) =>
     setCfgState((prev) => {
@@ -498,6 +504,7 @@ export function ParReports() {
     loadCharts();
     loadAging();
     // Listele pentru filtre: o singură dată pe sesiune (sunt mici și stabile).
+    getParSettings().then((s) => setOrgLogoUrl(s.orgLogoUrl ?? null)).catch(() => {});
     listPayers().then((r) => setPayerOpts(r.items.map((x) => ({ id: x.id, name: x.name })))).catch(() => {});
     listProjects().then((r) => setProjectOpts(r.items.map((x) => ({ id: x.id, name: x.name })))).catch(() => {});
     listDepartments().then((r) => setDeptOpts(r.items.map((x) => ({ id: x.id, name: x.name })))).catch(() => {});
@@ -564,6 +571,7 @@ export function ParReports() {
     try {
       await downloadReportPdf({
         orgName,
+        orgLogoUrl,
         periodLabel,
         filterLabels,
         basisLabel,

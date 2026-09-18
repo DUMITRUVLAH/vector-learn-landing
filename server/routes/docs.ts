@@ -1998,7 +1998,9 @@ docsRoutes.get("/documents/:id/word", async (c) => {
         lineTotalCents: l.lineTotalCents,
       })),
     },
-    { name: null, logoUrl: null }
+    // Fișierul pentru Word poartă ACELAȘI antet ca PDF-ul (logo + denumire). Până acum plecau
+    // goale amândouă câmpurile, deci actul descărcat pentru Word nu spunea a cui organizație e.
+    await loadOrg(user.tenantId)
   );
   const fileName = pdfFileName(
     { docNumber: doc.docNumber, title: doc.title, kind: doc.kind, docDate: doc.docDate, bodyHtml: "", bodyHash: null, status: doc.status },

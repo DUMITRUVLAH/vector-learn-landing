@@ -115,9 +115,34 @@ function approvalTable(d: ApprovalSheetData): PdfNode {
   };
 }
 
+/**
+ * Antetul organizației pe prima pagină a dosarului: logo + denumire legală, ca pe orice hârtie cu
+ * antet. Dosarul pleacă la audit ani mai târziu — trebuie să spună de la cine e, nu doar ce conține.
+ * Lipsa logoului sau a denumirii lasă fișa exact cum era.
+ */
+function orgHeadNode(org?: DosarOrg | null): PdfNode[] {
+  if (!org?.logoDataUrl && !org?.legalName) return [];
+  return [{
+    columns: [
+      ...(org.logoDataUrl
+        ? [{ width: "auto", image: org.logoDataUrl, fit: [120, 36], margin: [0, 0, 10, 0] }]
+        : []),
+      { width: "*", text: org.legalName ?? "", fontSize: 10, bold: true, color: MUTED, margin: [0, 11, 0, 0] },
+    ],
+    margin: [0, 0, 0, 12],
+  }];
+}
+
+/** Cine emite dosarul — subsetul din `OrgIdentity` de care are nevoie hârtia. */
+export interface DosarOrg {
+  logoDataUrl?: string | null;
+  legalName?: string | null;
+}
+
 /** Fișa aprobărilor, ca listă de noduri pdfmake (fără antetul de document). */
-export function approvalSheetContent(d: ApprovalSheetData, generatedAt: Date): PdfNode[] {
+export function approvalSheetContent(d: ApprovalSheetData, generatedAt: Date, org?: DosarOrg | null): PdfNode[] {
   const nodes: PdfNode[] = [
+    ...orgHeadNode(org),
     { text: `FIȘA APROBĂRILOR — ${d.requestNo ?? "fără număr"}`, bold: true, fontSize: 15, color: INK },
     {
       text: `Generată la ${fmtDateTime(generatedAt)} din sistemul PAR (statusul din momentul descărcării)`,
@@ -197,8 +222,9 @@ export function buildDosarPagesDefinition(
   sheet: { data: ApprovalSheetData; generatedAt: Date },
   separators: DosarSeparator[],
   requestNo: string | null,
+  org?: DosarOrg | null,
 ): PdfNode {
-  const content: PdfNode[] = approvalSheetContent(sheet.data, sheet.generatedAt);
+  const content: PdfNode[] = approvalSheetContent(sheet.data, sheet.generatedAt, org);
 
   for (const sep of separators) {
     content.push({

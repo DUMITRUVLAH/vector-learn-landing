@@ -45,17 +45,35 @@ function headers(key: string): Record<string, string> {
 
 const bucketsEnsured = new Set<string>();
 
-/** Creează bucket-ul privat dacă lipsește (idempotent; „already exists" e succes). */
+/**
+ * Bucket-urile care se creează PUBLICE. Totul aici e privat by default — un atașament de dosar
+ * sau o dovadă de plată nu are ce căuta la un URL ghicibil. Excepția e logoul organizației: el
+ * ajunge tipărit pe acte care pleacă la contraparte și trebuie să se încarce și în Word, care
+ * descarcă imaginea fără sesiunea noastră. Un logo e, prin definiție, public.
+ */
+const PUBLIC_BUCKETS = new Set<string>(["org-branding"]);
+
+/** Creează bucket-ul dacă lipsește (idempotent; „already exists" e succes). */
 async function ensureBucket(bucket: string, c: StorageCreds): Promise<void> {
   if (bucketsEnsured.has(bucket)) return;
   const r = await fetch(`${c.url}/storage/v1/bucket`, {
     method: "POST",
     headers: { ...headers(c.key), "content-type": "application/json" },
-    body: JSON.stringify({ id: bucket, name: bucket, public: false }),
+    body: JSON.stringify({ id: bucket, name: bucket, public: PUBLIC_BUCKETS.has(bucket) }),
   });
   // 200 = creat; 400/409 = există deja → ambele sunt în regulă.
   if (r.ok || r.status === 400 || r.status === 409) bucketsEnsured.add(bucket);
   else throw new Error(`bucket_ensure_${r.status}`);
+}
+
+/**
+ * URL-ul public al unui obiect dintr-un bucket public. `null` dacă storage-ul nu e configurat —
+ * apelantul decide ce face, nu primește un URL care duce nicăieri.
+ */
+export function publicObjectUrl(bucket: string, path: string): string | null {
+  const c = creds();
+  if (!c) return null;
+  return `${c.url}/storage/v1/object/public/${bucket}/${path}`;
 }
 
 /** Numele de fișier, redus la forma pe care `isSafeTenantObjectPath` o acceptă. */

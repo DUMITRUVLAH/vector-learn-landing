@@ -34,6 +34,11 @@ export interface PdfDocumentMeta {
   docDate: Date;
   bodyHash: string | null;
   orgName: string | null;
+  /**
+   * Logoul organizației ca data-URL (`lib/par/orgLogo.ts`). pdfmake nu descarcă imagini după URL —
+   * vrea octeții. `null` = antetul rămâne exact cum era, doar cu denumirea.
+   */
+  orgLogo?: string | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,11 +160,26 @@ function tableToNode(rows: TableCell[][], headerRows: number): PdfNode {
   };
 }
 
+/** Înălțimea logoului din antet, în puncte: cât două rânduri de 8pt, ca banda să nu se umfle. */
+const HEADER_LOGO_PT = 18;
+
 function headerNode(meta: PdfDocumentMeta): PdfNode {
+  // Logoul stă în stânga, lipit de denumire — antetul rămâne o singură bandă subțire, nu un cap
+  // de scrisoare care fură din corpul actului.
+  const identity: PdfNode = meta.orgLogo
+    ? {
+        columns: [
+          { width: "auto", image: meta.orgLogo, fit: [HEADER_LOGO_PT * 3, HEADER_LOGO_PT], margin: [0, -4, 6, 0] },
+          { width: "*", text: meta.orgName ?? "", fontSize: 8, color: "#555555", margin: [0, 1, 0, 0] },
+        ],
+        columnGap: 0,
+      }
+    : { text: meta.orgName ?? "", fontSize: 8, color: "#555555" };
+
   return {
     margin: [PAGE_MARGIN_MM.left * MM, PAGE_MARGIN_MM.top * MM * 0.45, PAGE_MARGIN_MM.right * MM, 0],
     columns: [
-      { text: meta.orgName ?? "", fontSize: 8, color: "#555555" },
+      identity,
       {
         text: meta.bodyHash ? `Amprentă: ${meta.bodyHash.slice(0, 16)}…` : "",
         fontSize: 8,

@@ -13,6 +13,7 @@
  *
  * HTML-ul tipăribil rămâne — previzualizarea și exportul pentru Word îl folosesc.
  */
+import { logoDataUrl } from "../par/orgLogo";
 import { renderDocumentPdfBuffer } from "./pdfDocument";
 import { blankUnresolved } from "./blanks";
 
@@ -68,6 +69,11 @@ const STYLES = `
   /* Blocul de semnături nu are voie să rămână orfan pe ultima pagină. */
   table:last-of-type { page-break-inside: avoid; }
   .doc-meta { font-size: 8.5pt; color: #666; text-align: right; margin-bottom: 8pt; }
+  /* Antetul organizației: aceeași bandă subțire ca în PDF, deasupra titlului. */
+  .doc-head { display: flex; align-items: center; gap: 8pt; border-bottom: .5pt solid #bbb;
+              padding-bottom: 5pt; margin-bottom: 10pt; }
+  .doc-head img { height: 34px; width: auto; }
+  .doc-head span { font-size: 9pt; color: #555; }
 `;
 
 export function escapeHtml(value: string): string {
@@ -127,7 +133,18 @@ export function buildPrintableHtml(doc: PrintableDocument, org: PrintableOrg): s
   return `<!doctype html>
 <html lang="ro"><head><meta charset="utf-8"><title>${escapeHtml(doc.docNumber ?? doc.title)}</title>
 <style>${STYLES}</style></head>
-<body>${seal}${body}</body></html>`;
+<body>${orgHead(org)}${seal}${body}</body></html>`;
+}
+
+/**
+ * Antetul organizației în varianta HTML. Aici logoul intră ca URL, nu ca data-URL: fișierul ăsta
+ * se descarcă și ca .doc, iar Word descarcă imaginile după link — data-URL-urile le ignoră. De
+ * aceea logoul stă într-un bucket PUBLIC (vezi `lib/par/orgLogo.ts`).
+ */
+function orgHead(org: PrintableOrg): string {
+  const logo = org.logoUrl ? `<img src="${escapeHtml(org.logoUrl)}" alt="">` : "";
+  const name = org.name ? `<span>${escapeHtml(org.name)}</span>` : "";
+  return logo || name ? `<div class="doc-head">${logo}${name}</div>` : "";
 }
 
 export interface RenderedDocument {
@@ -147,13 +164,14 @@ function printableBody(doc: PrintableDocument): string {
 }
 
 /** Doar PDF-ul, pentru căile care nu au nevoie și de HTML (ZIP, e-mail, atașament la cerere). */
-export function renderPrintablePdf(doc: PrintableDocument, org: PrintableOrg): Promise<Buffer> {
+export async function renderPrintablePdf(doc: PrintableDocument, org: PrintableOrg): Promise<Buffer> {
   return renderDocumentPdfBuffer(printableBody(doc), {
     docNumber: doc.docNumber,
     title: doc.title,
     docDate: doc.docDate,
     bodyHash: doc.bodyHash,
     orgName: org.name,
+    orgLogo: await logoDataUrl(org.logoUrl),
   });
 }
 

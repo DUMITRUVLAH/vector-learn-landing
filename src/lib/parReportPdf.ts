@@ -39,6 +39,8 @@ export interface ReportPdfSection {
 
 export interface ReportPdfInput {
   orgName: string;
+  /** Logoul organizației, din setările PAR. Lipsa lui lasă antetul exact cum era. */
+  orgLogoUrl?: string | null;
   /** Perioada, în cuvinte („1 ian. 2026 – 31 mar. 2026" sau „toate perioadele"). */
   periodLabel: string;
   /** Filtrele active, deja traduse în text („Proiect: LED", „Status: Plătită"). */
@@ -112,9 +114,12 @@ export function buildReportHtml(input: ReportPdfInput): string {
 
   return `<div style="width:794px;padding:28px 32px;background:#fff;color:${INK};font-family:Inter,Arial,sans-serif">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid ${INK};padding-bottom:8px">
-      <div>
-        <div style="font-size:18px;font-weight:700">Raport PAR — cereri de plată</div>
-        <div style="font-size:12px;margin-top:2px">${esc(input.orgName)}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        ${input.orgLogoUrl ? `<img src="${esc(input.orgLogoUrl)}" alt="" style="height:36px;width:auto;object-fit:contain">` : ""}
+        <div>
+          <div style="font-size:18px;font-weight:700">Raport PAR — cereri de plată</div>
+          <div style="font-size:12px;margin-top:2px">${esc(input.orgName)}</div>
+        </div>
       </div>
       <div style="text-align:right;font-size:10px;color:${MUTED}">
         <div>Generat: ${esc(when)}</div>

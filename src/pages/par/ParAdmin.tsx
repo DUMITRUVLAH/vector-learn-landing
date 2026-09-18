@@ -59,6 +59,7 @@ import {
 import {
   getParSettings,
   updateParSettings,
+  uploadParLogo,
   listParDoaMatrix,
   createParDoaRow,
   deleteParDoaRow,
@@ -680,6 +681,8 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoBroken, setLogoBroken] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
   // VM5-11: starea butonului „trimite digestul acum". Hook-urile stau AICI, nu lângă locul unde se
   // folosesc: mai jos e un `if (loading) return`, iar un useState după el schimbă ordinea hook-urilor.
   const [digestBusy, setDigestBusy] = useState(false);
@@ -691,6 +694,27 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
+
+  /**
+   * Urcarea salvează singură URL-ul în setări (serverul face upsert), deci logoul e pus chiar dacă
+   * omul închide pagina fără să apese „Salvează". Câmpul din formular se sincronizează ca să nu
+   * arate altceva decât ce e în baza de date.
+   */
+  const handleLogoUpload = async (file: File) => {
+    setLogoUploading(true);
+    setError(null);
+    try {
+      const { logoUrl } = await uploadParLogo(file);
+      setSettings((s) => ({ ...s, orgLogoUrl: logoUrl }));
+      setLogoBroken(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError("Logoul nu a putut fi încărcat. Acceptăm PNG sau JPG, până în 1 MB.");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     // The server's zod gate rejects non-URLs with a raw 400 — say it in Romanian, before the trip.
@@ -789,7 +813,7 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
 
           <div>
             <label htmlFor="par-logo-url" className="text-sm font-medium text-foreground block mb-1">
-              Logo URL (opțional)
+              Logo organizație (opțional)
             </label>
             <div className="flex items-center gap-3">
               <Input
@@ -810,6 +834,46 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
                 />
               )}
             </div>
+            {/* Câmpul de URL cerea ca fișierul să fie deja găzduit undeva public — de aceea rămânea
+                gol. Butonul urcă fișierul din calculator și completează singur linkul. */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                ref={logoFileRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = ""; // aceeași imagine poate fi reîncărcată după o eroare
+                  if (file) void handleLogoUpload(file);
+                }}
+              />
+              <button
+                type="button"
+                disabled={logoUploading}
+                onClick={() => logoFileRef.current?.click()}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+              >
+                {logoUploading
+                  ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  : <Upload className="h-4 w-4" aria-hidden />}
+                {logoUploading ? "Se încarcă…" : "Încarcă logo"}
+              </button>
+              {settings.orgLogoUrl && (
+                <button
+                  type="button"
+                  onClick={() => { setSettings((s) => ({ ...s, orgLogoUrl: null })); setLogoBroken(false); }}
+                  className="inline-flex min-h-[44px] items-center rounded-lg px-2 py-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Scoate logoul
+                </button>
+              )}
+              <span className="text-xs text-muted-foreground">PNG sau JPG, max 1 MB</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Apare în antetul actelor generate, pe formularul PAR tipărit, pe prima pagină a
+              dosarului și pe rapoartele exportate în PDF.
+            </p>
             {logoBroken && (
               <p className="mt-1 text-xs text-warning">Imaginea nu s-a putut încărca de la acest link.</p>
             )}
