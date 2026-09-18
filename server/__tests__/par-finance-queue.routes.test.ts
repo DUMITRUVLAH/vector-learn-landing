@@ -17,6 +17,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq } from "drizzle-orm";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
@@ -421,5 +422,62 @@ describe("Pachetul de dosare", () => {
     );
     expect((await askZip(ids)).status).toBe(400);
     expect((await askZip([])).status).toBe(400);
+  });
+});
+
+// ─── Referința actului pe dosarele deja existente ─────────────────────────────
+
+describe("Completarea referinței pe actele analizate înainte", () => {
+  const ask = () =>
+    app.request("/api/par/document-refs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [parId] }),
+    });
+
+  it("[blocant] citește seria/nr din textul actului și NU atinge verdictul de reconciliere", async () => {
+    const text = "CONT DE PLATĂ Nr. 251 din 09.09.2026\nFurnizor: S.R.L. MIXBOOK, IDNO 1015600011223";
+    const [att] = await testDb
+      .insert(parAttachments)
+      .values({
+        tenantId,
+        parId,
+        kind: "quotation",
+        fileName: "cont-de-plata.txt",
+        mimeType: "text/plain",
+        fileUrl: `data:text/plain;base64,${Buffer.from(text, "utf8").toString("base64")}`,
+        // Analiză de dinaintea funcției: are verdict, dar n-a fost întrebată de referință.
+        analysis: JSON.stringify({ version: 3, status: "match", warnings: 0, checks: [] }),
+      })
+      .returning();
+
+    try {
+      const res = await ask();
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ filled: 1 });
+
+      const [after] = await testDb.select().from(parAttachments).where(eq(parAttachments.id, att.id));
+      const analysis = JSON.parse(after.analysis!) as { status: string; warnings: number; document: { number: string; date: string } };
+      expect(analysis.document.number).toBe("251");
+      expect(analysis.document.date).toBe("2026-09-09");
+      // Reconcilierea rămâne exact cum era — ruta scrie UN câmp, nu re-judecă documentul.
+      expect(analysis.status).toBe("match");
+      expect(analysis.warnings).toBe(0);
+
+      // A doua chemare nu mai are ce relua (nici măcar pe actele fără referință găsită).
+      expect(await (await ask()).json()).toMatchObject({ filled: 0, remaining: 0 });
+    } finally {
+      await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
+    }
+  }, 60_000);
+
+  it("[blocant] nu completează nimic pentru o cerere pe care omul n-o poate vedea", async () => {
+    const res = await app.request("/api/par/document-refs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: ["00000000-0000-4000-8000-000000000000"] }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ filled: 0 });
   });
 });

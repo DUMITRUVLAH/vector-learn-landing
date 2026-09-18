@@ -11,7 +11,7 @@
  * CORE: backlog/par/PAR-CORE.md §0.16, §3, §4, §6
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Loader2,
   BanknoteIcon,
@@ -63,6 +63,7 @@ import {
   formatCurrency,
   downloadDosar,
   downloadDosarZip,
+  fillDocumentRefs,
   type ParFinanceQueueItem,
   type ParFinanceReturn,
   type ParFinanceArchive,
@@ -1327,6 +1328,22 @@ export default function ParFinanceQueue() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Cererile aflate DEJA în coadă au actele analizate înainte să existe referința din „Destinația
+  // plății" — adică exact cele care se plătesc acum ar rămâne fără ea. O completăm o dată, în
+  // fundal (citire de text, fără AI), și reîncărcăm doar dacă chiar s-a găsit ceva.
+  const refsAsked = useRef(false);
+  useEffect(() => {
+    if (refsAsked.current || loading || error || items.length === 0) return;
+    refsAsked.current = true;
+    void fillDocumentRefs(items.map((i) => i.id).slice(0, 60))
+      .then((r) => {
+        if (r.filled > 0) void load();
+      })
+      .catch(() => {
+        /* o completare care nu reușește nu are ce anunța — destinația rămâne descrierea */
+      });
+  }, [items, loading, error, load]);
 
   /** Descărcarea dosarului, cu fereastra de progres pornită ÎNAINTE de cerere. */
   const startDosar = useCallback(async (par: ParFinanceQueueItem) => {

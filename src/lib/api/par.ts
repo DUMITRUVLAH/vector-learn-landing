@@ -972,6 +972,15 @@ export async function downloadDosar(parId: string, requestNo?: string | null): P
   );
 }
 
+/**
+ * Completează referința actului (seria/nr + data) pe cererile deja existente, ale căror documente
+ * au fost analizate înainte ca funcția să existe. Doar citire de text + potrivire, fără AI, deci
+ * ecranul o poate chema în fundal. `filled` = câte acte au primit acum o referință.
+ */
+export async function fillDocumentRefs(ids: string[]): Promise<{ filled: number; remaining: number }> {
+  return api("/api/par/document-refs", { method: "POST", body: JSON.stringify({ ids }) });
+}
+
 /** Ce s-a întâmplat cu selecția: câte dosare au intrat în pachet și câte au rămas pe dinafară. */
 export interface DosarZipResult {
   included: number;

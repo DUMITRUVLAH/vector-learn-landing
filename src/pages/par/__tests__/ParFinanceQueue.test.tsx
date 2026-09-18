@@ -879,6 +879,32 @@ describe("ParFinanceQueue — mai multe dosare deodată", () => {
     expect(await screen.findByText(/1 nu au putut fi incluse/i)).toBeInTheDocument();
   });
 
+  it("[blocant] completează referințele lipsă o singură dată, apoi reîncarcă — fără buclă", async () => {
+    const queue = vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: twoItems(), total: 2 });
+    const fill = vi.spyOn(parApi, "fillDocumentRefs").mockResolvedValue({ filled: 1, remaining: 0 });
+
+    render(<ParFinanceQueue />);
+
+    await waitFor(() => expect(fill).toHaveBeenCalledTimes(1));
+    expect(fill).toHaveBeenCalledWith(["par-a", "par-b"]);
+    // S-a găsit ceva → lista se recitește, ca destinația să apară fără F5.
+    await waitFor(() => expect(queue).toHaveBeenCalledTimes(2));
+    // …dar reîncărcarea NU declanșează o a doua completare.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fill).toHaveBeenCalledTimes(1);
+  });
+
+  it("nimic de completat → lista nu se mai reîncarcă degeaba", async () => {
+    const queue = vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: twoItems(), total: 2 });
+    vi.spyOn(parApi, "fillDocumentRefs").mockResolvedValue({ filled: 0, remaining: 0 });
+
+    render(<ParFinanceQueue />);
+
+    await waitFor(() => expect(screen.getByText("PAR-2026-0001")).toBeInTheDocument());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(queue).toHaveBeenCalledTimes(1);
+  });
+
   it("[blocant] destinația plății poartă referința actului, gata de copiat în bancă", async () => {
     const item = makeFinanceItem({
       endUse: "Servicii predare curs",

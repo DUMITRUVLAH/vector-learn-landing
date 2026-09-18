@@ -7,6 +7,7 @@
  *   POST /api/par/:id/pay                         → record actual payment; 10% rule; PAR → paid or reapproval_required
  *   GET  /api/par/payment-proofs                  → VM4-04: plăți fără ordin de plată în dosar
  *   POST /api/par/dosare.zip                      → dosarele mai multor cereri, într-un singur zip
+ *   POST /api/par/document-refs                   → completează referința actului pe dosarele vechi
  *   POST /api/par/:id/unpay                       → VM4-01: anulează plata înregistrată din greșeală; PAR → in_finance
  *   POST /api/par/:id/finance-return              → VM4-02: finanțele refuză plata; PAR → changes_requested
  *   POST /api/par/:id/finance-archive             → VM4-05: scoate cererea din coada de lucru (arhivă)
@@ -61,6 +62,9 @@ import { buildDosar } from "../lib/par/buildDosar";
 import { canViewPar } from "../lib/par/visibility";
 import { contentDisposition } from "../lib/http/contentDisposition";
 import { DOSARE_ZIP_MAX } from "../../src/lib/par/dosarBatch";
+import { parseDocumentRef } from "../lib/par/documentRef";
+import { loadAttachmentBytes } from "../lib/par/attachmentStore";
+import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
@@ -1251,5 +1255,78 @@ parPaymentsRoutes.post(
     c.header("X-Dosare-Sarite", String(skipped));
     c.header("Access-Control-Expose-Headers", "Content-Disposition, X-Dosare-Incluse, X-Dosare-Sarite");
     return c.body(bytes);
+  },
+);
+
+// ─── POST /api/par/finance/document-refs — referința actului pe dosarele deja existente ──────
+//
+// Referința („factura fiscală seria/nr. … din …") se scrie în analiza atașamentului, la
+// încărcare. Cererile care erau DEJA în coadă când a apărut funcția au acte analizate înainte,
+// deci destinația plății le-ar fi rămas fără act — adică exact pe cererile care se plătesc acum.
+//
+// Ruta reia DOAR citirea textului și potrivirea (unpdf/jszip, local), nu și extragerea AI: nu
+// costă nimic, nu schimbă niciun verdict de reconciliere și scrie un singur câmp în JSON-ul care
+// există deja. Ecranul o cheamă o dată, în fundal, după ce s-a încărcat coada.
+const DOC_REF_BACKFILL_LIMIT = 20;
+const DOC_REF_BACKFILL_BUDGET_MS = 12_000;
+
+parPaymentsRoutes.post(
+  // O singură felie de cale: „/finance/document-refs" ar fi fost prins de garda `/:id/:action/*`
+  // (wildcard-ul acceptă și gol), deci ruta răspundea 404 cu id="finance".
+  "/document-refs",
+  zValidator("json", z.object({ ids: z.array(z.string().uuid()).min(1).max(60) })),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { ids } = c.req.valid("json");
+
+    const pars = await db
+      .select({ id: parRequests.id, requestedByUserId: parRequests.requestedByUserId, status: parRequests.status, projectId: parRequests.projectId, payerId: parRequests.payerId })
+      .from(parRequests)
+      .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, ids)));
+    const visible: string[] = [];
+    for (const par of pars) if (await canViewPar(user, tenantId, par)) visible.push(par.id);
+    if (!visible.length) return c.json({ filled: 0, remaining: 0 });
+
+    const rows = await db
+      .select()
+      .from(parAttachments)
+      .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, visible)));
+
+    // Doar actele care POT purta o referință și care n-au fost încă întrebate. Un `document: null`
+    // scris de o încercare anterioară e un răspuns („n-are"), nu o lipsă — nu se reia.
+    const pending = rows.filter((a) => {
+      const kind = a.kind ?? "other";
+      if (kind === "payment_order" || kind === "par_pdf") return false;
+      if (!a.analysis) return false;
+      try {
+        return !("document" in (JSON.parse(a.analysis) as Record<string, unknown>));
+      } catch {
+        return false;
+      }
+    });
+
+    const deadline = Date.now() + DOC_REF_BACKFILL_BUDGET_MS;
+    let filled = 0;
+    let processed = 0;
+    for (const att of pending) {
+      if (processed >= DOC_REF_BACKFILL_LIMIT || Date.now() >= deadline) break;
+      processed += 1;
+      try {
+        const { bytes, mime } = await loadAttachmentBytes(att);
+        const { rawText } = await readUploadedDoc(bytes, att.fileName, mime);
+        const document = parseDocumentRef(rawText);
+        const analysis = { ...(JSON.parse(att.analysis as string) as Record<string, unknown>), document };
+        await db
+          .update(parAttachments)
+          .set({ analysis: JSON.stringify(analysis) })
+          .where(and(eq(parAttachments.id, att.id), eq(parAttachments.tenantId, tenantId)));
+        if (document) filled += 1;
+      } catch {
+        // Un fișier ilizibil (șters din Storage, format exotic) nu oprește restul.
+      }
+    }
+
+    return c.json({ filled, remaining: Math.max(pending.length - processed, 0) });
   },
 );
