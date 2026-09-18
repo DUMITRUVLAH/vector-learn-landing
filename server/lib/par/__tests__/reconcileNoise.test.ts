@@ -3,7 +3,7 @@
  * (producție, documentele din 06–16.09.2026).
  */
 import { describe, it, expect } from "vitest";
-import { amountIsUnreliable, amountMismatch, comparesAmount, comparesPayee, isVatRatio, ANALYSIS_VERSION } from "../reconcileScope";
+import { amountIsUnreliable, amountMismatch, comparesAmount, comparesPayee, currencyMismatch, isVatRatio, ANALYSIS_VERSION } from "../reconcileScope";
 import { checkPayerOnDocument } from "../payerOnDocument";
 import { cleanPastedIdentityField } from "../fieldSanity";
 
@@ -30,6 +30,28 @@ describe("amountMismatch", () => {
   });
 });
 
+describe("currencyMismatch", () => {
+  it("tace când documentul n-a dat nicio sumă — valuta singură nu e o citire", () => {
+    // Producție, 18.09.2026: act de predare-primire scanat, din care n-au ieșit nici suma, nici
+    // părțile, nici contul. Singurul verdict rămas: „valută: document MDL · PAR USD".
+    expect(currencyMismatch("USD", "MDL", null)).toBeNull();
+    expect(currencyMismatch("USD", "MDL", 0)).toBeNull();
+  });
+
+  it("raportează diferența când documentul chiar poartă o sumă în altă monedă", () => {
+    expect(currencyMismatch("USD", "MDL", 4_750_000)).toBe(true);
+  });
+
+  it("nu face din scriere o diferență", () => {
+    expect(currencyMismatch("MDL", " mdl ", 120_000)).toBe(false);
+  });
+
+  it("tace când una dintre părți n-are valută", () => {
+    expect(currencyMismatch(null, "MDL", 120_000)).toBeNull();
+    expect(currencyMismatch("MDL", null, 120_000)).toBeNull();
+  });
+});
+
 describe("domeniul comparațiilor, pe tipul documentului", () => {
   it("suma se compară doar pe documentele care o declară", () => {
     expect(comparesAmount("invoice")).toBe(true);
@@ -46,8 +68,8 @@ describe("domeniul comparațiilor, pe tipul documentului", () => {
     expect(comparesPayee("invoice")).toBe(true);
   });
 
-  it("versiunea analizei e 3 — verdictele v2 nu mai blochează o semnătură", () => {
-    expect(ANALYSIS_VERSION).toBe(3);
+  it("versiunea analizei e 4 — verdictele v3 nu mai blochează o semnătură", () => {
+    expect(ANALYSIS_VERSION).toBe(4);
   });
 });
 

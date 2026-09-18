@@ -57,9 +57,14 @@ export function parseAttachmentAnalysis(raw: string | null | undefined): Attachm
  *
  * v3 (16.09.2026): comparatorul de nume nu mai confundă diacriticele, ordinea numelui și forma
  * juridică cu o nepotrivire; banca a ieșit dintre avertismente; decontul nu se mai compară pe
- * beneficiar. Analizele v2 rămân vizibile, dar nu mai blochează o semnătură.
+ * beneficiar.
+ *
+ * v4 (18.09.2026): valuta nu mai acuză singură pe un document din care n-a ieșit nicio sumă, iar
+ * banca acuză din nou — dar numai când documentul și cererea numesc două bănci cunoscute și
+ * diferite. Analizele mai vechi rămân vizibile pe fișă, dar nu mai blochează o semnătură; se
+ * reevaluează la reîncărcarea documentului sau prin ruta de reconciliere.
  */
-export const CURRENT_ANALYSIS_VERSION = 3;
+export const CURRENT_ANALYSIS_VERSION = 4;
 
 /**
  * Toate nepotrivirile cererii, în ordinea documentelor.

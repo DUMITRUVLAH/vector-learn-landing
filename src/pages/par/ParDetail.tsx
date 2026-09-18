@@ -131,6 +131,25 @@ function fmtCurrency(cents: number, currency: string): string {
   return `${v} ${currency}`;
 }
 
+/**
+ * O valoare de verificare, scrisă cum o citește omul.
+ *
+ * Sumele vin în bani (minor units), deci „PAR 4750000" pe ecran nu e 4,75 milioane, ci 47.500 —
+ * cifra brută cerea o împărțire mintală exact acolo unde se decide o plată. `formatCheckValue`
+ * e aceeași funcție pe care o folosește banda de nepotriviri, ca cele două locuri să nu se
+ * contrazică. Golul se NUMEȘTE („nedetectat" pe document / „nesetat" în cerere), fiindcă cele
+ * două tăceri nu înseamnă același lucru.
+ */
+function checkSide(value: string | number | null, missingLabel: string, currency: string): string {
+  return value == null || value === "" ? missingLabel : formatCheckValue(value, currency);
+}
+
+/** Valuta pe care o declară DOCUMENTUL — suma citită din el e în ea, nu în valuta cererii. */
+function docCurrency(analysis: { checks: { field: string; found: string | number | null }[] }): string | null {
+  const found = analysis.checks.find((c) => c.field === "valută")?.found;
+  return typeof found === "string" && found.trim() ? found.trim() : null;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface SectionProps {
@@ -1562,7 +1581,11 @@ export function ParDetailPage() {
                       </span>
                       {analysis && (
                         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", analysis.status === "match" ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>
-                          {analysis.status === "match" ? "Concordant" : `${analysis.warnings} diferențe`}
+                          {analysis.status === "match"
+                            ? "Concordant"
+                            : analysis.warnings === 1
+                              ? "1 diferență"
+                              : `${analysis.warnings} diferențe`}
                         </span>
                       )}
                     </div>
@@ -1572,7 +1595,9 @@ export function ParDetailPage() {
                         <ul className="mt-2 grid gap-1 sm:grid-cols-2">
                           {analysis.checks.map((check) => (
                             <li key={check.field} className={cn("rounded px-2 py-1", check.matches === false ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground")}>
-                              <span className="font-medium">{check.field}:</span> document {String(check.found ?? "nedetectat")} · PAR {String(check.expected ?? "nesetat")}
+                              <span className="font-medium">{check.field}:</span>{" "}
+                              document {checkSide(check.found, "nedetectat", docCurrency(analysis) ?? par.currency)} ·{" "}
+                              PAR {checkSide(check.expected, "nesetat", par.currency)}
                             </li>
                           ))}
                         </ul>

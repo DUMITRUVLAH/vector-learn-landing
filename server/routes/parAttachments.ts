@@ -29,7 +29,8 @@ import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
 import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
 import { checkPayerOnDocument } from "../lib/par/payerOnDocument";
-import { ANALYSIS_VERSION, amountIsUnreliable, amountMismatch, comparesAmount, comparesPayee } from "../lib/par/reconcileScope";
+import { ANALYSIS_VERSION, amountIsUnreliable, amountMismatch, comparesAmount, comparesPayee, currencyMismatch } from "../lib/par/reconcileScope";
+import { bankMismatch } from "../lib/par/bankIdentity";
 import { partyAliases, sameParty } from "../lib/par/sameParty";
 import { parseDocumentRef } from "../lib/par/documentRef";
 import { randomUUID } from "node:crypto";
@@ -413,7 +414,9 @@ async function analyzeAttachmentAgainstPar(
         // sumă (extragere eșuată), iar cererea n-are total completat. Și înghite bănuții pierduți
         // la scanare — 340,90 citit „340,00" nu e un motiv să oprești o plată.
         { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: invert(amountMismatch(par.totalEstimatedCents, amountCents)) },
-        { field: "valută", expected: par.currency, found: choice.currency, matches: !choice.currency ? null : choice.currency === par.currency },
+        // Valuta cere aceeași dovadă ca restul: fără o sumă citită din document, „document MDL ·
+        // PAR USD" e un cuvânt de pe pagină ridicat la rang de nepotrivire (vezi `currencyMismatch`).
+        { field: "valută", expected: par.currency, found: choice.currency, matches: invert(currencyMismatch(par.currency, choice.currency, amountCents)) },
       ]
     : [];
 
@@ -442,12 +445,25 @@ async function analyzeAttachmentAgainstPar(
     { field: "beneficiar", expected: par.payeeName, found: payee?.name ?? null, matches: aboutPayee ? sameParty(par.payeeName, payee?.name, { aliases: ourAliases }) : null },
     { field: "IDNO/IDNP", expected: par.payeeIdnp, found: payee?.idno ?? null, matches: !aboutPayee || !payee?.idno || !par.payeeIdnp ? null : norm(payee.idno) === norm(par.payeeIdnp) },
     { field: "IBAN", expected: par.payeeIban, found: payee?.iban ?? null, matches: !aboutPayee || !payee?.iban || !par.payeeIban ? null : norm(payee.iban) === norm(par.payeeIban) },
-    // Banca NU e identificator — IBAN-ul o conține deja, cifră cu cifră. Ca text liber e scrisă
-    // altfel pe fiecare document („BC «MOLDINDCONBANK» S.A" / „MOLDINDCONBANK" / „Moldindconbank"),
-    // iar băncile se și redenumesc („Mobiasbanca-OTP Group" → „OTP Bank"). Pe cele 10 zile măsurate,
-    // toate cele 7 „nepotriviri de bancă" erau aceeași bancă. Rămâne afișată ca informație —
-    // `matches` nu devine niciodată `false`, deci nu mai produce avertisment.
-    { field: "bancă", expected: par.payeeBank, found: payee?.bank ?? null, matches: sameParty(par.payeeBank, payee?.bank) === true ? true : null },
+    // Banca, ca TEXT, nu e identificator: e scrisă altfel pe fiecare document („BC «MOLDINDCONBANK»
+    // S.A" / „MOLDINDCONBANK" / „Moldindconbank") și băncile se redenumesc („Mobiasbanca-OTP Group"
+    // → „OTP Bank") — de aceea v3 a scos-o cu totul dintre avertismente (toate cele 7 „nepotriviri"
+    // măsurate erau aceeași bancă). Dar tăcerea totală a lăsat să treacă și cazul invers, pe un
+    // contract din 18.09.2026: document „BC Moldova-Agroindbank S.A." · cerere „Moldindconbank",
+    // cu IBAN-ul documentului necitit, deci nicio altă verificare nu avea cum s-o prindă.
+    // `bankMismatch` compară IDENTITĂȚI de bancă (cont → BIC → nume), nu șiruri, și acuză doar
+    // când amândouă părțile se reduc la o bancă cunoscută și diferită.
+    {
+      field: "bancă",
+      expected: par.payeeBank,
+      found: payee?.bank ?? null,
+      matches: sameParty(par.payeeBank, payee?.bank) === true
+        ? true
+        : invert(bankMismatch(
+            { name: par.payeeBank, iban: par.payeeIban },
+            { name: payee?.bank, iban: payee?.iban, ibans: payee?.ibans, bic: payee?.bic },
+          )),
+    },
     { field: "plătitor", expected: payerRow?.name ?? null, found: payerCheck.found, matches: payerCheck.matches },
   ];
   const warnings = checks.filter((check) => check.matches === false).length;

@@ -29,8 +29,14 @@
  * scoasă dintre avertismente, praguri pe sumă, plătitorul verificat doar cu identificator tare,
  * decontul tratat ca decont. Măsurat pe cele 10 zile dinainte: 78% → 25% din documente cu
  * avertisment, iar pe clientul real 75% → 19%.
+ *
+ * v4 (18.09.2026): valuta cere dovadă (vezi `currencyMismatch`), iar banca se întoarce între
+ * avertismente — dar numai când amândouă părțile se reduc la o bancă CUNOSCUTĂ și diferită
+ * (`bankIdentity`). Verdictele v3 conțin exact ce repară v4: alarme de valută pe documente din
+ * care n-a ieșit nicio sumă și tăcere pe două bănci diferite. Documentele se reevaluează la
+ * reîncărcare sau prin ruta de reconciliere.
  */
-export const ANALYSIS_VERSION = 3;
+export const ANALYSIS_VERSION = 4;
 
 /**
  * Tipurile de document care DECLARĂ suma de plată. Contractul lipsește intenționat: el arată
@@ -92,6 +98,36 @@ export function amountMismatch(
   // 3400,00, adică exact 8%. Cotele sunt fixe prin lege, deci raportul se verifică, nu se ghicește.
   if (isVatRatio(expectedMinor, foundMinor)) return false;
   return true;
+}
+
+/**
+ * Valuta citită din document nu e cea a cererii?
+ *
+ * `null` = nu se poate ști. Pe lângă cazul evident (documentul n-a dat nicio valută, cererea
+ * n-are una), aici intră și documentul din care N-A IEȘIT NICIO SUMĂ: o valută fără sumă nu e
+ * suma documentului scrisă în altă monedă, e un cuvânt găsit undeva pe pagină.
+ *
+ * Cazul care a cerut regula (producție, 18.09.2026): pe un act de predare-primire scanat,
+ * extractorul n-a scos nici suma, nici părțile, nici contul — toate rândurile verificării
+ * spuneau „document nedetectat". Singurul verdict rămas era „valută: document MDL · PAR USD",
+ * numărat ca nepotrivire și dus până în banda de avertisment de la aprobare. Nu citiserăm
+ * documentul; citiserăm un „MDL" de pe el.
+ *
+ * E aceeași regulă a dovezii ca la beneficiar (`payeeEvidence`) și la plătitor
+ * (`checkPayerOnDocument`): o acuzație cere dovadă, nu un token. Prețul, conștient: pe un
+ * document din care suma n-a putut fi citită, o valută chiar greșită rămâne nespusă — dar ea
+ * vine la pachet cu o sumă necitită, deci dosarul are oricum nevoie de ochi de om.
+ */
+export function currencyMismatch(
+  expected: string | null | undefined,
+  found: string | null | undefined,
+  foundAmountMinor: number | null | undefined
+): boolean | null {
+  const norm = (v: string | null | undefined) => (v ?? "").trim().toUpperCase();
+  if (!norm(expected) || !norm(found)) return null;
+  // Fără sumă citită, valuta nu are ce să califice.
+  if (!foundAmountMinor) return null;
+  return norm(expected) !== norm(found);
 }
 
 /**

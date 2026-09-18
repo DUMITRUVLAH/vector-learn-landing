@@ -344,6 +344,42 @@ describe("ParDetailPage — PAR-118", () => {
       });
     });
 
+    /**
+     * Chipul de lângă fișier era singurul loc care nu trecea prin `formatCheckValue`: scria
+     * „1 diferențe" și „PAR 4750000" — bani în minor units, adică o împărțire la 100 făcută
+     * mintal exact acolo unde cineva decide dacă oprește o plată.
+     */
+    it("chipul numără în română și scrie sumele ca bani, în valuta potrivită", async () => {
+      mockGetPar.mockResolvedValue({
+        ...mockPar,
+        currency: "USD",
+        attachments: [
+          {
+            ...mockPar.attachments[0],
+            fileName: "act-fox.pdf",
+            analysis: JSON.stringify({
+              version: CURRENT_ANALYSIS_VERSION,
+              status: "warning",
+              warnings: 1,
+              checks: [
+                { field: "sumă", expected: 4750000, found: null, matches: null },
+                { field: "valută", expected: "USD", found: "MDL", matches: false },
+              ],
+            }),
+          },
+        ],
+      });
+      mockGetParMe.mockResolvedValue({ roles: ["requestor"], userId: "user-requestor", tenantId: "tenant-1" });
+
+      const { default: ParDetailPage } = await import("../ParDetail");
+      render(<ParDetailPage />);
+
+      await waitFor(() => expect(screen.getByText("1 diferență")).toBeInTheDocument(), { timeout: 5000 });
+      expect(screen.getAllByText(/PAR 47\.500,00 USD/).length).toBeGreaterThan(0);
+      // Ce n-a fost citit din document se numește, nu se arată ca „—".
+      expect(screen.getAllByText(/document nedetectat/).length).toBeGreaterThan(0);
+    });
+
     it("fără nepotriviri, aprobarea rămâne un singur click", async () => {
       mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
 
