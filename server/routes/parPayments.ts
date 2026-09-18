@@ -6,6 +6,7 @@
  *   POST /api/par/:id/finance                     → write section 16; PAR → in_finance
  *   POST /api/par/:id/pay                         → record actual payment; 10% rule; PAR → paid or reapproval_required
  *   GET  /api/par/payment-proofs                  → VM4-04: plăți fără ordin de plată în dosar
+ *   POST /api/par/dosare.zip                      → dosarele mai multor cereri, într-un singur zip
  *   POST /api/par/:id/unpay                       → VM4-01: anulează plata înregistrată din greșeală; PAR → in_finance
  *   POST /api/par/:id/finance-return              → VM4-02: finanțele refuză plata; PAR → changes_requested
  *   POST /api/par/:id/finance-archive             → VM4-05: scoate cererea din coada de lucru (arhivă)
@@ -55,6 +56,11 @@ import {
   isFinanceReturnedStatus,
 } from "../lib/par/financeQueue";
 import { verifyParBodyHash } from "../lib/par/integrity";
+import { paymentDestination, pickDocumentRef } from "../lib/par/documentRef";
+import { buildDosar } from "../lib/par/buildDosar";
+import { canViewPar } from "../lib/par/visibility";
+import { contentDisposition } from "../lib/http/contentDisposition";
+import { DOSARE_ZIP_MAX } from "../../src/lib/par/dosarBatch";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
@@ -365,7 +371,14 @@ parPaymentsRoutes.get("/finance", async (c) => {
   // VM3-01: attachment METADATA only (id/fileName/kind) — the file bodies are data-URLs and would
   // bloat the list response; the UI fetches content on demand via GET /api/par/:id/attachments.
   const attachmentRows = parIds.length
-    ? await db.select({ id: parAttachments.id, parId: parAttachments.parId, fileName: parAttachments.fileName, kind: parAttachments.kind })
+    ? await db.select({
+        id: parAttachments.id,
+        parId: parAttachments.parId,
+        fileName: parAttachments.fileName,
+        kind: parAttachments.kind,
+        // Doar pentru referința actului (vezi mai jos) — `analysis` NU pleacă spre client.
+        analysis: parAttachments.analysis,
+      })
         .from(parAttachments)
         .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, parIds)))
     : [];
@@ -373,6 +386,12 @@ parPaymentsRoutes.get("/finance", async (c) => {
     attachmentRows
       .filter((a) => a.parId === parId)
       .map(({ id, fileName, kind }) => ({ id, fileName, kind }));
+
+  // Owner, 18.09.2026: „la destinația plății, prin bară, automat să se înscrie și seria/nr la
+  // factura fiscală și data, sau nr contului și data." Referința e citită la încărcarea actului
+  // (`analysis.document`); aici se alege documentul care contează și se lipește de descriere.
+  const destinationFor = (parId: string, endUse: string | null) =>
+    paymentDestination(endUse, pickDocumentRef(attachmentRows.filter((a) => a.parId === parId)));
 
   const items = queue.map((p) => ({
     ...p,
@@ -384,6 +403,7 @@ parPaymentsRoutes.get("/finance", async (c) => {
     approverDecisions: approverDecisionsFor(p.id),
     budgetCodeLabel: budgetLabel(p.budgetCodeId),
     attachmentsMeta: attachmentsFor(p.id),
+    paymentDestination: destinationFor(p.id, p.endUse),
     financeReturn: (() => {
       const r = returnByPar.get(p.id);
       if (!r) return null;
@@ -1148,3 +1168,88 @@ parPaymentsRoutes.get("/:id/match", async (c) => {
   const match = await evaluateMatch(parId, tenantId);
   return c.json(match);
 });
+
+// ─── POST /api/par/dosare.zip — mai multe dosare, într-un singur fișier ───────
+//
+// Owner, 18.09.2026: „să putem selecta mai multe PAR-uri o dată, să salvăm."
+// Până acum salvarea era un dosar pe rând: bifezi, aștepți, salvezi, o iei de la capăt — de 30 de
+// ori la închiderea lunii. Aici se cer N cereri și se primește UN zip cu dosarele lor, fiecare cu
+// numele pe care l-ar fi avut descărcat singur (`dosarFileName`).
+//
+// Aceleași reguli de acces ca la descărcarea unui singur dosar: `canViewPar`, cerere cu cerere. O
+// cerere pe care omul n-o poate vedea nu intră în pachet și nu strică restul.
+
+/** Ne oprim înainte de limita de 60s a platformei și livrăm ce s-a construit până atunci. */
+const DOSARE_ZIP_BUDGET_MS = 45_000;
+
+parPaymentsRoutes.post(
+  "/dosare.zip",
+  zValidator("json", z.object({ ids: z.array(z.string().uuid()).min(1).max(DOSARE_ZIP_MAX) })),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { ids } = c.req.valid("json");
+
+    const rows = await db
+      .select()
+      .from(parRequests)
+      .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, ids)));
+    // Ordinea din ecran, nu cea din baza de date.
+    const ordered = ids.map((id) => rows.find((r) => r.id === id)).filter((r): r is typeof rows[number] => !!r);
+
+    const { default: JSZip } = await import("jszip");
+    const zip = new JSZip();
+    const used = new Set<string>();
+    const deadline = Date.now() + DOSARE_ZIP_BUDGET_MS;
+    let included = 0;
+    let skipped = ids.length - ordered.length;
+
+    for (const par of ordered) {
+      // Bugetul de timp: mai bine un pachet cu 12 dosare și un mesaj clar decât o eroare de
+      // gateway după 60 de secunde, cu zero fișiere.
+      if (Date.now() >= deadline) {
+        skipped += 1;
+        continue;
+      }
+      if (!(await canViewPar(user, tenantId, par))) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        const built = await buildDosar(par.id, tenantId, { requestOrigin: new URL(c.req.url).origin });
+        if (!built) {
+          skipped += 1;
+          continue;
+        }
+        // Două cereri pot ajunge la același nume (aceeași plată, același beneficiar) — un zip cu
+        // două intrări identice pierde una la dezarhivare.
+        let name = built.fileName;
+        for (let i = 2; used.has(name); i++) name = built.fileName.replace(/\.pdf$/i, ` (${i}).pdf`);
+        used.add(name);
+        zip.file(name, built.bytes);
+        included += 1;
+      } catch {
+        // Un dosar care nu se poate construi (act corupt) nu are voie să piardă tot pachetul.
+        skipped += 1;
+      }
+    }
+
+    if (included === 0) {
+      return c.json({ error: "empty", detail: "Niciun dosar nu a putut fi construit din selecție." }, 404);
+    }
+
+    // STORE, nu DEFLATE: un PDF e deja comprimat, iar comprimarea lui încă o dată costă secunde
+    // din bugetul funcției pentru câțiva kilobytes.
+    const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "STORE" });
+    const fileName = `Dosare_PAR_${new Date().toISOString().slice(0, 10)}.zip`;
+
+    c.header("Content-Type", "application/zip");
+    c.header("Content-Disposition", contentDisposition("attachment", fileName));
+    // Câte au intrat și câte au rămas — ecranul o spune omului, altfel un pachet incomplet trece
+    // neobservat. Expuse prin CORS ca `fetch` să le poată citi.
+    c.header("X-Dosare-Incluse", String(included));
+    c.header("X-Dosare-Sarite", String(skipped));
+    c.header("Access-Control-Expose-Headers", "Content-Disposition, X-Dosare-Incluse, X-Dosare-Sarite");
+    return c.body(bytes);
+  },
+);

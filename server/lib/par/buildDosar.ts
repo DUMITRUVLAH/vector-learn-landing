@@ -19,10 +19,12 @@ import {
   parBudgetCodes,
   parEvents,
   parPayers,
+  parPayments,
   parProjects,
   parRequests,
 } from "../../db/schema/par";
 import { users } from "../../db/schema/users";
+import { asciiFileName } from "../http/contentDisposition";
 import type { ApprovalSheetData } from "./approvalSheet";
 import { loadAttachmentBytes } from "./attachmentStore";
 import { buildDosarPagesDefinition, renderDosarPagesPdf, type DosarSeparator } from "./dosarPdf";
@@ -62,10 +64,61 @@ export function kindLabel(kind: string): string {
   return map[kind] ?? kind;
 }
 
-/** Numele fișierului, identic în download și în Drive: `Dosar_PAR_<numar>.pdf`. */
-export function dosarFileName(requestNo: string | null, parId: string): string {
-  const safe = (requestNo ?? `PAR-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
-  return `Dosar_PAR_${safe}.pdf`;
+/** Din ce se compune numele dosarului. Tot ce lipsește se sare, fără să lase locul gol. */
+export interface DosarNameParts {
+  requestNo: string | null;
+  parId: string;
+  /** Agentul economic — beneficiarul plății. */
+  payeeName?: string | null;
+  projectName?: string | null;
+  /** Numărul ordinului de plată (`par_payments.payment_ref`). */
+  paymentRef?: string | null;
+  /** Data plății (`par_payments.payment_date`, altfel `par_requests.paid_at`). */
+  paymentDate?: Date | string | null;
+}
+
+/**
+ * Un bloc din numele fișierului: fără diacritice, fără caractere pe care Windows/Drive le refuză,
+ * cuvintele legate prin „-". Tăiat la `maxLen` ca numele întreg să rămână deschizibil.
+ */
+function nameChunk(value: string | null | undefined, maxLen: number): string | null {
+  if (!value) return null;
+  const chunk = asciiFileName(value, "")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLen)
+    .replace(/-+$/, "");
+  return chunk || null;
+}
+
+/** Data din numele fișierului: ISO, ca dosarele să se ordoneze singure în folder. */
+function nameDate(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
+/**
+ * Numele fișierului, identic în download, în pachetul de dosare și în Drive.
+ *
+ * Owner, 18.09.2026: „putem ca în denumire să avem și den. agentului economic, proiectul, nr de
+ * ordinului de plată și data plății". Un folder cu 40 de `Dosar_PAR_PAR-2026-00xx.pdf` nu se poate
+ * căuta: numărul cererii nu spune nici cui s-a plătit, nici când. Blocurile lipsă (o cerere
+ * neplătită încă n-are ordin de plată) se sar pur și simplu.
+ *
+ *   Dosar_PAR-2026-0045_DAIKIRI-STUDIO-SRL_Digital-Safeguard_OP-47_2026-09-15.pdf
+ */
+export function dosarFileName(parts: DosarNameParts): string {
+  const requestNo = nameChunk(parts.requestNo ?? `PAR-${parts.parId.slice(0, 8)}`, 30);
+  const payee = nameChunk(parts.payeeName, 40);
+  const project = nameChunk(parts.projectName, 30);
+  const ref = nameChunk(parts.paymentRef, 24);
+  // „OP-" doar dacă omul n-a scris-o deja („OP-2026-0047" nu devine „OP-OP-2026-0047").
+  const paymentRef = ref ? (/^op/i.test(ref) ? ref : `OP-${ref}`) : null;
+  const paid = nameDate(parts.paymentDate);
+
+  const blocks = ["Dosar", requestNo, payee, project, paymentRef, paid].filter(Boolean);
+  return `${blocks.join("_")}.pdf`;
 }
 
 export interface BuiltDosar {
@@ -158,6 +211,13 @@ export async function buildDosar(
         .from(parPayers)
         .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.id, par.payerId)))
     : [];
+
+  // Ordinul de plată și data ei intră în NUMELE dosarului (owner, 18.09.2026). O cerere neplătită
+  // n-are rândul ăsta — numele rămâne fără blocurile respective.
+  const [payment] = await db
+    .select({ paymentRef: parPayments.paymentRef, paymentDate: parPayments.paymentDate })
+    .from(parPayments)
+    .where(and(eq(parPayments.tenantId, tenantId), eq(parPayments.parId, parId)));
 
   const sheetData: ApprovalSheetData = {
     payer: sheetPayer ?? null,
@@ -456,5 +516,15 @@ export async function buildDosar(
 
   const pdfBytes = await dosar.save();
 
-  return { bytes: Buffer.from(pdfBytes), fileName: dosarFileName(par.requestNo, parId) };
+  return {
+    bytes: Buffer.from(pdfBytes),
+    fileName: dosarFileName({
+      requestNo: par.requestNo,
+      parId,
+      payeeName: par.payeeName,
+      projectName: sheetProj?.name ?? null,
+      paymentRef: payment?.paymentRef ?? null,
+      paymentDate: payment?.paymentDate ?? par.paidAt,
+    }),
+  };
 }

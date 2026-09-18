@@ -31,6 +31,7 @@ import { choosePayee } from "../lib/par/choosePayee";
 import { checkPayerOnDocument } from "../lib/par/payerOnDocument";
 import { ANALYSIS_VERSION, amountIsUnreliable, amountMismatch, comparesAmount, comparesPayee } from "../lib/par/reconcileScope";
 import { partyAliases, sameParty } from "../lib/par/sameParty";
+import { parseDocumentRef } from "../lib/par/documentRef";
 import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
@@ -457,6 +458,10 @@ async function analyzeAttachmentAgainstPar(
     status: warnings ? "warning" : "match",
     warnings,
     checks,
+    // Seria/numărul și data actului, citite din ACELAȘI text pe care l-a văzut extractorul.
+    // Nu e o verificare, ci o rechiziță: coada de finanțe o scrie în „Destinația plății", ca
+    // ordinul de plată să trimită la factura pe baza căreia se plătește (owner, 18.09.2026).
+    document: parseDocumentRef(rawText),
     analyzedAt: new Date().toISOString(),
   };
   await db.transaction(async (tx) => {

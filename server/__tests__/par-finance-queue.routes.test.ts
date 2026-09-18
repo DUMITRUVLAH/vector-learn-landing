@@ -58,6 +58,7 @@ vi.mock("../middleware/requireAuth", () => ({
 }));
 
 import { Hono } from "hono";
+import { DOSARE_ZIP_MAX } from "../../src/lib/par/dosarBatch";
 
 // Routes are imported DYNAMICALLY in beforeAll (after testDb exists): parPayments →
 // services/par/notify constructs MessagingService(db) at module scope, so a static
@@ -211,8 +212,22 @@ beforeAll(async () => {
   // Attachment kinds whose separator labels contain ă (Factură / Ordin de plată) —
   // the diacritics regression trigger.
   await testDb.insert(parAttachments).values([
-    { tenantId, parId, fileUrl: tinyPdfDataUrl(), fileName: "factura-42.pdf", kind: "invoice" },
-    { tenantId, parId, fileUrl: tinyPdfDataUrl(), fileName: "ordin-42.pdf", kind: "payment_order" },
+    {
+      tenantId, parId, fileUrl: tinyPdfDataUrl(), fileName: "factura-42.pdf", kind: "invoice",
+      // Referința citită la încărcare (`analysis.document`) — din ea se compune destinația plății.
+      analysis: JSON.stringify({
+        status: "match",
+        document: { kind: "factura_fiscala", label: "factura fiscală", number: "EBC000579678", date: "2025-11-04" },
+      }),
+    },
+    {
+      tenantId, parId, fileUrl: tinyPdfDataUrl(), fileName: "ordin-42.pdf", kind: "payment_order",
+      // Ordinul nostru de plată poartă și el un număr; destinația NU are voie să-l folosească.
+      analysis: JSON.stringify({
+        status: "match",
+        document: { kind: "factura_fiscala", label: "factura fiscală", number: "OP999", date: "2026-01-01" },
+      }),
+    },
   ]);
   // 240s: sub paralelism (mai multe suite PGlite concurente) migrarea completă poate depăși 120s.
 }, 240_000);
@@ -231,6 +246,7 @@ interface QueueItem {
   approverDecisions: { name: string; step: number; decidedAt: string | null }[];
   attachmentsMeta: { id: string; fileName: string; kind: string; fileUrl?: string }[];
   approverNames: string[];
+  paymentDestination: string | null;
 }
 
 describe("VM3-01: GET /api/par/finance — coloanele contabilului", () => {
@@ -269,6 +285,20 @@ describe("VM3-01: GET /api/par/finance — coloanele contabilului", () => {
 
     // Câmpul istoric rămâne (nume fără dată)
     expect(item.approverNames).toContain("Ion Aprobatorul");
+  });
+
+  // Owner, 18.09.2026: „la destinația plății, prin bară, automat să se înscrie și seria/nr la
+  // factura fiscală și data". Ce se copiază de aici ajunge literal în ordinul de plată din bancă.
+  it("[blocant] destinația plății poartă seria/nr și data facturii, după bară", async () => {
+    const res = await app.request("/api/par/finance");
+    const data = (await res.json()) as { items: QueueItem[] };
+    const item = data.items[0];
+
+    expect(item.paymentDestination).toBe(
+      `${item.endUse} / factura fiscală seria/nr. EBC000579678 din 04.11.2025`,
+    );
+    // Numărul ordinului NOSTRU de plată nu are ce căuta în destinație.
+    expect(item.paymentDestination).not.toContain("OP999");
   });
 });
 
@@ -338,5 +368,58 @@ describe("VM3-02: GET /api/par/:id/dosar — fișa aprobărilor + regresia diacr
     const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
     // fișa (1) + pagina informativă "nu există atașamente" (1)
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── POST /api/par/dosare.zip — owner: „să putem selecta mai multe PAR-uri o dată" ────────────
+
+describe("Pachetul de dosare", () => {
+  const GHOST = "00000000-0000-4000-8000-000000000000";
+  const askZip = (ids: string[]) =>
+    app.request("/api/par/dosare.zip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+
+  it("[blocant] un zip cu dosarul fiecărei cereri, numit după beneficiar și proiect", async () => {
+    const res = await askZip([parId]);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/zip");
+    expect(res.headers.get("x-dosare-incluse")).toBe("1");
+
+    const { default: JSZip } = await import("jszip");
+    const zip = await JSZip.loadAsync(Buffer.from(await res.arrayBuffer()));
+    const names = Object.keys(zip.files);
+    expect(names).toHaveLength(1);
+    // Numele e cel din `dosarFileName`: cerere, agent economic, proiect.
+    expect(names[0]).toContain("PAR-2026-0042");
+    expect(names[0]).toContain("Consult-Prim-SRL");
+    expect(names[0]).toContain("Digital-Safeguard");
+    expect(names[0].endsWith(".pdf")).toBe(true);
+    // Fișierul din pachet e un PDF adevărat, nu un octet gol.
+    const bytes = await zip.file(names[0])!.async("nodebuffer");
+    expect(bytes.subarray(0, 4).toString()).toBe("%PDF");
+  }, 90_000);
+
+  it("o cerere inaccesibilă nu pierde pachetul — se raportează ca sărită", async () => {
+    const res = await askZip([parId, GHOST]);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-dosare-incluse")).toBe("1");
+    expect(res.headers.get("x-dosare-sarite")).toBe("1");
+  }, 90_000);
+
+  it("[blocant] zero dosare construite → 404 cu explicație, nu un zip gol", async () => {
+    const res = await askZip([GHOST]);
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "empty" });
+  });
+
+  it("[blocant] o selecție peste plafon e refuzată de server, nu doar de ecran", async () => {
+    const ids = Array.from({ length: DOSARE_ZIP_MAX + 1 }, (_, i) =>
+      `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    );
+    expect((await askZip(ids)).status).toBe(400);
+    expect((await askZip([])).status).toBe(400);
   });
 });

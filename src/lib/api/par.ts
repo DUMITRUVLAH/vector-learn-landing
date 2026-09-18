@@ -3,6 +3,7 @@
  * Covers: create/get/patch/submit, line items, attachments, config lookups
  */
 import { api } from "../api";
+import { fileNameFromDisposition, saveBlob } from "@/lib/par/downloadName";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -952,6 +953,9 @@ export async function reconcileAttachment(parId: string, attId: string): Promise
 /**
  * Triggers download of the combined dosar PDF (PAR form + all attachments).
  * The server endpoint returns a binary PDF.
+ *
+ * Numele fișierului vine din `Content-Disposition`: serverul îl compune din beneficiar, proiect,
+ * ordinul de plată și data plății (`dosarFileName`). Varianta locală rămâne doar ca rezervă.
  */
 export async function downloadDosar(parId: string, requestNo?: string | null): Promise<void> {
   const resp = await fetch(`/api/par/${parId}/dosar`, {
@@ -961,16 +965,46 @@ export async function downloadDosar(parId: string, requestNo?: string | null): P
     const body = await resp.text().catch(() => "");
     throw new Error(`Dosar: ${resp.status} ${body}`);
   }
-  const blob = await resp.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
   const fileSafe = (requestNo ?? `PAR-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
-  a.download = `Dosar_PAR_${fileSafe}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  saveBlob(
+    await resp.blob(),
+    fileNameFromDisposition(resp.headers.get("Content-Disposition"), `Dosar_${fileSafe}.pdf`),
+  );
+}
+
+/** Ce s-a întâmplat cu selecția: câte dosare au intrat în pachet și câte au rămas pe dinafară. */
+export interface DosarZipResult {
+  included: number;
+  skipped: number;
+}
+
+/**
+ * Dosarele mai multor cereri, într-un singur zip (owner: „să putem selecta mai multe PAR-uri o
+ * dată, să salvăm"). Serverul construiește fiecare dosar cu același generator ca butonul de pe rând
+ * și se oprește înainte de limita de timp a platformei — de aceea răspunsul spune și câte au rămas.
+ */
+export async function downloadDosarZip(ids: string[]): Promise<DosarZipResult> {
+  const resp = await fetch("/api/par/dosare.zip", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`Dosare: ${resp.status} ${body}`);
+  }
+  saveBlob(
+    await resp.blob(),
+    fileNameFromDisposition(
+      resp.headers.get("Content-Disposition"),
+      `Dosare_PAR_${new Date().toISOString().slice(0, 10)}.zip`,
+    ),
+  );
+  return {
+    included: Number(resp.headers.get("X-Dosare-Incluse") ?? ids.length),
+    skipped: Number(resp.headers.get("X-Dosare-Sarite") ?? 0),
+  };
 }
 
 /**
@@ -983,16 +1017,11 @@ export async function downloadParForm(parId: string, requestNo?: string | null):
     const body = await resp.text().catch(() => "");
     throw new Error(`Formular PAR: ${resp.status} ${body}`);
   }
-  const blob = await resp.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
   const fileSafe = (requestNo ?? `par-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
-  a.download = `PAR_Form_${fileSafe}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  saveBlob(
+    await resp.blob(),
+    fileNameFromDisposition(resp.headers.get("Content-Disposition"), `PAR_Form_${fileSafe}.pdf`),
+  );
 }
 
 // ─── PAR-112/113: Finance queue + section 16 + payment execution ─────────────
@@ -1051,6 +1080,12 @@ export interface ParFinanceQueueItem extends ParRequest {
   approverDecisions?: ParApproverDecision[];
   budgetCodeLabel?: string | null;
   attachmentsMeta?: ParAttachmentMeta[];
+  /**
+   * Destinația plății gata de copiat în bancă: descrierea cererii, bară, referința actului
+   * („… / factura fiscală seria/nr. EBC000579678 din 04.11.2025"). Serverul o compune din
+   * `endUse` + documentul atașat; fără act recunoscut e exact `endUse`.
+   */
+  paymentDestination?: string | null;
   /** Nenul doar pentru cererile pe care finanțele le-au refuzat și le-au trimis la solicitant. */
   financeReturn?: ParFinanceReturn | null;
   /** Nenul doar pentru cererile arhivate (tabul „Arhivate"). */

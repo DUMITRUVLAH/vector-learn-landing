@@ -830,3 +830,76 @@ describe("VM4-05 — arhivarea cererilor din coada de finanțe", () => {
     expect(screen.getByRole("button", { name: /^arhivează$/i })).not.toBeDisabled();
   });
 });
+
+// ─── Selecție multiplă + destinația plății (owner, 18.09.2026) ────────────────
+
+describe("ParFinanceQueue — mai multe dosare deodată", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const twoItems = () => [
+    makeFinanceItem({ id: "par-a", requestNo: "PAR-2026-0001" }),
+    makeFinanceItem({ id: "par-b", requestNo: "PAR-2026-0002" }),
+  ];
+
+  it("[blocant] bifezi două cereri și pleacă UN pachet cu ambele dosare", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: twoItems(), total: 2 });
+    const zip = vi.spyOn(parApi, "downloadDosarZip").mockResolvedValue({ included: 2, skipped: 0 });
+
+    render(<ParFinanceQueue />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: /selectează PAR-2026-0001/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /selectează PAR-2026-0002/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /descarcă dosarele celor 2 cereri/i }));
+
+    await waitFor(() => expect(zip).toHaveBeenCalledWith(["par-a", "par-b"]));
+    expect(await screen.findByText(/2 dosare salvate/i)).toBeInTheDocument();
+  });
+
+  it("bifa din antet ia toate cererile din listă, iar «Renunță» le lasă", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: twoItems(), total: 2 });
+
+    render(<ParFinanceQueue />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: /selectează toate cererile/i }));
+    expect(await screen.findByText("2 cereri selectate")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /renunță la selecție/i }));
+    await waitFor(() => expect(screen.queryByText("2 cereri selectate")).not.toBeInTheDocument());
+  });
+
+  it("spune câte dosare n-au încăput în pachet, ca să nu treacă neobservat", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: twoItems(), total: 2 });
+    vi.spyOn(parApi, "downloadDosarZip").mockResolvedValue({ included: 1, skipped: 1 });
+
+    render(<ParFinanceQueue />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: /selectează toate cererile/i }));
+    fireEvent.click(screen.getByRole("button", { name: /descarcă dosarele/i }));
+
+    expect(await screen.findByText(/1 nu au putut fi incluse/i)).toBeInTheDocument();
+  });
+
+  it("[blocant] destinația plății poartă referința actului, gata de copiat în bancă", async () => {
+    const item = makeFinanceItem({
+      endUse: "Servicii predare curs",
+      paymentDestination: "Servicii predare curs / factura fiscală seria/nr. EBC000579678 din 04.11.2025",
+    });
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [item], total: 1 });
+
+    render(<ParFinanceQueue />);
+
+    expect(
+      await screen.findByText("Servicii predare curs / factura fiscală seria/nr. EBC000579678 din 04.11.2025"),
+    ).toBeInTheDocument();
+  });
+
+  it("o cerere fără act recunoscut arată descrierea, nu un câmp gol", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ endUse: "Group consulting", paymentDestination: null })],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+    expect(await screen.findByText("Group consulting")).toBeInTheDocument();
+  });
+});

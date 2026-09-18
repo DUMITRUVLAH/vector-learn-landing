@@ -27,12 +27,14 @@ import {
   X,
   Archive,
   ArchiveRestore,
+  FolderDown,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Input,
   Select,
   Table,
@@ -60,6 +62,7 @@ import {
   formatMDL,
   formatCurrency,
   downloadDosar,
+  downloadDosarZip,
   type ParFinanceQueueItem,
   type ParFinanceReturn,
   type ParFinanceArchive,
@@ -68,6 +71,7 @@ import {
   type PayPayload,
 } from "@/lib/api/par";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
+import { DOSARE_ZIP_MAX } from "@/lib/par/dosarBatch";
 import { viewParAttachment } from "@/lib/parFiles";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { useRouter } from "@/router/HashRouter";
@@ -242,6 +246,17 @@ function mdlHint(par: { currency: string; totalMdlCents?: number | null }): stri
   return par.currency && par.currency !== "MDL" && par.totalMdlCents != null
     ? `≈ ${formatMDL(par.totalMdlCents)}`
     : null;
+}
+
+/**
+ * Destinația plății, așa cum se copiază în bancă: descrierea cererii plus, după bară, actul pe
+ * baza căruia se plătește („… / factura fiscală seria/nr. EBC000579678 din 04.11.2025").
+ *
+ * Serverul o compune (`paymentDestination`) din documentele atașate. Cererile vechi, ale căror
+ * acte au fost analizate înainte de această funcție, n-au referință — rămâne descrierea.
+ */
+function payDestination(par: { paymentDestination?: string | null; endUse?: string | null }): string {
+  return par.paymentDestination ?? par.endUse ?? "";
 }
 
 /** Ce scrie sub buton la fiecare pas — în cuvintele omului de la finanțe, nu ale sistemului. */
@@ -1126,6 +1141,8 @@ function QueueActions({
 interface QueueCardProps extends Omit<QueueActionsProps, "wrap"> {
   onOpen: (par: ParFinanceQueueItem) => void;
   onDocuments: (par: ParFinanceQueueItem) => void;
+  selected: boolean;
+  onSelect: (par: ParFinanceQueueItem, next: boolean) => void;
 }
 
 function QueueCard({
@@ -1139,18 +1156,27 @@ function QueueCard({
   archivedView,
   onOpen,
   onDocuments,
+  selected,
+  onSelect,
 }: QueueCardProps) {
   return (
     <li className="space-y-3 rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => onOpen(par)}
-          className="font-mono text-sm text-foreground hover:text-primary hover:underline"
-          aria-label={`Deschide cererea ${par.requestNo}`}
-        >
-          {par.requestNo}
-        </button>
+        <span className="flex items-center gap-2">
+          <Checkbox
+            checked={selected}
+            onChange={(next) => onSelect(par, next)}
+            aria-label={`Selectează ${par.requestNo} pentru descărcarea dosarelor`}
+          />
+          <button
+            type="button"
+            onClick={() => onOpen(par)}
+            className="font-mono text-sm text-foreground hover:text-primary hover:underline"
+            aria-label={`Deschide cererea ${par.requestNo}`}
+          >
+            {par.requestNo}
+          </button>
+        </span>
         <span className="font-mono text-base font-semibold text-foreground">
           {parAmount(par.totalEstimatedCents, par.currency)}
         </span>
@@ -1174,7 +1200,13 @@ function QueueCard({
         <p className="font-medium text-foreground">{par.payeeName ?? "Beneficiar nespecificat"}</p>
         {par.payeeIban && <CopyValue display={par.payeeIban} label="Copiază IBAN" mono maxWidthClass="max-w-full" />}
         {par.payeeIdnp && <CopyValue display={par.payeeIdnp} label="Copiază IDNO" mono maxWidthClass="max-w-full" />}
-        {par.endUse && <p className="text-muted-foreground">{par.endUse}</p>}
+        {payDestination(par) && (
+          <CopyValue
+            display={payDestination(par)}
+            label="Copiază destinația plății"
+            maxWidthClass="max-w-full"
+          />
+        )}
         {(par.projectName || par.budgetCodeLabel) && (
           <p className="text-xs text-muted-foreground">
             {[par.projectName, par.budgetCodeLabel].filter(Boolean).join(" · ")}
@@ -1250,6 +1282,11 @@ export default function ParFinanceQueue() {
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
   const [dosarJob, setDosarJob] = useState<DosarJob | null>(null);
+  // Owner, 18.09.2026: „să putem selecta mai multe PAR-uri o dată, să salvăm." Selecția e a
+  // ecranului, nu a serverului: se pierde la reîncărcare și nu supraviețuiește schimbării tabului.
+  const [selected, setSelected] = useState<string[]>([]);
+  const [zipping, setZipping] = useState(false);
+  const [zipNote, setZipNote] = useState<string | null>(null);
   // Tabelul de 13 coloane nu încape pe un telefon; acolo aceleași cereri se citesc ca niște carduri.
   const isPhone = useIsPhone();
   const [refusePar, setRefusePar] = useState<ParFinanceQueueItem | null>(null);
@@ -1274,6 +1311,8 @@ export default function ParFinanceQueue() {
     try {
       const data = await getFinanceQueue({ archived: archivedView });
       setItems(data.items);
+      // Ce nu mai e în listă nu mai poate fi în selecție (o cerere plătită între timp iese din coadă).
+      setSelected((prev) => prev.filter((id) => data.items.some((i) => i.id === id)));
       setCounts({
         active: data.activeCount ?? (archivedView ? 0 : data.items.length),
         archived: data.archivedCount ?? (archivedView ? data.items.length : 0),
@@ -1304,6 +1343,31 @@ export default function ParFinanceQueue() {
     }
   }, []);
 
+  const isSelected = (id: string) => selected.includes(id);
+  const toggleOne = useCallback((par: ParFinanceQueueItem, next: boolean) => {
+    setSelected((prev) => (next ? [...prev, par.id] : prev.filter((id) => id !== par.id)));
+  }, []);
+
+  /** Pachetul de dosare al cererilor bifate — un singur fișier, nu N descărcări. */
+  const startDosarZip = useCallback(async () => {
+    if (!selected.length) return;
+    setZipping(true);
+    setZipNote(null);
+    try {
+      const { included, skipped } = await downloadDosarZip(selected);
+      setZipNote(
+        skipped > 0
+          ? `${included} ${included === 1 ? "dosar salvat" : "dosare salvate"} · ${skipped} nu au putut fi incluse (încearcă-le separat).`
+          : `${included} ${included === 1 ? "dosar salvat" : "dosare salvate"}.`,
+      );
+      setSelected([]);
+    } catch (e: unknown) {
+      setZipNote(e instanceof Error ? e.message : "Pachetul de dosare nu a putut fi generat.");
+    } finally {
+      setZipping(false);
+    }
+  }, [selected]);
+
   const filteredItems = items.filter((par) => {
     const haystack = `${par.requestNo} ${par.payeeName ?? ""} ${par.payeeIdnp ?? ""} ${par.payeeIban ?? ""} ${par.projectName ?? ""} ${par.endUse ?? ""}`.toLocaleLowerCase("ro");
     const created = new Date(par.submittedAt ?? par.createdAt);
@@ -1315,6 +1379,8 @@ export default function ParFinanceQueue() {
       && (!minTotal || par.totalEstimatedCents >= Number(minTotal) * 100)
       && (!maxTotal || par.totalEstimatedCents <= Number(maxTotal) * 100);
   });
+
+  const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((i) => selected.includes(i.id));
 
   return (
     <AppShell
@@ -1351,6 +1417,46 @@ export default function ParFinanceQueue() {
             <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Până la" className="w-auto" />
             <Input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="w-28" />
             <Input type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" className="w-28" />
+          </Card>
+        )}
+
+        {/* Bara selecției: apare doar când s-a bifat ceva. Owner: „să putem selecta mai multe
+            PAR-uri o dată, să salvăm" — un singur zip, cu dosarele bifate. */}
+        {!loading && !error && (selected.length > 0 || zipNote) && (
+          <Card className="flex flex-wrap items-center gap-3 p-3">
+            {selected.length > 0 && (
+              <>
+                <span className="text-sm font-medium text-foreground">
+                  {selected.length} {selected.length === 1 ? "cerere selectată" : "cereri selectate"}
+                </span>
+                <Button
+                  onClick={() => void startDosarZip()}
+                  disabled={zipping || selected.length > DOSARE_ZIP_MAX}
+                  aria-label={`Descarcă dosarele celor ${selected.length} cereri selectate`}
+                >
+                  {zipping ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <FolderDown className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {zipping ? "Se pregătește pachetul…" : `Descarcă dosarele (${selected.length})`}
+                </Button>
+                <Button variant="outline" onClick={() => setSelected([])} disabled={zipping}>
+                  Renunță la selecție
+                </Button>
+                {selected.length > DOSARE_ZIP_MAX && (
+                  <span className="text-sm text-warning">
+                    Maximum {DOSARE_ZIP_MAX} de cereri într-un pachet — deselectează{" "}
+                    {selected.length - DOSARE_ZIP_MAX}.
+                  </span>
+                )}
+              </>
+            )}
+            {zipNote && (
+              <span role="status" className="text-sm text-muted-foreground">
+                {zipNote}
+              </span>
+            )}
           </Card>
         )}
 
@@ -1408,6 +1514,8 @@ export default function ParFinanceQueue() {
                 archivedView={archivedView}
                 onOpen={(p) => navigate(`/business/par/${p.id}`)}
                 onDocuments={setAttPar}
+                selected={isSelected(par.id)}
+                onSelect={toggleOne}
               />
             ))}
           </ul>
@@ -1417,6 +1525,20 @@ export default function ParFinanceQueue() {
           <Table className="min-w-[1280px]" aria-label={archivedView ? "Cereri arhivate" : "Coadă finanțe"}>
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
+                  {/* Bifa de antet lucrează pe lista FILTRATĂ — ce vezi e ce selectezi. */}
+                  <th className="px-3 py-3">
+                    <Checkbox
+                      checked={allFilteredSelected}
+                      onChange={(next) =>
+                        setSelected(next ? filteredItems.map((i) => i.id) : [])
+                      }
+                      aria-label={
+                        allFilteredSelected
+                          ? "Deselectează toate cererile din listă"
+                          : "Selectează toate cererile din listă"
+                      }
+                    />
+                  </th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Acțiuni</th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nr.</th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Status</th>
@@ -1441,6 +1563,13 @@ export default function ParFinanceQueue() {
                       idx % 2 === 0 ? "bg-background" : "bg-muted/10"
                     )}
                   >
+                    <td className="px-3 py-3">
+                      <Checkbox
+                        checked={isSelected(par.id)}
+                        onChange={(next) => toggleOne(par, next)}
+                        aria-label={`Selectează ${par.requestNo} pentru descărcarea dosarelor`}
+                      />
+                    </td>
                     <td className="px-3 py-3">
                       <QueueActions
                         par={par}
@@ -1551,7 +1680,7 @@ export default function ParFinanceQueue() {
                     </td>
                     <td className="px-3 py-3 text-foreground">
                       <CopyValue
-                        display={par.endUse ?? ""}
+                        display={payDestination(par)}
                         label="Copiază destinația plății"
                         maxWidthClass="max-w-[200px]"
                       />

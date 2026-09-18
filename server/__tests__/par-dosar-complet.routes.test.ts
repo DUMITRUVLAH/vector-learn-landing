@@ -18,7 +18,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { tenants, users } from "../db/schema";
-import { parRequests, parAttachments, parApprovals, parMembers, parPayerModules, parPayers } from "../db/schema/par";
+import { parRequests, parAttachments, parApprovals, parMembers, parPayerModules, parPayers, parPayments } from "../db/schema/par";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -381,4 +381,29 @@ describe("Dosarul complet", () => {
     await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
     storageObjects.delete(objectPath);
   }, 60_000);
+});
+
+// ─── Numele fișierului (owner, 18.09.2026) ───────────────────────────────────
+
+describe("Numele dosarului descărcat", () => {
+  it("[blocant] spune cui s-a plătit, cu ce ordin de plată și când — nu doar numărul cererii", async () => {
+    const [payment] = await testDb
+      .insert(parPayments)
+      .values({ tenantId, parId, paymentRef: "1247", paymentDate: new Date("2026-09-10T00:00:00Z") })
+      .returning();
+    try {
+      const res = await app.request(`/api/par/${parId}/dosar`);
+      expect(res.status).toBe(200);
+      const disposition = res.headers.get("content-disposition") ?? "";
+
+      expect(disposition).toContain("PAR-2026-0023");
+      // Agentul economic, pliat pe ASCII: antetul HTTP nu poate purta diacritice (RFC 6266).
+      expect(disposition).toContain("ASOCIATIA-NATIONALA");
+      expect(disposition).toContain("OP-1247");
+      expect(disposition).toContain("2026-09-10");
+      expect(disposition).toContain(".pdf");
+    } finally {
+      await testDb.delete(parPayments).where(eq(parPayments.id, payment.id));
+    }
+  }, 90_000);
 });
