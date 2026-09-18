@@ -106,6 +106,37 @@ describe("ParPaymentProofs — dovezile în bloc", () => {
     expect(file.name).toBe("OP-2026-0047.pdf");
   });
 
+  it("[blocant] mai multe plăți bifate se descarcă într-un singur pachet de dosare", async () => {
+    vi.spyOn(parApi, "getPaymentProofsQueue").mockResolvedValue(
+      queue([makeItem(), makeItem({ id: "par-2", requestNo: "PAR-2026-0021", payeeName: "Alfa Trans SRL" })])
+    );
+    const zipSpy = vi.spyOn(parApi, "downloadDosarZip").mockResolvedValue({ included: 2, skipped: 0 });
+    render(<ParPaymentProofs />);
+    await screen.findByText("PAR-2026-0020");
+
+    fireEvent.click(screen.getByLabelText(/selectează PAR-2026-0020 pentru descărcarea dosarelor/i));
+    fireEvent.click(screen.getByLabelText(/selectează PAR-2026-0021 pentru descărcarea dosarelor/i));
+
+    fireEvent.click(await screen.findByRole("button", { name: /descarcă dosarele celor 2 plăți selectate/i }));
+
+    await waitFor(() => expect(zipSpy).toHaveBeenCalledWith(["par-1", "par-2"]));
+    expect(await screen.findByText("2 dosare salvate.")).toBeInTheDocument();
+    // Selecția se golește după descărcare: bara nu mai are de ce să stea pe ecran.
+    expect(screen.queryByRole("button", { name: /descarcă dosarele/i })).not.toBeInTheDocument();
+  });
+
+  it("bifa din antet ia toate plățile afișate", async () => {
+    vi.spyOn(parApi, "getPaymentProofsQueue").mockResolvedValue(
+      queue([makeItem(), makeItem({ id: "par-2", requestNo: "PAR-2026-0021" })])
+    );
+    render(<ParPaymentProofs />);
+    await screen.findByText("PAR-2026-0020");
+
+    fireEvent.click(screen.getByLabelText(/selectează toate plățile afișate/i));
+
+    expect(await screen.findByText("2 plăți selectate")).toBeInTheDocument();
+  });
+
   it("[blocant] un fișier nepotrivit rămâne de ales manual și NU se atașează singur", async () => {
     vi.spyOn(parApi, "getPaymentProofsQueue").mockResolvedValue(queue([makeItem()]));
     const uploadSpy = vi.spyOn(parApi, "uploadAttachmentDirect").mockResolvedValue({} as never);

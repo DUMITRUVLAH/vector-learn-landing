@@ -33,6 +33,7 @@ import { ANALYSIS_VERSION, amountIsUnreliable, amountMismatch, comparesAmount, c
 import { bankMismatch } from "../lib/par/bankIdentity";
 import { partyAliases, sameParty } from "../lib/par/sameParty";
 import { parseDocumentRef } from "../lib/par/documentRef";
+import { fillPaymentRefFromProof } from "../lib/par/paymentRefFromProof";
 import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
@@ -491,6 +492,17 @@ async function analyzeAttachmentAgainstPar(
       detail: JSON.stringify({ attachmentId: attachment.id, fileName: attachment.fileName, warnings, checks }),
     });
   });
+  // Dovada de plată își poartă numărul scris pe ea. Aici textul e deja citit, deci completarea
+  // rubricii nu costă nimic în plus — vezi `fillPaymentRefFromProof`.
+  if (attachment.kind === "payment_order") {
+    await fillPaymentRefFromProof({
+      tenantId: par.tenantId,
+      parId: par.id,
+      attachmentId: attachment.id,
+      actorUserId,
+      rawText,
+    });
+  }
   return analysis;
 }
 
@@ -772,6 +784,21 @@ parAttachmentsRoutes.post(
         uploadedBy: user.id,
       })
       .returning();
+
+    // Numărul ordinului de plată, citit pe loc din documentul băncii. NU e analiza AI de mai jos:
+    // e un regex peste textul PDF-ului, de ordinul milisecundelor, iar rezultatul trebuie să fie în
+    // bază ÎNAINTE ca ecranul să se reîncarce — altfel omul vede tot „—" la „Nr. ordin" și îl scrie
+    // de mână, exact munca pe care o scutim.
+    if (attachment && body.kind === "payment_order") {
+      const { rawText } = await readUploadedDoc(bytes, body.file_name, body.mime);
+      await fillPaymentRefFromProof({
+        tenantId,
+        parId,
+        attachmentId: attachment.id,
+        actorUserId: user.id,
+        rawText,
+      });
+    }
 
     // Analiza NU mai rulează aici, deși e ieftin de scris pe același drum.
     //

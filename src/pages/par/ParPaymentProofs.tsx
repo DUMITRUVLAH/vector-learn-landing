@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Paperclip,
+  FolderDown,
   Loader2,
   RefreshCcw,
   UploadCloud,
@@ -30,17 +31,19 @@ import {
   FileCheck2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
-import { Alert, Button, Card, Select, Table } from "@/components/ds";
+import { Alert, Button, Card, Checkbox, Select, Table } from "@/components/ds";
 import { useRouter } from "@/router/HashRouter";
 import {
   getPaymentProofsQueue,
   uploadAttachmentDirect,
   reconcileInBackground,
+  downloadDosarZip,
   formatCurrency,
   type ParPaymentProofItem,
 } from "@/lib/api/par";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
 import { matchProofFiles, type ProofConfidence } from "@/lib/par/proofMatch";
+import { DOSARE_ZIP_MAX } from "@/lib/par/dosarBatch";
 import { cn } from "@/lib/utils";
 
 // ─── Tipuri locale ────────────────────────────────────────────────────────────
@@ -93,6 +96,12 @@ export default function ParPaymentProofs() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  /** Cererile bifate pentru pachetul de dosare (owner: „să pot selecta dosarele și să le descarc
+   *  mai multe o dată"). Tot ce vede omul aici e o plată gata de arhivat — exact ce se cere la
+   *  audit sau la donator, deci selecția trăiește pe ACEST ecran, nu doar în coada de finanțe. */
+  const [selected, setSelected] = useState<string[]>([]);
+  const [zipping, setZipping] = useState(false);
+  const [zipNote, setZipNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -205,6 +214,33 @@ export default function ParPaymentProofs() {
   };
 
   const doneCount = proofs.filter((p) => p.state === "done").length;
+
+  // Lista se schimbă sub selecție (filtru, reîncărcare): ce nu mai e pe ecran nu poate rămâne bifat.
+  useEffect(() => {
+    setSelected((prev) => prev.filter((id) => items.some((i) => i.id === id)));
+  }, [items]);
+
+  const allSelected = items.length > 0 && items.every((i) => selected.includes(i.id));
+
+  /** Pachetul de dosare al plăților bifate — un singur fișier, nu N descărcări. */
+  const startDosarZip = async () => {
+    if (!selected.length) return;
+    setZipping(true);
+    setZipNote(null);
+    try {
+      const { included, skipped } = await downloadDosarZip(selected);
+      setZipNote(
+        skipped > 0
+          ? `${included} ${included === 1 ? "dosar salvat" : "dosare salvate"} · ${skipped} nu au putut fi incluse (încearcă-le separat).`
+          : `${included} ${included === 1 ? "dosar salvat" : "dosare salvate"}.`
+      );
+      setSelected([]);
+    } catch (e: unknown) {
+      setZipNote(e instanceof Error ? e.message : "Pachetul de dosare nu a putut fi generat.");
+    } finally {
+      setZipping(false);
+    }
+  };
 
   return (
     <AppShell
@@ -397,10 +433,58 @@ export default function ParPaymentProofs() {
           </div>
         )}
 
+        {/* Bara selecției: apare doar când s-a bifat ceva. Aceleași reguli ca în coada de
+            finanțe — un singur zip, cu un plafon de dosare, fiindcă fiecare dosar e un
+            PDF construit pe loc. */}
+        {!loading && !error && (selected.length > 0 || zipNote) && (
+          <Card className="flex flex-wrap items-center gap-3 p-3">
+            {selected.length > 0 && (
+              <>
+                <span className="text-sm font-medium text-foreground">
+                  {selected.length} {selected.length === 1 ? "plată selectată" : "plăți selectate"}
+                </span>
+                <Button
+                  onClick={() => void startDosarZip()}
+                  disabled={zipping || selected.length > DOSARE_ZIP_MAX}
+                  aria-label={`Descarcă dosarele celor ${selected.length} plăți selectate`}
+                >
+                  {zipping ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <FolderDown className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {zipping ? "Se pregătește pachetul…" : `Descarcă dosarele (${selected.length})`}
+                </Button>
+                <Button variant="outline" onClick={() => setSelected([])} disabled={zipping}>
+                  Renunță la selecție
+                </Button>
+                {selected.length > DOSARE_ZIP_MAX && (
+                  <span className="text-sm text-warning">
+                    Maximum {DOSARE_ZIP_MAX} de dosare într-un pachet — deselectează{" "}
+                    {selected.length - DOSARE_ZIP_MAX}.
+                  </span>
+                )}
+              </>
+            )}
+            {zipNote && (
+              <span role="status" className="text-sm text-muted-foreground">
+                {zipNote}
+              </span>
+            )}
+          </Card>
+        )}
+
         {!loading && !error && items.length > 0 && (
           <Table className="min-w-[900px]" aria-label="Plăți și dovezile lor">
             <thead>
               <tr className="border-b border-border bg-muted/50">
+                <th className="w-10 px-3 py-3 text-left font-medium text-muted-foreground">
+                  <Checkbox
+                    checked={allSelected}
+                    onChange={(next) => setSelected(next ? items.map((i) => i.id) : [])}
+                    aria-label={allSelected ? "Deselectează toate plățile" : "Selectează toate plățile afișate"}
+                  />
+                </th>
                 <th className="px-3 py-3 text-left font-medium text-muted-foreground">Nr.</th>
                 <th className="px-3 py-3 text-left font-medium text-muted-foreground">Beneficiar</th>
                 <th className="px-3 py-3 text-right font-medium text-muted-foreground">Suma plătită</th>
@@ -412,6 +496,15 @@ export default function ParPaymentProofs() {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                  <td className="px-3 py-3">
+                    <Checkbox
+                      checked={selected.includes(item.id)}
+                      onChange={(next) =>
+                        setSelected((prev) => (next ? [...prev, item.id] : prev.filter((id) => id !== item.id)))
+                      }
+                      aria-label={`Selectează ${item.requestNo} pentru descărcarea dosarelor`}
+                    />
+                  </td>
                   <td className="px-3 py-3">
                     <button
                       type="button"

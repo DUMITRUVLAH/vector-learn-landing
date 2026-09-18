@@ -187,8 +187,10 @@ function findFiscalSeries(text: string): string | null {
  * „от 03 марта 2026". Se încearcă TOATE etichetele — „Date Bancare:" (antetul oricărui cont de
  * plată) e o potrivire fără dată după ea, iar oprirea la prima ar pierde data reală de mai jos.
  */
-function findLabelledDate(foldedText: string): string | null {
-  const re = new RegExp(`(?:^|[\\s(,;:/-])(?:data|date|дата|от|incheiat la)${EOW}[^\\n]{0,40}`, "g");
+function findLabelledDate(foldedText: string, labels?: RegExp): string | null {
+  const re = labels
+    ? new RegExp(labels.source, "g")
+    : new RegExp(`(?:^|[\\s(,;:/-])(?:data|date|дата|от|incheiat la)${EOW}[^\\n]{0,40}`, "g");
   for (const m of foldedText.matchAll(re)) {
     const hit = findDate(m[0]);
     if (hit) return hit;
@@ -337,4 +339,98 @@ export function paymentDestination(
   if (ref?.number && base.includes(ref.number)) return base;
   if (!base) return tail;
   return `${base} / ${tail}`;
+}
+
+// ─── Ordinul de plată (documentul care CONFIRMĂ plata) ───────────────────────
+
+export interface ParsedPaymentOrderRef {
+  /** Numărul ordinului, ca pe document: „2065", „OP-47". */
+  number: string | null;
+  /** Data lui, ISO „YYYY-MM-DD". */
+  date: string | null;
+}
+
+/**
+ * Titlul documentului de la bancă. Scopul e altul decât la `TITLES`: acolo se caută actul care
+ * JUSTIFICĂ plata (factura, contul), fiindcă el intră în destinația plății; aici se caută actul
+ * care o CONFIRMĂ. Se potrivește oriunde pe rând, nu doar la început — băncile pun titlul lângă
+ * siglă, lângă numărul contului sau într-un tabel.
+ */
+const PAYMENT_ORDER_TITLE = new RegExp(
+  `(?:ordin(?:ul)?\\s+de\\s+plata|dispozitie\\s+de\\s+plata|payment\\s+order|платежное\\s+поручение)${EOW}`,
+);
+
+/** Cum își scriu băncile numărul documentului când titlul nu-l poartă pe același rând. */
+const DOC_NUMBER_LABELS: RegExp[] = [
+  /(?:nr|no|numar(?:ul)?|№)\s*\.?\s*(?:documentului|document|ordinului(?:\s+de\s+plata)?|de plata)\s*[:.]?\s*([a-z0-9][a-z0-9./-]{0,29})/g,
+  /(?:documentul|document)\s*(?:nr|no|№)\s*\.?\s*[:.]?\s*([a-z0-9][a-z0-9./-]{0,29})/g,
+  /номер\s+документа\s*[:.]?\s*([a-zа-я0-9][a-zа-я0-9./-]{0,29})/g,
+];
+
+/** Datele cu etichetă proprie pe un document bancar, mai precise decât „Data" generic. */
+const PAYMENT_DATE_LABELS = new RegExp(
+  `(?:data\\s+(?:documentului|emiterii|executarii|platii|operatiunii|tranzactiei)` +
+    `|дата\\s+(?:документа|операции|платежа))${EOW}[^\\n]{0,40}`,
+  "g",
+);
+
+/**
+ * Numărul documentului din etichetele de mai sus. `fold` păstrează pozițiile 1:1, deci valoarea se
+ * taie din textul ORIGINAL — altfel un număr cu literă („OP-47") s-ar întoarce cu litere mici.
+ *
+ * Două etichete cu valori DIFERITE = un extras de cont cu mai multe operațiuni, nu confirmarea
+ * unei plăți. Acolo nu avem cum ști care rând e al cererii noastre, deci nu ghicim.
+ */
+function findDocumentNumber(text: string, folded: string): string | null {
+  const hits = new Set<string>();
+  for (const re of DOC_NUMBER_LABELS) {
+    for (const m of folded.matchAll(new RegExp(re.source, "g"))) {
+      const at = (m.index ?? 0) + m[0].indexOf(m[1]);
+      const value = text.slice(at, at + m[1].length).replace(/[.,;]+$/, "");
+      if (plausibleNumber(value)) hits.add(value);
+    }
+  }
+  return hits.size === 1 ? [...hits][0] : null;
+}
+
+/**
+ * Numărul și data ordinului de plată, citite din documentul primit de la bancă.
+ *
+ * De ce există (owner, 18.09.2026): „numărul ordinului de plată eu după trebuie să-l iau din
+ * bancă". La ora plății numărul încă nu există — extrasul ștampilat vine a doua zi, iar rubrica
+ * „Referință plată" rămâne goală sau se completează de mână, cerere cu cerere. Din ea se compune
+ * numele dosarului (`…_OP-2065_2026-09-18.pdf`) și coloana „Nr. ordin" din Dovezi de plată, deci
+ * un număr netastat înseamnă un dosar care nu se poate căuta.
+ *
+ * Determinist, ca `parseDocumentRef`: numărul unui ordin de plată nu are voie să fie inventat de
+ * un model. Dacă documentul e un scan fără strat de text sau nu se recunoaște, întoarce `null` și
+ * rubrica rămâne cum era — de completat de om.
+ *
+ * Se cheamă DOAR pe atașamentele de tip `payment_order`, deci „ordin de plată" de aici e titlul
+ * documentului, nu o vorbă dintr-un contract („se achită prin ordin de plată").
+ */
+export function parsePaymentOrderRef(rawText: string | null | undefined): ParsedPaymentOrderRef | null {
+  if (!rawText || !rawText.trim()) return null;
+  const text = rawText.replace(/ /g, " ").replace(/[ \t]+/g, " ");
+  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  const folded = fold(text);
+
+  // Fereastra de după titlu: „ORDIN DE PLATĂ nr. 2065 din 18.09.2026" stă pe un rând, dar într-un
+  // PDF cu rândurile rupte numărul cade pe cel de dedesubt.
+  let window: string | null = null;
+  for (let i = 0; i < lines.length && !window; i++) {
+    if (!lines[i]) continue;
+    const m = fold(lines[i]).match(PAYMENT_ORDER_TITLE);
+    if (!m) continue;
+    window = [lines[i].slice((m.index ?? 0) + m[0].length), lines[i + 1] ?? "", lines[i + 2] ?? ""]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  const number = (window ? findNumber(window) : null) ?? findDocumentNumber(text, folded);
+  const date =
+    (window ? findDate(window) : null) ?? findLabelledDate(folded, PAYMENT_DATE_LABELS) ?? findLabelledDate(folded);
+
+  if (!number && !date) return null;
+  return { number, date };
 }
