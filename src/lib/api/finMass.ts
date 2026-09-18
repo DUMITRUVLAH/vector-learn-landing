@@ -2,7 +2,7 @@
  * MASS-002: Client-side API helpers for the FinDesk Bulk Operations module.
  * All requests go to /api/fin/mass/*.
  */
-import { api } from "../api";
+import { api, apiUpload } from "../api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -96,11 +96,7 @@ export async function importPartiesFromCsv(
 ): Promise<{ jobId: string; totalRows: number }> {
   const form = new FormData();
   form.append("file", file);
-  return api<{ jobId: string; totalRows: number }>("/api/fin/mass/import/parties", {
-    method: "POST",
-    body: form,
-    // Don't set Content-Type — browser sets it with boundary for multipart
-  });
+  return apiUpload<{ jobId: string; totalRows: number }>("/api/fin/mass/import/parties", form);
 }
 
 /** Import spend (expense) records from a CSV File object */
@@ -109,10 +105,7 @@ export async function importSpendFromCsv(
 ): Promise<{ jobId: string; totalRows: number }> {
   const form = new FormData();
   form.append("file", file);
-  return api<{ jobId: string; totalRows: number }>("/api/fin/mass/import/spend", {
-    method: "POST",
-    body: form,
-  });
+  return apiUpload<{ jobId: string; totalRows: number }>("/api/fin/mass/import/spend", form);
 }
 
 /** MASS-004: Retry all failed (non-validation) rows in a job */

@@ -2,7 +2,7 @@
  * DOCMERGE-001: API client for Document Merge module.
  * DB-portability: zero .execute().rows — uses query builder.
  */
-import { api } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
 
 export interface DocmergeTemplate {
   id: string;
@@ -99,16 +99,16 @@ export interface AutoMapResult {
 
 /**
  * Upload an .xlsx file for parsing. Returns headers + preview rows.
- * NOTE: uses FormData, not JSON — api() is called differently here.
+ *
+ * `apiUpload`, NU `api`: comentariul de aici spunea „No Content-Type header — browser sets
+ * multipart boundary automatically", dar `api()` scrie întotdeauna `Content-Type: application/json`,
+ * iar un header de tip scris de noi îl împiedică pe browser să pună boundary-ul. Corpul pleca fără
+ * el, `c.req.formData()` din `/api/docmerge/parse-excel` nu-l putea citi și încărcarea pica.
  */
 export async function parseExcel(file: File): Promise<ParsedExcelResult> {
   const form = new FormData();
   form.append("file", file);
-  return api<ParsedExcelResult>("/api/docmerge/parse-excel", {
-    method: "POST",
-    body: form,
-    // No Content-Type header — browser sets multipart boundary automatically
-  });
+  return apiUpload<ParsedExcelResult>("/api/docmerge/parse-excel", form);
 }
 
 export function autoMapColumns(
