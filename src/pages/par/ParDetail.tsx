@@ -90,6 +90,7 @@ import { checkTenderThreshold, clearTender, getParTimeline, type TenderCheck } f
 import { buildFlowSteps, revisionLabel, type FlowStep } from "@/lib/par/flowBand";
 import {
   collectDocumentMismatches,
+  analysisBadge,
   formatCheckValue,
   parseAttachmentAnalysis,
   type DocumentMismatch,
@@ -130,6 +131,13 @@ function fmtCurrency(cents: number, currency: string): string {
   const v = (cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${v} ${currency}`;
 }
+
+/** Culorile semnului de pe atașament; „nimic de verificat" NU e verde — vezi `analysisBadge`. */
+const BADGE_TONE: Record<"warning" | "success" | "muted", string> = {
+  warning: "bg-warning/15 text-warning",
+  success: "bg-success/15 text-success",
+  muted: "bg-muted text-muted-foreground",
+};
 
 /**
  * O valoare de verificare, scrisă cum o citește omul.
@@ -1580,12 +1588,8 @@ export function ParDetailPage() {
                         ({att.kind === "par_pdf" ? "PDF generat" : attachmentKindLabel(att.kind, att.kindOther)})
                       </span>
                       {analysis && (
-                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", analysis.status === "match" ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>
-                          {analysis.status === "match"
-                            ? "Concordant"
-                            : analysis.warnings === 1
-                              ? "1 diferență"
-                              : `${analysis.warnings} diferențe`}
+                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", BADGE_TONE[analysisBadge(analysis).tone])}>
+                          {analysisBadge(analysis).label}
                         </span>
                       )}
                     </div>

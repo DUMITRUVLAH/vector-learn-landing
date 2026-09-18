@@ -96,6 +96,30 @@ export function collectDocumentMismatches(
   return out;
 }
 
+/** Semnul de lângă numele fișierului: ce scrie și cum arată. */
+export interface AnalysisBadge {
+  label: string;
+  tone: "warning" | "success" | "muted";
+}
+
+/**
+ * Verdictul unui document, în trei cuvinte.
+ *
+ * „Concordant" se spune doar când s-a confirmat CEVA. Un document din care extractorul n-a scos
+ * niciun câmp (act scanat prost: toate rândurile „document nedetectat") avea zero nepotriviri,
+ * deci ieșea verde — iar verdele ăla spune „am verificat și se potrivește", când adevărul e „n-am
+ * putut verifica nimic". Tăcerea nu e acord: al treilea semn există tocmai ca cele două să nu mai
+ * arate la fel.
+ */
+export function analysisBadge(analysis: AttachmentAnalysis): AnalysisBadge {
+  if (analysis.status !== "match" || analysis.warnings > 0) {
+    return { label: analysis.warnings === 1 ? "1 diferență" : `${analysis.warnings} diferențe`, tone: "warning" };
+  }
+  const verified = analysis.checks.filter((c) => c.matches === true).length;
+  if (!verified) return { label: "Nimic de verificat", tone: "muted" };
+  return { label: "Concordant", tone: "success" };
+}
+
 /** Cum se scrie o valoare de verificare pe ecran: sumele vin în bani (minor units). */
 export function formatCheckValue(value: string | number | null, currency = "MDL"): string {
   if (value == null || value === "") return "—";

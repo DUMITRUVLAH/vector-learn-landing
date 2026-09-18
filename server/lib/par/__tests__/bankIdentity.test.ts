@@ -47,7 +47,7 @@ describe("bankIdentity", () => {
     expect(bankIdentity({ bic: "AGRNMD2X885" })).toBe("maib");
   });
 
-  it("două conturi la bănci diferite înseamnă „nu se poate ști", () => {
+  it("două conturi la bănci diferite înseamnă „nu se poate ști”", () => {
     expect(bankIdentity({ iban: "MD67ML0000002258A0919582", ibans: ["MD87AG000000022516065719"] })).toBeNull();
   });
 

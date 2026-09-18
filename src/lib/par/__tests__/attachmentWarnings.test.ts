@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
+  analysisBadge,
   collectDocumentMismatches,
   CURRENT_ANALYSIS_VERSION,
   formatCheckValue,
@@ -110,5 +111,33 @@ describe("formatCheckValue()", () => {
     expect(formatCheckValue("Digital Safeguard SRL")).toBe("Digital Safeguard SRL");
     expect(formatCheckValue(null)).toBe("—");
     expect(formatCheckValue("")).toBe("—");
+  });
+});
+
+describe("analysisBadge()", () => {
+  const parsed = (checks: { field: string; expected: unknown; found: unknown; matches: boolean | null }[]) =>
+    parseAttachmentAnalysis(analysis(checks))!;
+
+  it("numără nepotrivirile în română", () => {
+    expect(analysisBadge(parsed([{ field: "valută", expected: "USD", found: "MDL", matches: false }])))
+      .toEqual({ label: "1 diferență", tone: "warning" });
+    expect(analysisBadge(parsed([
+      { field: "valută", expected: "USD", found: "MDL", matches: false },
+      { field: "beneficiar", expected: "ATIC", found: "Altcineva SRL", matches: false },
+    ])).label).toBe("2 diferențe");
+  });
+
+  it("spune „Concordant” doar când chiar s-a confirmat ceva", () => {
+    expect(analysisBadge(parsed([{ field: "IDNO/IDNP", expected: "1006600034927", found: "1006600034927", matches: true }])))
+      .toEqual({ label: "Concordant", tone: "success" });
+  });
+
+  it("un document din care n-a ieșit niciun câmp NU e verde", () => {
+    // Act scanat prost: toate rândurile „document nedetectat". Zero nepotriviri, dar și zero
+    // verificări — tăcerea nu e acord.
+    expect(analysisBadge(parsed([
+      { field: "sumă", expected: 4750000, found: null, matches: null },
+      { field: "beneficiar", expected: "ATIC", found: null, matches: null },
+    ]))).toEqual({ label: "Nimic de verificat", tone: "muted" });
   });
 });
