@@ -11,7 +11,13 @@
  * fiecare deschidere — nu depinde de cardul din board, ca să poată fi refolosită și dintr-o
  * listă/căutare viitoare.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Phone,
   Mail,
@@ -32,7 +38,20 @@ import {
   FileText,
   ExternalLink,
 } from "lucide-react";
-import { Sheet, Button, Input, Label, Select, Textarea, Badge, Alert, Skeleton, Separator, Tabs, type TabItem } from "@/components/ds";
+import {
+  Sheet,
+  Button,
+  Input,
+  Label,
+  Select,
+  Textarea,
+  Badge,
+  Alert,
+  Skeleton,
+  Separator,
+  Tabs,
+  type TabItem,
+} from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { Link } from "@/router/HashRouter";
 import { docPath } from "@/lib/docs/paths";
@@ -73,9 +92,22 @@ import {
   type CrmLeadTask,
   type CrmLeadTag,
 } from "@/lib/api/crm";
-import { CRM_SOURCE_LABEL, crmStageLabel, stageColorClasses } from "@/components/crm/constants";
-import { CALL_OUTCOMES, CALL_OUTCOME_LABELS, type CallOutcome } from "@/lib/crm/callOutcomes";
-import { formatCents, leadValueToCents, leadTitle, emptyToNull } from "@/components/crm/format";
+import {
+  CRM_SOURCE_LABEL,
+  crmStageLabel,
+  stageColorClasses,
+} from "@/components/crm/constants";
+import {
+  CALL_OUTCOMES,
+  CALL_OUTCOME_LABELS,
+  type CallOutcome,
+} from "@/lib/crm/callOutcomes";
+import {
+  formatCents,
+  leadValueToCents,
+  leadTitle,
+  emptyToNull,
+} from "@/components/crm/format";
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
 import { LeadContactsTab } from "@/components/crm/LeadContactsTab";
 import { LeadFilesTab } from "@/components/crm/LeadFilesTab";
@@ -110,11 +142,11 @@ export interface LeadDetailSheetProps {
 /** Filele fișei. „Comunicare" lipsește înadins: mesajele trimise apar deja în „Activitate", iar
  *  o filă separată ar fi o A DOUA cronologie a aceluiași lead — exact ce s-a evitat când
  *  `lead_interactions` a fost refolosită în loc de un jurnal nou (PORT-DIN-CRM-VECTOR.md §3). */
-type LeadTab = "activitate" | "detalii" | "fisiere" | "contacte" | "acte" | "istoric";
+/** „detalii" a DISPĂRUT ca filă: datele clientului stau permanent în coloana din stânga. */
+type LeadTab = "activitate" | "fisiere" | "contacte" | "acte" | "istoric";
 
 const LEAD_TABS: readonly TabItem<LeadTab>[] = [
   { value: "activitate", label: "Activitate" },
-  { value: "detalii", label: "Detalii" },
   { value: "fisiere", label: "Fișiere" },
   { value: "contacte", label: "Contacte" },
   { value: "acte", label: "Acte" },
@@ -133,14 +165,25 @@ const INTERACTION_LABEL: Record<CrmInteractionType, string> = {
 };
 
 const INTERACTION_ICON: Record<CrmInteractionType, ReactNode> = {
-  note: <MessageSquare className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
+  note: (
+    <MessageSquare className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+  ),
   call: <Phone className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
   email: <Mail className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
-  whatsapp: <MessageCircle className="h-3.5 w-3.5 text-success" aria-hidden="true" />,
+  whatsapp: (
+    <MessageCircle className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+  ),
   sms: <Smartphone className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
   meeting: <Calendar className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
-  stage_change: <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />,
-  system: <Info className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />,
+  stage_change: (
+    <ArrowRightLeft
+      className="h-3.5 w-3.5 text-muted-foreground"
+      aria-hidden="true"
+    />
+  ),
+  system: (
+    <Info className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+  ),
 };
 
 function formatInteractionDate(iso: string): string {
@@ -154,11 +197,17 @@ function formatInteractionDate(iso: string): string {
 }
 
 function formatTaskDue(iso: string): string {
-  return new Date(iso).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("ro-MD", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function isTaskOverdue(task: CrmLeadTask): boolean {
-  return task.status === "open" && !!task.dueAt && new Date(task.dueAt) < new Date();
+  return (
+    task.status === "open" && !!task.dueAt && new Date(task.dueAt) < new Date()
+  );
 }
 
 /** Taskurile deschise/amânate primele (după scadență, fără scadență la urmă), cele încheiate
@@ -201,7 +250,8 @@ function toFormState(lead: CrmLead): DetailFormState {
     fullName: lead.fullName,
     productId: lead.productId ?? "",
     productQtyText: lead.productQty == null ? "" : String(lead.productQty),
-    probabilityText: lead.probabilityPct == null ? "" : String(lead.probabilityPct),
+    probabilityText:
+      lead.probabilityPct == null ? "" : String(lead.probabilityPct),
     dealName: lead.dealName ?? "",
     company: lead.company ?? "",
     phone: lead.phone ?? "",
@@ -215,10 +265,19 @@ function toFormState(lead: CrmLead): DetailFormState {
 
 function isFormDirty(form: DetailFormState, lead: CrmLead): boolean {
   const base = toFormState(lead);
-  return (Object.keys(base) as (keyof DetailFormState)[]).some((key) => form[key] !== base[key]);
+  return (Object.keys(base) as (keyof DetailFormState)[]).some(
+    (key) => form[key] !== base[key],
+  );
 }
 
-export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, onOpenLead }: LeadDetailSheetProps) {
+export function LeadDetailSheet({
+  leadId,
+  stages,
+  onClose,
+  onChanged,
+  onToast,
+  onOpenLead,
+}: LeadDetailSheetProps) {
   const [tab, setTab] = useState<LeadTab>("activitate");
   const [detail, setDetail] = useState<CrmLeadDetailResponse | null>(null);
   const [interactions, setInteractions] = useState<CrmLeadInteraction[]>([]);
@@ -286,7 +345,12 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([getCrmLeadDetail(leadId), listCrmLeadTasks(leadId), listCrmLeadTags(leadId), listCrmTagSuggestions()])
+    Promise.all([
+      getCrmLeadDetail(leadId),
+      listCrmLeadTasks(leadId),
+      listCrmLeadTags(leadId),
+      listCrmTagSuggestions(),
+    ])
       .then(([detailRes, tasksRes, tagsRes, suggestionsRes]) => {
         if (cancelled) return;
         setDetail(detailRes);
@@ -298,7 +362,9 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Nu am putut încărca leadul.");
+        setError(
+          err instanceof Error ? err.message : "Nu am putut încărca leadul.",
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -341,7 +407,12 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     if (!leadId) return;
     setLoading(true);
     setError(null);
-    Promise.all([getCrmLeadDetail(leadId), listCrmLeadTasks(leadId), listCrmLeadTags(leadId), listCrmTagSuggestions()])
+    Promise.all([
+      getCrmLeadDetail(leadId),
+      listCrmLeadTasks(leadId),
+      listCrmLeadTags(leadId),
+      listCrmTagSuggestions(),
+    ])
       .then(([detailRes, tasksRes, tagsRes, suggestionsRes]) => {
         setDetail(detailRes);
         setInteractions(detailRes.interactions);
@@ -350,7 +421,11 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
         setTags(tagsRes.items);
         setTagSuggestions(suggestionsRes.items);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Nu am putut încărca leadul."))
+      .catch((err: unknown) =>
+        setError(
+          err instanceof Error ? err.message : "Nu am putut încărca leadul.",
+        ),
+      )
       .finally(() => setLoading(false));
   }
 
@@ -363,15 +438,26 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
 
   // Produsul ales acum în formular — de el atârnă și câmpul de cantitate, și cifra de stoc.
   const selectedProduct = useMemo(
-    () => (form?.productId ? products.find((p) => p.id === form.productId) ?? null : null),
-    [form?.productId, products]
+    () =>
+      form?.productId
+        ? (products.find((p) => p.id === form.productId) ?? null)
+        : null,
+    [form?.productId, products],
   );
 
   const assigneeOptions = useMemo(() => {
-    if (!form || !form.assignedTo || teamMembers.some((m) => m.id === form.assignedTo)) return teamMembers;
+    if (
+      !form ||
+      !form.assignedTo ||
+      teamMembers.some((m) => m.id === form.assignedTo)
+    )
+      return teamMembers;
     // Responsabilul curent nu (mai) e în listă (ex. cont dezactivat) — îl păstrăm ca opțiune, ca
     // salvarea formularului să nu-l șteargă din greșeală doar pentru că select-ul nu-l cunoaște.
-    return [...teamMembers, { id: form.assignedTo, fullName: form.assignedTo, email: "", role: "" }];
+    return [
+      ...teamMembers,
+      { id: form.assignedTo, fullName: form.assignedTo, email: "", role: "" },
+    ];
   }, [teamMembers, form]);
 
   async function refetchDetail() {
@@ -388,7 +474,10 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     setMovingStage(true);
     setDetail((d) => (d ? { ...d, lead: { ...d.lead, stage: toStage } } : d));
     try {
-      const moved = await moveCrmLeadStage(leadId, { stage: toStage, lostReason });
+      const moved = await moveCrmLeadStage(leadId, {
+        stage: toStage,
+        lostReason,
+      });
       // Stocul e consecința mutării, deci se anunță în același mesaj: altfel omul află că a rămas
       // fără marfă abia când nu mai poate onora comanda următoare.
       const stock = moved.stock;
@@ -408,7 +497,10 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
           message: `Lead mutat la „${crmStageLabel(stages, toStage)}”. Stoc returnat: +${stock.qty} × „${stock.productName}”.`,
         });
       } else {
-        onToast({ kind: "success", message: `Lead mutat la „${crmStageLabel(stages, toStage)}”.` });
+        onToast({
+          kind: "success",
+          message: `Lead mutat la „${crmStageLabel(stages, toStage)}”.`,
+        });
       }
       // Reîncarcă fișa: serverul a scris deja un `stage_change` în istoric la mutare — vrem să
       // apară în timeline fără un reload de pagină, doar fișa își reia propriile date.
@@ -416,7 +508,11 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       onChanged();
     } catch (err) {
       setDetail(prevDetail);
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut muta leadul." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut muta leadul.",
+      });
     } finally {
       setMovingStage(false);
     }
@@ -437,7 +533,10 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
   async function saveDetails() {
     if (!leadId || !detail || !form) return;
     if (form.fullName.trim().length < 2) {
-      onToast({ kind: "error", message: "Numele trebuie să aibă cel puțin 2 caractere." });
+      onToast({
+        kind: "error",
+        message: "Numele trebuie să aibă cel puțin 2 caractere.",
+      });
       return;
     }
     const prevDetail = detail;
@@ -451,7 +550,10 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       productId: form.productId ? form.productId : null,
       productQty: Math.max(1, Number(form.productQtyText) || 1),
       // Gol = „moștenește de la etapă", nu „0%": diferența contează la prognoză.
-      probabilityPct: form.probabilityText.trim() === "" ? null : Math.max(0, Math.min(100, Number(form.probabilityText) || 0)),
+      probabilityPct:
+        form.probabilityText.trim() === ""
+          ? null
+          : Math.max(0, Math.min(100, Number(form.probabilityText) || 0)),
       valueCents: leadValueToCents(form.valueText),
       source: form.source,
       assignedTo: form.assignedTo ? form.assignedTo : null,
@@ -482,7 +584,13 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     } catch (err) {
       setDetail(prevDetail);
       setForm(toFormState(prevDetail.lead));
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut salva modificările." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Nu am putut salva modificările.",
+      });
     } finally {
       setSavingDetails(false);
     }
@@ -492,7 +600,10 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
    * Ce a răspuns clientul la ofertă/contract (cerințele 42 și 45). „Trimis" îl știe sistemul din
    * momentul trimiterii; asta o știe doar omul care a vorbit cu clientul.
    */
-  async function markOutcome(documentId: string, status: "signed" | "rejected") {
+  async function markOutcome(
+    documentId: string,
+    status: "signed" | "rejected",
+  ) {
     let reason: string | undefined;
     if (status === "rejected") {
       // Motivul e obligatoriu, ca la pierderea unui lead: fără el, raportul de mai târziu nu
@@ -503,12 +614,25 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     }
     setDocOutcomeId(documentId);
     try {
-      await setCrmDocumentOutcome(documentId, { status, ...(reason ? { reason } : {}) });
+      await setCrmDocumentOutcome(documentId, {
+        status,
+        ...(reason ? { reason } : {}),
+      });
       reloadDocuments();
-      onToast({ kind: "success", message: status === "signed" ? "Act marcat ca semnat." : "Act marcat ca refuzat." });
+      onToast({
+        kind: "success",
+        message:
+          status === "signed"
+            ? "Act marcat ca semnat."
+            : "Act marcat ca refuzat.",
+      });
       onChanged();
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut marca răspunsul." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut marca răspunsul.",
+      });
     } finally {
       setDocOutcomeId(null);
     }
@@ -518,11 +642,17 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     if (!leadId || !noteBody.trim()) return;
     setAddingNote(true);
     try {
-      const created = await createCrmLeadInteraction(leadId, { type: "note", body: noteBody.trim() });
+      const created = await createCrmLeadInteraction(leadId, {
+        type: "note",
+        body: noteBody.trim(),
+      });
       setInteractions((prev) => [created, ...prev]);
       setNoteBody("");
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut salva nota." });
+      onToast({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Nu am putut salva nota.",
+      });
     } finally {
       setAddingNote(false);
     }
@@ -554,7 +684,11 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       onChanged();
       onToast({ kind: "success", message: "Apel notat în istoric." });
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut nota apelul." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut nota apelul.",
+      });
     } finally {
       setLoggingCall(false);
     }
@@ -571,7 +705,9 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
         title: newTaskTitle.trim(),
         // Ora fixă (prânz) evită ca o dată aleasă să „alunece" cu o zi din cauza fusului orar la
         // conversia în UTC — un task „scadent azi" nu trebuie să pară scadent ieri sau mâine.
-        dueAt: newTaskDueDate ? new Date(`${newTaskDueDate}T12:00:00`).toISOString() : null,
+        dueAt: newTaskDueDate
+          ? new Date(`${newTaskDueDate}T12:00:00`).toISOString()
+          : null,
       });
       setTasks((prev) => sortTasksForDisplay([...prev, created]));
       setAskNextAction(false);
@@ -580,25 +716,38 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       // Un task nou poate scoate lead-ul din „fără pas următor" pe orice ecran care arată „Azi".
       onChanged();
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut adăuga taskul." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut adăuga taskul.",
+      });
     } finally {
       setAddingTask(false);
     }
   }
 
   function replaceTask(updated: CrmLeadTask) {
-    setTasks((prev) => sortTasksForDisplay(prev.map((t) => (t.id === updated.id ? updated : t))));
+    setTasks((prev) =>
+      sortTasksForDisplay(prev.map((t) => (t.id === updated.id ? updated : t))),
+    );
   }
 
   async function toggleTaskDone(task: CrmLeadTask) {
     setTaskActionId(task.id);
     try {
-      const updated = task.status === "done" ? await reopenCrmLeadTask(task.id) : await completeCrmLeadTask(task.id);
+      const updated =
+        task.status === "done"
+          ? await reopenCrmLeadTask(task.id)
+          : await completeCrmLeadTask(task.id);
       replaceTask(updated);
       // Un task încheiat iese din restanțe — ecranele care arată „Azi" trebuie să se resincronizeze.
       onChanged();
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut actualiza taskul." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut actualiza taskul.",
+      });
     } finally {
       setTaskActionId(null);
     }
@@ -612,7 +761,11 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       onToast({ kind: "success", message: "Task amânat cu o zi." });
       onChanged();
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut amâna taskul." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut amâna taskul.",
+      });
     } finally {
       setTaskActionId(null);
     }
@@ -626,7 +779,11 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       setTasks((prev) => prev.filter((t) => t.id !== task.id));
       onChanged();
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut șterge taskul." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut șterge taskul.",
+      });
     } finally {
       setTaskActionId(null);
     }
@@ -641,11 +798,19 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       const created = await addCrmLeadTag(leadId, newTagText.trim());
       // Idempotent și pe server (nu dublează), dar verificăm și local — a doua adăugare a
       // aceleiași etichete întoarce exact același `id`, nu trebuie să apară de două ori în listă.
-      setTags((prev) => (prev.some((t) => t.id === created.id) ? prev : [...prev, created]));
-      setTagSuggestions((prev) => (prev.includes(created.tag) ? prev : [...prev, created.tag].sort()));
+      setTags((prev) =>
+        prev.some((t) => t.id === created.id) ? prev : [...prev, created],
+      );
+      setTagSuggestions((prev) =>
+        prev.includes(created.tag) ? prev : [...prev, created.tag].sort(),
+      );
       setNewTagText("");
     } catch (err) {
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut adăuga eticheta." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut adăuga eticheta.",
+      });
     } finally {
       setAddingTag(false);
     }
@@ -658,7 +823,11 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       await removeCrmLeadTag(tag.id);
     } catch (err) {
       setTags(prev);
-      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut șterge eticheta." });
+      onToast({
+        kind: "error",
+        message:
+          err instanceof Error ? err.message : "Nu am putut șterge eticheta.",
+      });
     }
   }
 
@@ -667,9 +836,19 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
 
   return (
     <>
-      <Sheet open={leadId !== null} onClose={onClose} title={title} description={lead?.company ?? undefined} size="lg">
+      <Sheet
+        open={leadId !== null}
+        onClose={onClose}
+        title={title}
+        description={lead?.company ?? undefined}
+        size="full"
+      >
         {loading && (
-          <div className="flex flex-col gap-3" role="status" aria-label="Se încarcă fișa leadului">
+          <div
+            className="flex flex-col gap-3"
+            role="status"
+            aria-label="Se încarcă fișa leadului"
+          >
             <Skeleton className="h-5 w-1/2" />
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-40 w-full" />
@@ -677,10 +856,18 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
         )}
 
         {!loading && error && (
-          <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" aria-hidden="true" />}>
+          <Alert
+            variant="destructive"
+            icon={<AlertCircle className="h-4 w-4" aria-hidden="true" />}
+          >
             <div className="flex flex-col gap-2">
               <p>{error}</p>
-              <Button variant="outline" size="sm" className="w-fit" onClick={retryLoad}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={retryLoad}
+              >
                 Reîncearcă
               </Button>
             </div>
@@ -689,516 +876,436 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
 
         {!loading && !error && lead && form && (
           <div className="flex flex-col gap-6">
-            {/* Antet */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Bara de context: starea afacerii, pe toată lățimea. Înghesuită în coloana din
+                stânga, se pierdea între câmpuri — deși ea e primul lucru pe care îl cauți când
+                deschizi fișa: în ce etapă e, cât valorează, al cui e, când s-a sunat ultima dată. */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border pb-4">
               {currentStage && (
                 <Badge
                   className={cn(
                     stageColorClasses(currentStage.color).bg,
                     stageColorClasses(currentStage.color).fg,
-                    "border-transparent"
+                    "border-transparent",
                   )}
                 >
                   {currentStage.label}
                 </Badge>
               )}
               {lead.valueCents > 0 && (
-                <span className="text-sm font-bold tabular-nums text-foreground">{formatCents(lead.valueCents)}</span>
+                <span className="text-lg font-bold tabular-nums text-foreground">
+                  {formatCents(lead.valueCents)}
+                </span>
+              )}
+              <span className="text-sm text-muted-foreground">
+                Responsabil:{" "}
+                <strong className="font-medium text-foreground">
+                  {teamMembers.find((m) => m.id === lead.assignedTo)?.fullName ?? "neasignat"}
+                </strong>
+              </span>
+              {typeof lead.callAttempts === "number" && lead.callAttempts > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  Apeluri: <strong className="font-medium text-foreground tabular-nums">{lead.callAttempts}</strong>
+                  {lead.lastCallOutcome ? ` · ultimul: ${CALL_OUTCOME_LABELS[lead.lastCallOutcome as CallOutcome] ?? lead.lastCallOutcome}` : ""}
+                </span>
               )}
             </div>
 
-            {/* Etichete */}
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-1.5" aria-label="Etichete">
-                {tags.map((t) => (
-                  <Badge key={t.id} variant="secondary" className="gap-1 pr-1">
-                    {t.tag}
-                    <button
-                      type="button"
-                      onClick={() => void removeTagRow(t)}
-                      aria-label={`Șterge eticheta ${t.tag}`}
-                      className="rounded-full p-0.5 hover:bg-foreground/10"
-                    >
-                      <X className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="lead-sheet-new-tag" className="sr-only">
-                  Etichetă nouă
-                </Label>
-                <Input
-                  id="lead-sheet-new-tag"
-                  value={newTagText}
-                  onChange={(e) => setNewTagText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void addTag();
-                    }
-                  }}
-                  placeholder="Etichetă nouă..."
-                  list="lead-sheet-tag-suggestions"
-                  className="h-8 max-w-[200px]"
-                />
-                <datalist id="lead-sheet-tag-suggestions">
-                  {tagSuggestions.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  aria-label="Adaugă eticheta"
-                  onClick={() => void addTag()}
-                  disabled={!newTagText.trim() || addingTag}
-                >
-                  {addingTag ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                </Button>
-              </div>
-            </div>
+            <div className="grid items-start gap-8 lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">
+              {/* ── STÂNGA: clientul ────────────────────────────────────────────────
+                Contextul, mereu la vedere: cine e, cât valorează, în ce etapă stă, pe ce
+                numere se sună. Până acum datele astea erau într-o FILĂ („Detalii"), deci ca
+                să te uiți la telefonul omului în timp ce scriai nota trebuia să pleci din
+                notă. Pe ecran întreg încap amândouă, una lângă alta. */}
+              <div className="flex flex-col gap-6 lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
 
-            {/* Acțiuni rapide */}
-            <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Acțiuni rapide</h3>
-              <div className="flex flex-wrap items-center gap-2">
-                {lead.phone && (
-                  <QuickActionLink href={`tel:${lead.phone}`} icon={<Phone className="h-4 w-4" aria-hidden="true" />}>
-                    Sună
-                  </QuickActionLink>
-                )}
-                {/* Trimiterea se face din aplicație, nu prin `mailto:`. Un mailto
-                    deschide Outlook și nu lasă nicio urmă — peste o lună,
-                    cronologia arată tăcere acolo unde au plecat cinci mesaje. */}
-                <Button variant="outline" size="sm" onClick={() => setEmailOpen(true)}>
-                  <Mail className="h-4 w-4" aria-hidden="true" />
-                  Scrie email
-                </Button>
-                {whatsappLink(lead.phone) && (
-                  <QuickActionLink
-                    href={whatsappLink(lead.phone) as string}
-                    icon={<MessageCircle className="h-4 w-4" aria-hidden="true" />}
+                {/* Etichete */}
+                <div className="flex flex-col gap-2">
+                  <div
+                    className="flex flex-wrap items-center gap-1.5"
+                    aria-label="Etichete"
                   >
-                    WhatsApp
-                  </QuickActionLink>
-                )}
-                {lead.phone && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      await logCrmTouch({ leadId: lead.id, channel: "whatsapp", body: "I-am scris pe WhatsApp" });
-                      onChanged();
-                    }}
-                  >
-                    Am scris pe WhatsApp
-                  </Button>
-                )}
-                {/* Rezultatul se alege ODATĂ cu notarea apelului, nu într-un al doilea pas:
-                    un pas separat se sare, iar un apel fără rezultat nu spune nimic raportului. */}
-                <div className="flex items-center gap-1.5">
-                  <Label htmlFor="lead-sheet-call" className="sr-only">
-                    Notează apelul cu rezultatul lui
-                  </Label>
-                  {loggingCall ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Phone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  )}
-                  <Select
-                    id="lead-sheet-call"
-                    className="h-9 w-56"
-                    value=""
-                    disabled={loggingCall}
-                    onChange={(e) => {
-                      const outcome = e.target.value;
-                      if (outcome) void logCall(outcome as CallOutcome);
-                      e.target.value = "";
-                    }}
-                  >
-                    <option value="">Am sunat — rezultatul…</option>
-                    {CALL_OUTCOMES.map((o) => (
-                      <option key={o} value={o}>
-                        {CALL_OUTCOME_LABELS[o]}
-                      </option>
-                    ))}
-                  </Select>
-                  {typeof lead.callAttempts === "number" && lead.callAttempts > 0 && (
-                    <span className="text-xs text-muted-foreground" title="Încercări de apel">
-                      {lead.callAttempts} înc.
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="lead-sheet-stage">Etapă</Label>
-                <Select
-                  id="lead-sheet-stage"
-                  value={lead.stage}
-                  disabled={movingStage}
-                  onChange={(e) => requestStageChange(e.target.value)}
-                >
-                  {stages.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </section>
-
-
-            {/* Filele fișei. Până acum totul era un singur scroll de ~1000 de linii: taskurile
-                stăteau peste acte, actele peste formular, iar ca să ajungi la istoric derulai
-                pe lângă tot. Antetul (etapă, valoare, etichete, acțiuni rapide) rămâne mereu
-                deasupra — el e contextul, nu conținutul. */}
-            <Tabs
-              tabs={LEAD_TABS}
-              value={tab}
-              onChange={setTab}
-              aria-label="Secțiunile fișei leadului"
-            />
-
-            {tab === "activitate" && (
-              <div className="flex flex-col gap-6">
-                {askNextAction && (
-                  <Alert variant="warning" icon={<AlertCircle className="h-4 w-4" aria-hidden="true" />}>
-                    <div className="flex flex-col gap-2">
-                      <p>
-                        Ai notat activitatea, dar leadul a rămas fără pas următor. Adaugă un task mai jos — altfel
-                        nimeni nu știe când se revine la el.
-                      </p>
-                      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAskNextAction(false)}>
-                        Am înțeles
-                      </Button>
-                    </div>
-                  </Alert>
-                )}
-                {/* Cadențele stau lângă taskuri, nu într-o filă proprie: sunt tot „ce urmează",
-                    doar că programat dinainte. Secțiunea dispare complet dacă workspace-ul n-are
-                    nicio cadență. */}
-                <LeadCadencePanel leadId={lead.id} onToast={onToast} onChanged={onChanged} />
-
-            {/* Taskuri */}
-            <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Taskuri</h3>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="flex flex-1 flex-col gap-1">
-                  <Label htmlFor="lead-sheet-new-task" className="sr-only">
-                    Task nou
-                  </Label>
-                  <Input
-                    id="lead-sheet-new-task"
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="Task nou (ex: Revino cu oferta)..."
-                  />
-                </div>
-                <div className="flex items-end gap-2">
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="lead-sheet-new-task-due" className="sr-only">
-                      Scadență
-                    </Label>
-                    <Input
-                      id="lead-sheet-new-task-due"
-                      type="date"
-                      value={newTaskDueDate}
-                      onChange={(e) => setNewTaskDueDate(e.target.value)}
-                      className="w-[150px]"
-                    />
-                  </div>
-                  <Button onClick={() => void addTask()} disabled={!newTaskTitle.trim() || addingTask}>
-                    {addingTask ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Plus className="h-4 w-4" aria-hidden="true" />
-                    )}
-                    Adaugă
-                  </Button>
-                </div>
-              </div>
-
-              {tasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Niciun task pe acest lead încă.</p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {tasks.map((task) => {
-                    const overdue = isTaskOverdue(task);
-                    const busy = taskActionId === task.id;
-                    return (
-                      <li
-                        key={task.id}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg border p-2.5",
-                          overdue ? "border-destructive/40 bg-destructive/5" : "border-border"
-                        )}
+                    {tags.map((t) => (
+                      <Badge
+                        key={t.id}
+                        variant="secondary"
+                        className="gap-1 pr-1"
                       >
+                        {t.tag}
                         <button
                           type="button"
-                          onClick={() => void toggleTaskDone(task)}
-                          disabled={busy}
-                          aria-label={task.status === "done" ? `Redeschide taskul ${task.title}` : `Încheie taskul ${task.title}`}
-                          className={cn(
-                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors",
-                            task.status === "done"
-                              ? "border-success bg-success/10 text-success"
-                              : "border-border text-muted-foreground hover:bg-muted/60"
-                          )}
+                          onClick={() => void removeTagRow(t)}
+                          aria-label={`Șterge eticheta ${t.tag}`}
+                          className="rounded-full p-0.5 hover:bg-foreground/10"
                         >
-                          {task.status === "done" ? (
-                            <Undo2 className="h-4 w-4" aria-hidden="true" />
-                          ) : (
-                            <Check className="h-4 w-4" aria-hidden="true" />
-                          )}
+                          <X className="h-3 w-3" aria-hidden="true" />
                         </button>
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className={cn(
-                              "text-sm text-foreground",
-                              task.status === "done" && "text-muted-foreground line-through"
-                            )}
-                          >
-                            {task.title}
-                          </p>
-                          {task.dueAt && (
-                            <p className={cn("text-xs", overdue ? "font-semibold text-destructive" : "text-muted-foreground")}>
-                              Scadent {formatTaskDue(task.dueAt)}
-                              {task.status === "snoozed" && " · amânat"}
-                            </p>
-                          )}
-                        </div>
-                        {task.status !== "done" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Amână taskul ${task.title} cu o zi`}
-                            onClick={() => void snoozeTaskOneDay(task)}
-                            disabled={busy}
-                          >
-                            <Clock className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Șterge taskul ${task.title}`}
-                          onClick={() => void deleteTaskRow(task)}
-                          disabled={busy}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-
-                <Separator />
-
-            {/* Activitate */}
-            <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Activitate</h3>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="lead-sheet-note" className="sr-only">
-                  Notă nouă
-                </Label>
-                <Textarea
-                  id="lead-sheet-note"
-                  value={noteBody}
-                  onChange={(e) => setNoteBody(e.target.value)}
-                  placeholder="Adaugă o notă..."
-                  rows={2}
-                />
-                <Button size="sm" className="w-fit" onClick={() => void addNote()} disabled={!noteBody.trim() || addingNote}>
-                  {addingNote && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                  Adaugă notă
-                </Button>
-              </div>
-              <ul className="flex flex-col gap-2">
-                {interactions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nicio interacțiune încă.</p>
-                ) : (
-                  interactions.map((item) => (
-                    <li key={item.id} className="flex gap-2">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                        {INTERACTION_ICON[item.type]}
-                      </div>
-                      <div className="flex-1 rounded-lg border border-border bg-card p-2.5">
-                        <div className="mb-0.5 flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-foreground">{INTERACTION_LABEL[item.type]}</span>
-                          <time className="text-[11px] text-muted-foreground" dateTime={item.occurredAt}>
-                            {formatInteractionDate(item.occurredAt)}
-                          </time>
-                        </div>
-                        {item.body && <p className="whitespace-pre-wrap text-sm text-foreground/80">{item.body}</p>}
-                      </div>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-              </div>
-            )}
-
-            {tab === "detalii" && (
-              <div className="flex flex-col gap-6">
-            {/* Detalii */}
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Detalii</h3>
-                <Button size="sm" onClick={() => void saveDetails()} disabled={!dirty || savingDetails}>
-                  {savingDetails && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                  Salvează
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1 sm:col-span-2">
-                  <Label htmlFor="lead-sheet-name" required>
-                    Nume
-                  </Label>
-                  <Input
-                    id="lead-sheet-name"
-                    value={form.fullName}
-                    onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1 sm:col-span-2">
-                  <Label htmlFor="lead-sheet-company">Companie</Label>
-                  <Input
-                    id="lead-sheet-company"
-                    value={form.company}
-                    onChange={(e) => setForm({ ...form, company: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-phone">Telefon</Label>
-                  <Input
-                    id="lead-sheet-phone"
-                    type="tel"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-email">Email</Label>
-                  <Input
-                    id="lead-sheet-email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-interest">Curs / interes</Label>
-                  <Input
-                    id="lead-sheet-interest"
-                    value={form.interestCourse}
-                    onChange={(e) => setForm({ ...form, interestCourse: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-product">Produs</Label>
-                  <Select
-                    id="lead-sheet-product"
-                    value={form.productId}
-                    onChange={(e) => setForm({ ...form, productId: e.target.value })}
-                  >
-                    <option value="">— fără produs —</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
+                      </Badge>
                     ))}
-                  </Select>
-                  {selectedProduct?.tracksStock ? (
-                    <p
-                      className={`text-xs ${selectedProduct.lowStock ? "text-destructive" : "text-muted-foreground"}`}
-                    >
-                      Stoc disponibil: {selectedProduct.qtyOnHand} {selectedProduct.unit}
-                      {selectedProduct.lowStock ? " — sub pragul de alertă" : ""}
-                    </p>
-                  ) : null}
-                </div>
-                {/* Cantitatea se arată doar la produsele cu stoc: la un serviciu n-ar însemna nimic
-                    și ar mai cere o decizie degeaba. */}
-                {selectedProduct?.tracksStock ? (
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="lead-sheet-product-qty">Cantitate</Label>
-                    <Input
-                      id="lead-sheet-product-qty"
-                      type="number"
-                      min={1}
-                      value={form.productQtyText}
-                      onChange={(e) => setForm({ ...form, productQtyText: e.target.value })}
-                      placeholder="1"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Se scade din stoc când leadul ajunge în etapa de câștig.
-                    </p>
                   </div>
-                ) : null}
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-probability">Probabilitate (%)</Label>
-                  <Input
-                    id="lead-sheet-probability"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={form.probabilityText}
-                    onChange={(e) => setForm({ ...form, probabilityText: e.target.value })}
-                    placeholder={currentStage ? `implicit ${currentStage.probabilityPct}%` : "din etapă"}
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="lead-sheet-new-tag" className="sr-only">
+                      Etichetă nouă
+                    </Label>
+                    <Input
+                      id="lead-sheet-new-tag"
+                      value={newTagText}
+                      onChange={(e) => setNewTagText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void addTag();
+                        }
+                      }}
+                      placeholder="Etichetă nouă..."
+                      list="lead-sheet-tag-suggestions"
+                      className="h-8 max-w-[200px]"
+                    />
+                    <datalist id="lead-sheet-tag-suggestions">
+                      {tagSuggestions.map((s) => (
+                        <option key={s} value={s} />
+                      ))}
+                    </datalist>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      aria-label="Adaugă eticheta"
+                      onClick={() => void addTag()}
+                      disabled={!newTagText.trim() || addingTag}
+                    >
+                      {addingTag ? (
+                        <Loader2
+                          className="h-3.5 w-3.5 animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-value">Valoare (MDL)</Label>
-                  <Input
-                    id="lead-sheet-value"
-                    type="text"
-                    inputMode="decimal"
-                    value={form.valueText}
-                    onChange={(e) => setForm({ ...form, valueText: e.target.value.replace(/[^\d.,]/g, "") })}
-                    placeholder="ex: 1500"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-source">Sursă</Label>
-                  <Select
-                    id="lead-sheet-source"
-                    value={form.source}
-                    onChange={(e) => setForm({ ...form, source: e.target.value as CrmLeadSource })}
-                  >
-                    {Object.entries(CRM_SOURCE_LABEL).map(([key, label]) => (
-                      <option key={key} value={key}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="lead-sheet-assignee">Responsabil</Label>
-                  <Select
-                    id="lead-sheet-assignee"
-                    value={form.assignedTo}
-                    onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
-                  >
-                    <option value="">— Neasignat —</option>
-                    {assigneeOptions.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.fullName}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-            </section>
 
+                {/* Acțiuni rapide */}
+                <section className="flex flex-col gap-3">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Acțiuni rapide
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {lead.phone && (
+                      <QuickActionLink
+                        href={`tel:${lead.phone}`}
+                        icon={<Phone className="h-4 w-4" aria-hidden="true" />}
+                      >
+                        Sună
+                      </QuickActionLink>
+                    )}
+                    {/* Trimiterea se face din aplicație, nu prin `mailto:`. Un mailto
+                    deschide Outlook și nu lasă nicio urmă — peste o lună,
+                    cronologia arată tăcere acolo unde au plecat cinci mesaje. */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEmailOpen(true)}
+                    >
+                      <Mail className="h-4 w-4" aria-hidden="true" />
+                      Scrie email
+                    </Button>
+                    {whatsappLink(lead.phone) && (
+                      <QuickActionLink
+                        href={whatsappLink(lead.phone) as string}
+                        icon={
+                          <MessageCircle
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                        }
+                      >
+                        WhatsApp
+                      </QuickActionLink>
+                    )}
+                    {lead.phone && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          await logCrmTouch({
+                            leadId: lead.id,
+                            channel: "whatsapp",
+                            body: "I-am scris pe WhatsApp",
+                          });
+                          onChanged();
+                        }}
+                      >
+                        Am scris pe WhatsApp
+                      </Button>
+                    )}
+                    {/* Rezultatul se alege ODATĂ cu notarea apelului, nu într-un al doilea pas:
+                    un pas separat se sare, iar un apel fără rezultat nu spune nimic raportului. */}
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="lead-sheet-call" className="sr-only">
+                        Notează apelul cu rezultatul lui
+                      </Label>
+                      {loggingCall ? (
+                        <Loader2
+                          className="h-4 w-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Phone
+                          className="h-4 w-4 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <Select
+                        id="lead-sheet-call"
+                        className="h-9 w-56"
+                        value=""
+                        disabled={loggingCall}
+                        onChange={(e) => {
+                          const outcome = e.target.value;
+                          if (outcome) void logCall(outcome as CallOutcome);
+                          e.target.value = "";
+                        }}
+                      >
+                        <option value="">Am sunat — rezultatul…</option>
+                        {CALL_OUTCOMES.map((o) => (
+                          <option key={o} value={o}>
+                            {CALL_OUTCOME_LABELS[o]}
+                          </option>
+                        ))}
+                      </Select>
+                      {typeof lead.callAttempts === "number" &&
+                        lead.callAttempts > 0 && (
+                          <span
+                            className="text-xs text-muted-foreground"
+                            title="Încercări de apel"
+                          >
+                            {lead.callAttempts} înc.
+                          </span>
+                        )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="lead-sheet-stage">Etapă</Label>
+                    <Select
+                      id="lead-sheet-stage"
+                      value={lead.stage}
+                      disabled={movingStage}
+                      onChange={(e) => requestStageChange(e.target.value)}
+                    >
+                      {stages.map((s) => (
+                        <option key={s.key} value={s.key}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </section>
+
+                {/* Detalii */}
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Detalii
+                    </h3>
+                    <Button
+                      size="sm"
+                      onClick={() => void saveDetails()}
+                      disabled={!dirty || savingDetails}
+                    >
+                      {savingDetails && (
+                        <Loader2
+                          className="h-4 w-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                      )}
+                      Salvează
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1 sm:col-span-2">
+                      <Label htmlFor="lead-sheet-name" required>
+                        Nume
+                      </Label>
+                      <Input
+                        id="lead-sheet-name"
+                        value={form.fullName}
+                        onChange={(e) =>
+                          setForm({ ...form, fullName: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 sm:col-span-2">
+                      <Label htmlFor="lead-sheet-company">Companie</Label>
+                      <Input
+                        id="lead-sheet-company"
+                        value={form.company}
+                        onChange={(e) =>
+                          setForm({ ...form, company: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-phone">Telefon</Label>
+                      <Input
+                        id="lead-sheet-phone"
+                        type="tel"
+                        value={form.phone}
+                        onChange={(e) =>
+                          setForm({ ...form, phone: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-email">Email</Label>
+                      <Input
+                        id="lead-sheet-email"
+                        type="email"
+                        value={form.email}
+                        onChange={(e) =>
+                          setForm({ ...form, email: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-interest">
+                        Curs / interes
+                      </Label>
+                      <Input
+                        id="lead-sheet-interest"
+                        value={form.interestCourse}
+                        onChange={(e) =>
+                          setForm({ ...form, interestCourse: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-product">Produs</Label>
+                      <Select
+                        id="lead-sheet-product"
+                        value={form.productId}
+                        onChange={(e) =>
+                          setForm({ ...form, productId: e.target.value })
+                        }
+                      >
+                        <option value="">— fără produs —</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </Select>
+                      {selectedProduct?.tracksStock ? (
+                        <p
+                          className={`text-xs ${selectedProduct.lowStock ? "text-destructive" : "text-muted-foreground"}`}
+                        >
+                          Stoc disponibil: {selectedProduct.qtyOnHand}{" "}
+                          {selectedProduct.unit}
+                          {selectedProduct.lowStock
+                            ? " — sub pragul de alertă"
+                            : ""}
+                        </p>
+                      ) : null}
+                    </div>
+                    {/* Cantitatea se arată doar la produsele cu stoc: la un serviciu n-ar însemna nimic
+                    și ar mai cere o decizie degeaba. */}
+                    {selectedProduct?.tracksStock ? (
+                      <div className="flex flex-col gap-1">
+                        <Label htmlFor="lead-sheet-product-qty">
+                          Cantitate
+                        </Label>
+                        <Input
+                          id="lead-sheet-product-qty"
+                          type="number"
+                          min={1}
+                          value={form.productQtyText}
+                          onChange={(e) =>
+                            setForm({ ...form, productQtyText: e.target.value })
+                          }
+                          placeholder="1"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Se scade din stoc când leadul ajunge în etapa de
+                          câștig.
+                        </p>
+                      </div>
+                    ) : null}
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-probability">
+                        Probabilitate (%)
+                      </Label>
+                      <Input
+                        id="lead-sheet-probability"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={form.probabilityText}
+                        onChange={(e) =>
+                          setForm({ ...form, probabilityText: e.target.value })
+                        }
+                        placeholder={
+                          currentStage
+                            ? `implicit ${currentStage.probabilityPct}%`
+                            : "din etapă"
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-value">Valoare (MDL)</Label>
+                      <Input
+                        id="lead-sheet-value"
+                        type="text"
+                        inputMode="decimal"
+                        value={form.valueText}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            valueText: e.target.value.replace(/[^\d.,]/g, ""),
+                          })
+                        }
+                        placeholder="ex: 1500"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-source">Sursă</Label>
+                      <Select
+                        id="lead-sheet-source"
+                        value={form.source}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            source: e.target.value as CrmLeadSource,
+                          })
+                        }
+                      >
+                        {Object.entries(CRM_SOURCE_LABEL).map(
+                          ([key, label]) => (
+                            <option key={key} value={key}>
+                              {label}
+                            </option>
+                          ),
+                        )}
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="lead-sheet-assignee">Responsabil</Label>
+                      <Select
+                        id="lead-sheet-assignee"
+                        value={form.assignedTo}
+                        onChange={(e) =>
+                          setForm({ ...form, assignedTo: e.target.value })
+                        }
+                      >
+                        <option value="">— Neasignat —</option>
+                        {assigneeOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.fullName}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+                </section>
 
                 <Separator />
 
@@ -1217,99 +1324,421 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
                   }}
                 />
               </div>
-            )}
 
-            {tab === "fisiere" && <LeadFilesTab leadId={lead.id} onToast={onToast} />}
+              {/* ── DREAPTA: ce facem noi ───────────────────────────────────────────
+                Zona de lucru: activitate, taskuri, fișiere, contacte, acte, istoric. */}
+              <div className="flex min-w-0 flex-col gap-6">
+                {/* Filele fișei. Până acum totul era un singur scroll de ~1000 de linii: taskurile
+                stăteau peste acte, actele peste formular, iar ca să ajungi la istoric derulai
+                pe lângă tot. Antetul (etapă, valoare, etichete, acțiuni rapide) rămâne mereu
+                deasupra — el e contextul, nu conținutul. */}
+                <Tabs
+                  tabs={LEAD_TABS}
+                  value={tab}
+                  onChange={setTab}
+                  aria-label="Secțiunile fișei leadului"
+                />
 
-            {tab === "contacte" && <LeadContactsTab leadId={lead.id} onToast={onToast} />}
-
-            {tab === "acte" && (
-              <div className="flex flex-col gap-6">
-            {/* Acte: oferte și contracte pornite din acest lead. Se deschid în
-                editorul de acte al FinFlow — acolo se finalizează și se trimit. */}
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Oferte și contracte</h3>
-                <Button size="sm" variant="outline" onClick={() => setNewDocOpen(true)}>
-                  <FileText className="h-4 w-4" aria-hidden="true" />
-                  Act nou
-                </Button>
-              </div>
-              {documents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Niciun act încă. „Act nou” pornește o ofertă cu datele acestui lead.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {documents.map((d) => (
-                    <li key={d.id} className="flex flex-col gap-1 rounded-lg border border-border p-2.5">
-                      <div className="flex items-center justify-between gap-2 text-sm">
-                        <Link to={docPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
-                          {d.docNumber ? `${CRM_DOC_KIND_LABELS[d.kind as keyof typeof CRM_DOC_KIND_LABELS] ?? d.kind} nr. ${d.docNumber}` : d.title}
-                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                        </Link>
-                        <Badge variant={d.status === "draft" ? "secondary" : "default"}>
-                          {CRM_DOC_STATUS_LABELS[d.status] ?? d.status}
-                        </Badge>
-                      </div>
-
-                      {d.outcomeReason && (
-                        <p className="text-xs text-destructive">Motiv refuz: {d.outcomeReason}</p>
-                      )}
-
-                      {/* Ce a răspuns clientul. Apare doar după ce actul a plecat: o ciornă n-a
-                          ajuns la nimeni, deci n-are cum să fie semnată sau refuzată. */}
-                      {(d.status === "sent" || d.status === "final") && (
-                        <div className="flex items-center gap-2">
+                {tab === "activitate" && (
+                  <div className="flex flex-col gap-6">
+                    {askNextAction && (
+                      <Alert
+                        variant="warning"
+                        icon={
+                          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                        }
+                      >
+                        <div className="flex flex-col gap-2">
+                          <p>
+                            Ai notat activitatea, dar leadul a rămas fără pas
+                            următor. Adaugă un task mai jos — altfel nimeni nu
+                            știe când se revine la el.
+                          </p>
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={docOutcomeId === d.id}
-                            onClick={() => void markOutcome(d.id, "signed")}
+                            className="w-fit"
+                            onClick={() => setAskNextAction(false)}
                           >
-                            {docOutcomeId === d.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                            ) : (
-                              <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                            )}
-                            Semnat
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={docOutcomeId === d.id}
-                            onClick={() => void markOutcome(d.id, "rejected")}
-                          >
-                            <X className="h-3.5 w-3.5" aria-hidden="true" />
-                            Refuzat
+                            Am înțeles
                           </Button>
                         </div>
+                      </Alert>
+                    )}
+                    {/* Cadențele stau lângă taskuri, nu într-o filă proprie: sunt tot „ce urmează",
+                    doar că programat dinainte. Secțiunea dispare complet dacă workspace-ul n-are
+                    nicio cadență. */}
+                    <LeadCadencePanel
+                      leadId={lead.id}
+                      onToast={onToast}
+                      onChanged={onChanged}
+                    />
+
+                    {/* Taskuri */}
+                    <section className="flex flex-col gap-3">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Taskuri
+                      </h3>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <div className="flex flex-1 flex-col gap-1">
+                          <Label
+                            htmlFor="lead-sheet-new-task"
+                            className="sr-only"
+                          >
+                            Task nou
+                          </Label>
+                          <Input
+                            id="lead-sheet-new-task"
+                            value={newTaskTitle}
+                            onChange={(e) => setNewTaskTitle(e.target.value)}
+                            placeholder="Task nou (ex: Revino cu oferta)..."
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <div className="flex flex-col gap-1">
+                            <Label
+                              htmlFor="lead-sheet-new-task-due"
+                              className="sr-only"
+                            >
+                              Scadență
+                            </Label>
+                            <Input
+                              id="lead-sheet-new-task-due"
+                              type="date"
+                              value={newTaskDueDate}
+                              onChange={(e) =>
+                                setNewTaskDueDate(e.target.value)
+                              }
+                              className="w-[150px]"
+                            />
+                          </div>
+                          <Button
+                            onClick={() => void addTask()}
+                            disabled={!newTaskTitle.trim() || addingTask}
+                          >
+                            {addingTask ? (
+                              <Loader2
+                                className="h-4 w-4 animate-spin"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <Plus className="h-4 w-4" aria-hidden="true" />
+                            )}
+                            Adaugă
+                          </Button>
+                        </div>
+                      </div>
+
+                      {tasks.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          Niciun task pe acest lead încă.
+                        </p>
+                      ) : (
+                        <ul className="flex flex-col gap-2">
+                          {tasks.map((task) => {
+                            const overdue = isTaskOverdue(task);
+                            const busy = taskActionId === task.id;
+                            return (
+                              <li
+                                key={task.id}
+                                className={cn(
+                                  "flex items-center gap-2 rounded-lg border p-2.5",
+                                  overdue
+                                    ? "border-destructive/40 bg-destructive/5"
+                                    : "border-border",
+                                )}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => void toggleTaskDone(task)}
+                                  disabled={busy}
+                                  aria-label={
+                                    task.status === "done"
+                                      ? `Redeschide taskul ${task.title}`
+                                      : `Încheie taskul ${task.title}`
+                                  }
+                                  className={cn(
+                                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors",
+                                    task.status === "done"
+                                      ? "border-success bg-success/10 text-success"
+                                      : "border-border text-muted-foreground hover:bg-muted/60",
+                                  )}
+                                >
+                                  {task.status === "done" ? (
+                                    <Undo2
+                                      className="h-4 w-4"
+                                      aria-hidden="true"
+                                    />
+                                  ) : (
+                                    <Check
+                                      className="h-4 w-4"
+                                      aria-hidden="true"
+                                    />
+                                  )}
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className={cn(
+                                      "text-sm text-foreground",
+                                      task.status === "done" &&
+                                        "text-muted-foreground line-through",
+                                    )}
+                                  >
+                                    {task.title}
+                                  </p>
+                                  {task.dueAt && (
+                                    <p
+                                      className={cn(
+                                        "text-xs",
+                                        overdue
+                                          ? "font-semibold text-destructive"
+                                          : "text-muted-foreground",
+                                      )}
+                                    >
+                                      Scadent {formatTaskDue(task.dueAt)}
+                                      {task.status === "snoozed" && " · amânat"}
+                                    </p>
+                                  )}
+                                </div>
+                                {task.status !== "done" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Amână taskul ${task.title} cu o zi`}
+                                    onClick={() => void snoozeTaskOneDay(task)}
+                                    disabled={busy}
+                                  >
+                                    <Clock
+                                      className="h-4 w-4"
+                                      aria-hidden="true"
+                                    />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Șterge taskul ${task.title}`}
+                                  onClick={() => void deleteTaskRow(task)}
+                                  disabled={busy}
+                                >
+                                  <Trash2
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  />
+                                </Button>
+                              </li>
+                            );
+                          })}
+                        </ul>
                       )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-              </div>
-            )}
+                    </section>
 
-            {tab === "istoric" && (
-              <div className="flex flex-col gap-4">
-                <LeadPersonHistoryTab
-                  leadId={lead.id}
-                  stages={stages}
-                  onOpenLead={(id) => {
-                    // Fișa e controlată de părinte (`leadId`): fără el, „Deschide" dintr-un lead
-                    // înrudit n-ar avea unde naviga.
-                    onOpenLead?.(id);
-                  }}
-                />
-                {/* Ce s-a SCHIMBAT în fișă și de către cine — altă întrebare decât ce s-a
+                    <Separator />
+
+                    {/* Activitate */}
+                    <section className="flex flex-col gap-3">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Activitate
+                      </h3>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="lead-sheet-note" className="sr-only">
+                          Notă nouă
+                        </Label>
+                        <Textarea
+                          id="lead-sheet-note"
+                          value={noteBody}
+                          onChange={(e) => setNoteBody(e.target.value)}
+                          placeholder="Adaugă o notă..."
+                          rows={2}
+                        />
+                        <Button
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => void addNote()}
+                          disabled={!noteBody.trim() || addingNote}
+                        >
+                          {addingNote && (
+                            <Loader2
+                              className="h-4 w-4 animate-spin"
+                              aria-hidden="true"
+                            />
+                          )}
+                          Adaugă notă
+                        </Button>
+                      </div>
+                      <ul className="flex flex-col gap-2">
+                        {interactions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Nicio interacțiune încă.
+                          </p>
+                        ) : (
+                          interactions.map((item) => (
+                            <li key={item.id} className="flex gap-2">
+                              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                                {INTERACTION_ICON[item.type]}
+                              </div>
+                              <div className="flex-1 rounded-lg border border-border bg-card p-2.5">
+                                <div className="mb-0.5 flex items-center justify-between gap-2">
+                                  <span className="text-xs font-semibold text-foreground">
+                                    {INTERACTION_LABEL[item.type]}
+                                  </span>
+                                  <time
+                                    className="text-[11px] text-muted-foreground"
+                                    dateTime={item.occurredAt}
+                                  >
+                                    {formatInteractionDate(item.occurredAt)}
+                                  </time>
+                                </div>
+                                {item.body && (
+                                  <p className="whitespace-pre-wrap text-sm text-foreground/80">
+                                    {item.body}
+                                  </p>
+                                )}
+                              </div>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </section>
+                  </div>
+                )}
+
+                {tab === "fisiere" && (
+                  <LeadFilesTab leadId={lead.id} onToast={onToast} />
+                )}
+
+                {tab === "contacte" && (
+                  <LeadContactsTab leadId={lead.id} onToast={onToast} />
+                )}
+
+                {tab === "acte" && (
+                  <div className="flex flex-col gap-6">
+                    {/* Acte: oferte și contracte pornite din acest lead. Se deschid în
+                editorul de acte al FinFlow — acolo se finalizează și se trimit. */}
+                    <section className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-foreground">
+                          Oferte și contracte
+                        </h3>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setNewDocOpen(true)}
+                        >
+                          <FileText className="h-4 w-4" aria-hidden="true" />
+                          Act nou
+                        </Button>
+                      </div>
+                      {documents.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          Niciun act încă. „Act nou” pornește o ofertă cu datele
+                          acestui lead.
+                        </p>
+                      ) : (
+                        <ul className="flex flex-col gap-2">
+                          {documents.map((d) => (
+                            <li
+                              key={d.id}
+                              className="flex flex-col gap-1 rounded-lg border border-border p-2.5"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-sm">
+                                <Link
+                                  to={docPath(d.id)}
+                                  className="inline-flex items-center gap-1 hover:underline"
+                                >
+                                  {d.docNumber
+                                    ? `${CRM_DOC_KIND_LABELS[d.kind as keyof typeof CRM_DOC_KIND_LABELS] ?? d.kind} nr. ${d.docNumber}`
+                                    : d.title}
+                                  <ExternalLink
+                                    className="h-3 w-3"
+                                    aria-hidden="true"
+                                  />
+                                </Link>
+                                <Badge
+                                  variant={
+                                    d.status === "draft"
+                                      ? "secondary"
+                                      : "default"
+                                  }
+                                >
+                                  {CRM_DOC_STATUS_LABELS[d.status] ?? d.status}
+                                </Badge>
+                              </div>
+
+                              {d.outcomeReason && (
+                                <p className="text-xs text-destructive">
+                                  Motiv refuz: {d.outcomeReason}
+                                </p>
+                              )}
+
+                              {/* Ce a răspuns clientul. Apare doar după ce actul a plecat: o ciornă n-a
+                          ajuns la nimeni, deci n-are cum să fie semnată sau refuzată. */}
+                              {(d.status === "sent" ||
+                                d.status === "final") && (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={docOutcomeId === d.id}
+                                    onClick={() =>
+                                      void markOutcome(d.id, "signed")
+                                    }
+                                  >
+                                    {docOutcomeId === d.id ? (
+                                      <Loader2
+                                        className="h-3.5 w-3.5 animate-spin"
+                                        aria-hidden="true"
+                                      />
+                                    ) : (
+                                      <Check
+                                        className="h-3.5 w-3.5"
+                                        aria-hidden="true"
+                                      />
+                                    )}
+                                    Semnat
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={docOutcomeId === d.id}
+                                    onClick={() =>
+                                      void markOutcome(d.id, "rejected")
+                                    }
+                                  >
+                                    <X
+                                      className="h-3.5 w-3.5"
+                                      aria-hidden="true"
+                                    />
+                                    Refuzat
+                                  </Button>
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
+                )}
+
+                {tab === "istoric" && (
+                  <div className="flex flex-col gap-4">
+                    <LeadPersonHistoryTab
+                      leadId={lead.id}
+                      stages={stages}
+                      onOpenLead={(id) => {
+                        // Fișa e controlată de părinte (`leadId`): fără el, „Deschide" dintr-un lead
+                        // înrudit n-ar avea unde naviga.
+                        onOpenLead?.(id);
+                      }}
+                    />
+                    {/* Ce s-a SCHIMBAT în fișă și de către cine — altă întrebare decât ce s-a
                     DISCUTAT cu clientul (aia e cronologia din „Activitate"). */}
-                <LeadAuditTrail leadId={lead.id} />
+                    <LeadAuditTrail leadId={lead.id} />
+                  </div>
+                )}
               </div>
-            )}
-
+            </div>
           </div>
         )}
       </Sheet>
@@ -1349,7 +1778,15 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
  * `Button.tsx` + `HashRouter`) — greșit pentru `tel:`/`mailto:`, care au nevoie de navigare
  * reală de browser, nu de client-side routing. De-aici un `<a>` simplu, stilizat ca `outline`.
  */
-function QuickActionLink({ href, icon, children }: { href: string; icon: ReactNode; children: ReactNode }) {
+function QuickActionLink({
+  href,
+  icon,
+  children,
+}: {
+  href: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <a
       href={href}

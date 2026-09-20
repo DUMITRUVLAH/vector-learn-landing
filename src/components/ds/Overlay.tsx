@@ -109,11 +109,14 @@ export interface SheetProps {
   title: string;
   description?: string;
   side?: "left" | "right";
-  size?: "sm" | "md" | "lg";
+  /** `full` = ecran întreg. Pentru fișe de lucru (fișa leadului), unde panoul lateral obliga la
+   *  un scroll lung printr-o singură coloană: pe ecran întreg încap două, context în stânga și
+   *  lucrul în dreapta. */
+  size?: "sm" | "md" | "lg" | "full";
   children?: ReactNode;
 }
 
-const SHEET_SIZES = { sm: "max-w-md", md: "max-w-xl", lg: "max-w-3xl" } as const;
+const SHEET_SIZES = { sm: "max-w-md", md: "max-w-xl", lg: "max-w-3xl", full: "max-w-none" } as const;
 
 export function Sheet({ open, onClose, title, description, side = "right", size = "md", children }: SheetProps) {
   useDismiss(open, onClose);
@@ -133,7 +136,9 @@ export function Sheet({ open, onClose, title, description, side = "right", size 
         className={cn(
           "absolute inset-y-0 w-full overflow-y-auto border-border bg-background p-6 shadow-xl animate-slide-in",
           SHEET_SIZES[size],
-          side === "right" ? "right-0 border-l" : "left-0 border-r",
+          // Pe ecran întreg nu mai există „lateral": panoul ocupă tot, deci nici bordura de
+          // margine n-are ce despărți.
+          size === "full" ? "inset-x-0" : side === "right" ? "right-0 border-l" : "left-0 border-r",
         )}
       >
         <div className="mb-6 flex flex-col gap-1 pr-8">

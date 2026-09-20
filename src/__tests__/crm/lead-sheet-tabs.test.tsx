@@ -209,8 +209,8 @@ describe("Fișa leadului pe file", () => {
     setCrmLeadFieldValue.mockResolvedValue({ id: "v1", leadId: "lead-1", fieldId: "f1", value: "C-114" });
 
     renderSheet();
-    await screen.findByRole("tab", { name: "Detalii" });
-    fireEvent.click(screen.getByRole("tab", { name: "Detalii" }));
+    // „Detalii" nu mai e o filă: datele clientului stau permanent în coloana din stânga.
+    await screen.findByLabelText("Nr. contract");
 
     const input = await screen.findByLabelText("Nr. contract");
     fireEvent.change(input, { target: { value: "C-114" } });
@@ -326,13 +326,13 @@ describe("Modificările din fișă", () => {
 });
 
 describe("Drepturile persoanei (GDPR) pe fișă", () => {
-  it("[blocant] cele trei drepturi sunt în „Detalii”, unde se uită omul când primește cererea", async () => {
+  it("[blocant] cele trei drepturi stau lângă datele persoanei, unde se uită omul când primește cererea", async () => {
     getCrmLeadDetail.mockResolvedValue(makeDetail());
     listCrmCustomFields.mockResolvedValue({ items: [] });
     listCrmLeadFieldValues.mockResolvedValue({ items: [] });
 
     renderSheet();
-    fireEvent.click(await screen.findByRole("tab", { name: "Detalii" }));
+    await screen.findByLabelText("Nume*");
 
     // Exportul e un link, nu un buton: serverul trimite un fișier.
     const exportLink = await screen.findByRole("link", { name: /Exportă datele/i });
@@ -349,10 +349,48 @@ describe("Drepturile persoanei (GDPR) pe fișă", () => {
     listCrmLeadFieldValues.mockResolvedValue({ items: [] });
 
     renderSheet();
-    fireEvent.click(await screen.findByRole("tab", { name: "Detalii" }));
+    await screen.findByLabelText("Nume*");
 
     expect(await screen.findByText(/Consimțământ retras/)).toBeInTheDocument();
     // Butonul de retragere dispare: nu se retrage de două ori.
     expect(screen.queryByRole("button", { name: /Retrage consimțământul/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("Fișa pe două coloane, pe ecran întreg", () => {
+  it("[blocant] datele clientului sunt la vedere ODATĂ cu zona de lucru, nu într-o filă separată", async () => {
+    // Regresia de evitat: ca să te uiți la telefonul omului în timp ce scrii nota, trebuia să
+    // pleci din notă. Acum telefonul și caseta de notă trebuie să existe în ACELAȘI ecran.
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    listCrmCustomFields.mockResolvedValue({ items: [] });
+    listCrmLeadFieldValues.mockResolvedValue({ items: [] });
+
+    renderSheet();
+
+    expect(await screen.findByLabelText("Telefon")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Adaugă o notă...")).toBeInTheDocument();
+    // Iar „Detalii" nu mai e o filă în care să te pierzi.
+    expect(screen.queryByRole("tab", { name: "Detalii" })).not.toBeInTheDocument();
+  });
+
+  it("[blocant] filele rămase sunt DOAR zona de lucru", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    listCrmCustomFields.mockResolvedValue({ items: [] });
+    listCrmLeadFieldValues.mockResolvedValue({ items: [] });
+
+    renderSheet();
+    await screen.findByRole("tab", { name: "Activitate" });
+
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["Activitate", "Fișiere", "Contacte", "Acte", "Istoric"]);
+  });
+
+  it("starea afacerii (etapă, valoare, responsabil) stă în bara de sus, nu îngropată în formular", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    listCrmCustomFields.mockResolvedValue({ items: [] });
+    listCrmLeadFieldValues.mockResolvedValue({ items: [] });
+
+    renderSheet();
+    expect(await screen.findByText(/Responsabil:/)).toBeInTheDocument();
   });
 });

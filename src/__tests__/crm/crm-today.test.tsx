@@ -69,6 +69,18 @@ listCrmTagSuggestions.mockResolvedValue({ items: [] });
 listCrmLostReasons.mockResolvedValue({ items: [] });
 
 vi.mock("@/lib/api/crm", () => ({
+  // Fișa arată acum câmpurile personalizate și cadențele FĂRĂ să mai treacă prin fila
+  // „Detalii" — deci le cere la deschidere. Fără dublurile astea, un `vi.mock` incomplet
+  // aruncă într-un efect, iar React demontează tot arborele (testul vede un ecran gol).
+  listCrmCustomFields: vi.fn().mockResolvedValue({ items: [] }),
+  listCrmLeadFieldValues: vi.fn().mockResolvedValue({ items: [] }),
+  setCrmLeadFieldValue: vi.fn().mockResolvedValue({}),
+  listCrmCadences: vi.fn().mockResolvedValue({ items: [] }),
+  listCrmLeadEnrollments: vi.fn().mockResolvedValue({ items: [] }),
+  // Panoul GDPR stă acum lângă datele persoanei, deci se randează odată cu fișa.
+  crmGdprExportUrl: (id: string) => `/api/crm/gdpr/export/${id}`,
+  revokeCrmLeadConsent: vi.fn().mockResolvedValue({}),
+  anonymizeCrmLead: vi.fn().mockResolvedValue({}),
   // Catalogul de produse: fișa îl cere pentru select-ul „Produs".
   listCrmProducts: vi.fn().mockResolvedValue({ items: [] }),
   // Drepturile utilizatorului: ecranele CRM le cer ca să știe ce butoane să arate.
