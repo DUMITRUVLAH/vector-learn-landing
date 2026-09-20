@@ -16,7 +16,7 @@
  * ceea ce e altceva decât cine vinde cât.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Filter } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Badge, Card, EmptyState, Label, Select } from "@/components/ds";
 import { SegmentFilterBar } from "@/components/crm/SegmentFilterBar";
@@ -178,11 +178,10 @@ export function CrmFunnelPage() {
         <Card className="space-y-3 p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Pâlnia echipei</h2>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>bani</span>
-              <Filter className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>cădere</span>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Panta fiecărei benzi ESTE rata de cădere — cu cât se îngustează mai tare, cu atât se pierd
+              mai multe acolo.
+            </p>
           </div>
 
           {loading && !data ? (
