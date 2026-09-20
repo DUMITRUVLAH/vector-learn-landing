@@ -275,6 +275,102 @@ export async function moveFile(
   await driveJson<{ id: string }>(url, accessToken, { method: "PATCH" });
 }
 
+/** Metadatele de care are nevoie manifestul de arhivă. `md5Checksum` vine de la Drive, nu îl calculăm noi. */
+export interface DriveFileMeta {
+  id: string;
+  name: string;
+  size: number | null;
+  md5Checksum: string | null;
+  modifiedTime: string | null;
+}
+
+export async function getFileMeta(accessToken: string, fileId: string): Promise<DriveFileMeta | null> {
+  const url = `${DRIVE_FILES}/${encodeURIComponent(fileId)}?fields=id,name,size,md5Checksum,modifiedTime,trashed`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) return null;
+  const d = (await res.json()) as {
+    id: string; name?: string; size?: string; md5Checksum?: string; modifiedTime?: string; trashed?: boolean;
+  };
+  if (d.trashed) return null;
+  return {
+    id: d.id,
+    name: d.name ?? "",
+    size: d.size ? Number(d.size) : null,
+    md5Checksum: d.md5Checksum ?? null,
+    modifiedTime: d.modifiedTime ?? null,
+  };
+}
+
+/** Copiază un fișier în altă mapă. Copia e un fișier nou: modificarea originalului n-o mai atinge. */
+export async function copyFile(
+  accessToken: string,
+  fileId: string,
+  params: { name: string; parentId: string }
+): Promise<string> {
+  const data = await driveJson<{ id: string }>(
+    `${DRIVE_FILES}/${encodeURIComponent(fileId)}/copy?fields=id`,
+    accessToken,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: params.name, parents: [params.parentId] }),
+    }
+  );
+  return data.id;
+}
+
+/**
+ * Blochează conținutul unui fișier (`contentRestrictions.readOnly`).
+ *
+ * E cel mai tare lucru pe care îl oferă Drive pentru „nu se mai atinge": fișierul nu mai poate fi
+ * editat, nici de noi. NU împiedică ștergerea de către proprietarul Drive-ului — Google nu are așa
+ * ceva, iar manifestul cu amprente e acolo tocmai ca o ștergere să fie detectabilă.
+ */
+export async function lockFile(accessToken: string, fileId: string, reason: string): Promise<boolean> {
+  try {
+    await driveJson<{ id: string }>(`${DRIVE_FILES}/${encodeURIComponent(fileId)}?fields=id`, accessToken, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contentRestrictions: [{ readOnly: true, reason: reason.slice(0, 120) }] }),
+    });
+    return true;
+  } catch {
+    // Unele conturi (sau fișierele deja blocate) refuză restricția. Arhiva rămâne validă, doar că
+    // fișierul acela apare ca neblocat în raport — mai bine o arhivă parțial blocată decât niciuna.
+    return false;
+  }
+}
+
+/** Urcă manifestul ca text simplu, ca să poată fi citit direct în Drive, fără descărcare. */
+export async function uploadTextFile(
+  accessToken: string,
+  params: { name: string; parentId: string; text: string }
+): Promise<string> {
+  const boundary = `vector-${Math.random().toString(36).slice(2)}`;
+  const body = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+        `${JSON.stringify({ name: params.name, parents: [params.parentId] })}\r\n` +
+        `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n`,
+      "utf8"
+    ),
+    Buffer.from(params.text, "utf8"),
+    Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+  ]);
+  const res = await fetch(`${DRIVE_UPLOAD}?uploadType=multipart&fields=id`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": `multipart/related; boundary=${boundary}`,
+    },
+    body: new Uint8Array(body),
+  });
+  if (!res.ok) {
+    throw new Error(`drive_manifest_${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+  }
+  return ((await res.json()) as { id: string }).id;
+}
+
 /** Revocă token-ul la deconectare — altfel aplicația rămâne în lista de acces a contului Google. */
 export async function revokeDriveToken(refreshToken: string): Promise<void> {
   await fetch("https://oauth2.googleapis.com/revoke", {

@@ -53,4 +53,18 @@ export const PAR_DRIVE_ENSURE_STATEMENTS: string[] = [
 )`,
   `CREATE INDEX IF NOT EXISTS "par_drive_files_tenant_idx" ON "par_drive_files" ("tenant_id")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "par_drive_files_tenant_par_uniq" ON "par_drive_files" ("tenant_id","par_id")`,
+  `CREATE TABLE IF NOT EXISTS "par_drive_archives" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+	"label" varchar(40) NOT NULL,
+	"folder_id" varchar(200),
+	"manifest_file_id" varchar(200),
+	"file_count" integer DEFAULT 0 NOT NULL,
+	"locked_count" integer DEFAULT 0 NOT NULL,
+	"status" varchar(20) DEFAULT 'ok' NOT NULL,
+	"message" varchar(500),
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+)`,
+  `CREATE INDEX IF NOT EXISTS "par_drive_archives_tenant_idx" ON "par_drive_archives" ("tenant_id")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "par_drive_archives_tenant_label_uniq" ON "par_drive_archives" ("tenant_id","label")`,
 ];

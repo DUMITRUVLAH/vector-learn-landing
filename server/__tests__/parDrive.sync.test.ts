@@ -255,6 +255,31 @@ describe("runWeeklyDriveSync", () => {
     expect(summaries[0].tenantId).toBe(tenantId);
   });
 
+  it("[blocant] o rulare neterminată se reia a doua zi, nu peste o săptămână", async () => {
+    const { runWeeklyDriveSync } = await import("../lib/par/driveSync");
+    // Luni s-a oprit la limita de timp; marți NU e ziua aleasă, dar restul trebuie urcat oricum —
+    // altfel dosarele rămase ar aștepta șapte zile, exact ce owner-ul a numit „lasă pe dinafară".
+    await testDb
+      .update(parDriveConnections)
+      .set({ syncDayOfWeek: 1, lastSyncAt: new Date("2026-09-07T06:00:00Z"), lastSyncStatus: "partial" })
+      .where(eq(parDriveConnections.tenantId, tenantId));
+
+    const tuesday = new Date("2026-09-08T06:00:00Z");
+    const summaries = await runWeeklyDriveSync(tuesday);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].tenantId).toBe(tenantId);
+  });
+
+  it("o rulare încheiată curat nu se mai reia în afara zilei alese", async () => {
+    const { runWeeklyDriveSync } = await import("../lib/par/driveSync");
+    await testDb
+      .update(parDriveConnections)
+      .set({ syncDayOfWeek: 1, lastSyncAt: new Date("2026-09-07T06:00:00Z"), lastSyncStatus: "ok" })
+      .where(eq(parDriveConnections.tenantId, tenantId));
+
+    expect(await runWeeklyDriveSync(new Date("2026-09-08T06:00:00Z"))).toHaveLength(0);
+  });
+
   it("nu reia sincronizarea de două ori în aceeași zi", async () => {
     const { runWeeklyDriveSync } = await import("../lib/par/driveSync");
     const monday = new Date("2026-09-07T06:00:00Z");

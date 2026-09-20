@@ -46,6 +46,7 @@ import {
   uploadPdf,
 } from "./googleDrive";
 import { ancestorKeys, driveFolderPathFor, type DriveFolderPath } from "./driveTree";
+import { runArchiveForTenant, type ArchiveSummary } from "./driveArchive";
 
 /** Câte dosare urcăm într-o singură rulare, ca invocarea să nu atingă limita de 60s a Vercel. */
 export const DEFAULT_BATCH_LIMIT = 8;
@@ -273,6 +274,9 @@ export async function runDriveSyncForTenant(
     }
 
     const fingerprint = sourceFingerprint([
+      // requestNo e în amprentă pentru că el dă NUMELE fișierului din Drive: dacă cererea se
+      // renumerotează, fișierul trebuie redenumit, chiar dacă restul conținutului e identic.
+      par.requestNo,
       par.updatedAt,
       par.paidAt,
       ...attachments
@@ -409,20 +413,43 @@ export async function runDriveSyncForTenant(
  * mai departe dacă nu e ziua aleasă de workspace — „săptămânal" e o decizie de date, nu de
  * infrastructură, și fiecare organizație își alege singură ziua.
  */
-export async function runWeeklyDriveSync(now = new Date()): Promise<DriveSyncSummary[]> {
+export async function runWeeklyDriveSync(
+  now = new Date(),
+  archiveSummaries: ArchiveSummary[] = []
+): Promise<DriveSyncSummary[]> {
   // ISO-8601: 1 = luni … 7 = duminică (getDay() dă 0 pentru duminică).
   const isoDay = now.getDay() === 0 ? 7 : now.getDay();
 
   const connections = await db
-    .select({ tenantId: parDriveConnections.tenantId, lastSyncAt: parDriveConnections.lastSyncAt })
+    .select({
+      tenantId: parDriveConnections.tenantId,
+      lastSyncAt: parDriveConnections.lastSyncAt,
+      lastSyncStatus: parDriveConnections.lastSyncStatus,
+      syncDayOfWeek: parDriveConnections.syncDayOfWeek,
+    })
     .from(parDriveConnections)
-    .where(and(eq(parDriveConnections.syncEnabled, true), eq(parDriveConnections.syncDayOfWeek, isoDay)));
+    .where(eq(parDriveConnections.syncEnabled, true));
 
   const summaries: DriveSyncSummary[] = [];
   for (const conn of connections) {
     // Rulat deja azi (retry manual, cron dublu): nu reluăm de la capăt în aceeași zi.
     if (conn.lastSyncAt && conn.lastSyncAt.toDateString() === now.toDateString()) continue;
-    summaries.push(await runDriveSyncForTenant(conn.tenantId));
+
+    // Ziua aleasă de organizație SAU o rulare rămasă neterminată. A doua condiție e cea care face
+    // ca nimic să nu rămână pe dinafară: un lot se oprește la limita de timp a platformei, iar
+    // fără recuperare zilnică restul ar aștepta o săptămână întreagă.
+    const isChosenDay = conn.syncDayOfWeek === isoDay;
+    const unfinished = conn.lastSyncStatus === "partial" || conn.lastSyncStatus === "error";
+    if (!isChosenDay && !unfinished) continue;
+
+    const summary = await runDriveSyncForTenant(conn.tenantId);
+    summaries.push(summary);
+
+    // Sincronizarea s-a terminat curat: dacă a venit vremea, facem și arhiva periodică.
+    if (summary.status === "ok" && summary.remaining === 0) {
+      const archive = await runArchiveForTenant(conn.tenantId, { now });
+      if (archive.status !== "skipped") archiveSummaries.push(archive);
+    }
   }
   return summaries;
 }

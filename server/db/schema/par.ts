@@ -1163,11 +1163,53 @@ export const parDriveConnections = pgTable(
     /** ok | partial | error — „partial" = batch-ul s-a oprit la limita de timp, mai are de urcat. */
     lastSyncStatus: varchar("last_sync_status", { length: 20 }),
     lastSyncMessage: varchar("last_sync_message", { length: 500 }),
+    /** Arhiva periodică: o copie înghețată a dosarelor, ca istoricul să nu depindă de fișierul viu. */
+    archiveEnabled: boolean("archive_enabled").notNull().default(true),
+    /** La câte zile se face o arhivă. Owner-ul a cerut 2 săptămâni. */
+    archiveIntervalDays: integer("archive_interval_days").notNull().default(14),
+    lastArchiveAt: timestamp("last_archive_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("par_drive_connections_tenant_idx").on(t.tenantId),
+  })
+);
+
+/**
+ * O arhivă = o fotografie a dosarelor la un moment dat.
+ *
+ * De ce copii și nu doar o listă: dosarul viu se rescrie când se adaugă un document. Fără copie,
+ * „istoricul" ar fi doar ultima versiune, adică exact ce nu e un istoric. Copiile primesc
+ * `contentRestrictions.readOnly` la Drive (nu se mai pot edita), iar manifestul cu amprente MD5
+ * face detectabilă orice ștergere sau înlocuire ulterioară.
+ *
+ * Ce NU putem promite: proprietarul Drive-ului își poate șterge oricând fișierele. Google nu oferă
+ * niciun mecanism prin care o aplicație să împiedice asta.
+ */
+export const parDriveArchives = pgTable(
+  "par_drive_archives",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Eticheta mapei din Drive, ex. „2026-09-20". */
+    label: varchar("label", { length: 40 }).notNull(),
+    folderId: varchar("folder_id", { length: 200 }),
+    /** Manifestul cu numele, mărimea și MD5-ul fiecărei copii. */
+    manifestFileId: varchar("manifest_file_id", { length: 200 }),
+    fileCount: integer("file_count").notNull().default(0),
+    /** Câte copii au primit blocarea la scriere (restul rămân editabile — se vede în manifest). */
+    lockedCount: integer("locked_count").notNull().default(0),
+    /** ok | partial | error */
+    status: varchar("status", { length: 20 }).notNull().default("ok"),
+    message: varchar("message", { length: 500 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_drive_archives_tenant_idx").on(t.tenantId),
+    labelUniq: uniqueIndex("par_drive_archives_tenant_label_uniq").on(t.tenantId, t.label),
   })
 );
 
@@ -1260,6 +1302,7 @@ export type ParDriveConnection = typeof parDriveConnections.$inferSelect;
 export type NewParDriveConnection = typeof parDriveConnections.$inferInsert;
 export type ParDriveFolder = typeof parDriveFolders.$inferSelect;
 export type ParDriveFile = typeof parDriveFiles.$inferSelect;
+export type ParDriveArchive = typeof parDriveArchives.$inferSelect;
 export type NewParDelegation = typeof parDelegations.$inferInsert;
 export type ParQuote = typeof parQuotes.$inferSelect;
 export type NewParQuote = typeof parQuotes.$inferInsert;

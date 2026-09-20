@@ -24,6 +24,32 @@ export interface ParDriveStatus {
   syncedCount: number;
   errorCount: number;
   pendingCount: number;
+  archiveEnabled: boolean;
+  archiveIntervalDays: number;
+  lastArchiveAt: string | null;
+  /** True când a trecut intervalul și următoarea sincronizare completă va declanșa arhiva. */
+  archiveDue: boolean;
+  archives: ParDriveArchive[];
+}
+
+export interface ParDriveArchive {
+  /** Data arhivei, folosită și ca nume de mapă în Drive: „2026-09-20". */
+  label: string;
+  folderId: string | null;
+  fileCount: number;
+  /** Câte copii au primit blocarea la scriere din Drive. */
+  lockedCount: number;
+  status: "ok" | "partial" | "error";
+  createdAt: string;
+}
+
+export interface ParDriveArchiveSummary {
+  status: "ok" | "partial" | "error" | "skipped";
+  label: string | null;
+  copied: number;
+  locked: number;
+  failed: number;
+  message: string;
 }
 
 export interface ParDriveSyncSummary {
@@ -47,6 +73,8 @@ export function updateDriveSettings(patch: {
   syncEnabled?: boolean;
   syncDayOfWeek?: number;
   rootFolderName?: string;
+  archiveEnabled?: boolean;
+  archiveIntervalDays?: number;
 }): Promise<{ ok: true; renamed: boolean }> {
   return api("/api/par/drive/settings", { method: "PATCH", body: JSON.stringify(patch) });
 }
@@ -57,6 +85,31 @@ export function syncDriveNow(): Promise<ParDriveSyncSummary> {
 
 export function resyncDriveAll(): Promise<ParDriveSyncSummary> {
   return api<ParDriveSyncSummary>("/api/par/drive/resync-all", { method: "POST" });
+}
+
+export function archiveDriveNow(): Promise<ParDriveArchiveSummary> {
+  return api<ParDriveArchiveSummary>("/api/par/drive/archive-now", { method: "POST" });
+}
+
+/**
+ * Rulează loturi în lanț până nu mai rămâne nimic.
+ *
+ * O invocare urcă un lot, ca să nu depășească limita de timp a platformei. Fără bucla asta, omul
+ * ar trebui să apese butonul din nou și din nou — și, mai rău, ar putea crede că restul s-a pierdut.
+ * `onProgress` alimentează textul din buton, ca așteptarea să fie explicată, nu doar lungă.
+ */
+export async function syncDriveUntilDone(
+  onProgress?: (summary: ParDriveSyncSummary, round: number) => void,
+  maxRounds = 25
+): Promise<ParDriveSyncSummary> {
+  let last = await syncDriveNow();
+  onProgress?.(last, 1);
+  for (let round = 2; round <= maxRounds; round++) {
+    if (last.status === "error" || last.status === "skipped" || last.remaining === 0) break;
+    last = await syncDriveNow();
+    onProgress?.(last, round);
+  }
+  return last;
 }
 
 export function disconnectDrive(): Promise<{ ok: true }> {

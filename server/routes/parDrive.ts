@@ -20,7 +20,13 @@ import { z } from "zod";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { parDriveConnections, parDriveFiles, parDriveFolders, parRequests } from "../db/schema/par";
+import {
+  parDriveArchives,
+  parDriveConnections,
+  parDriveFiles,
+  parDriveFolders,
+  parRequests,
+} from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { encrypt, decrypt } from "../lib/crypto";
@@ -33,6 +39,7 @@ import {
   revokeDriveToken,
 } from "../lib/par/googleDrive";
 import { runDriveSyncForTenant, runWeeklyDriveSync } from "../lib/par/driveSync";
+import { archiveDue, runArchiveForTenant } from "../lib/par/driveArchive";
 
 export const parDriveRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -66,8 +73,9 @@ parDriveCronRoutes.get("/run-weekly", async (c) => {
   if ((c.req.header("authorization") ?? "") !== `Bearer ${secret}`) {
     return c.json({ error: "unauthorized" }, 401);
   }
-  const summaries = await runWeeklyDriveSync();
-  return c.json({ ok: true, tenants: summaries.length, summaries });
+  const archives: Awaited<ReturnType<typeof runArchiveForTenant>>[] = [];
+  const summaries = await runWeeklyDriveSync(new Date(), archives);
+  return c.json({ ok: true, tenants: summaries.length, summaries, archives });
 });
 
 // ─── Rute cu sesiune ─────────────────────────────────────────────────────────
@@ -99,6 +107,13 @@ parDriveRoutes.get("/status", async (c) => {
     .from(parDriveFiles)
     .where(and(eq(parDriveFiles.tenantId, tenantId), eq(parDriveFiles.status, "error")));
 
+  // Ultimele arhive, cea mai nouă prima — pagina arată istoricul, nu doar ultima rulare.
+  const archives = (
+    await db.select().from(parDriveArchives).where(eq(parDriveArchives.tenantId, tenantId))
+  )
+    .sort((a, b) => b.label.localeCompare(a.label))
+    .slice(0, 12);
+
   return c.json({
     configured: !!config,
     connected: !!conn,
@@ -114,6 +129,18 @@ parDriveRoutes.get("/status", async (c) => {
     syncedCount,
     errorCount,
     pendingCount: Math.max(paidCount - syncedCount, 0),
+    archiveEnabled: conn?.archiveEnabled ?? true,
+    archiveIntervalDays: conn?.archiveIntervalDays ?? 14,
+    lastArchiveAt: conn?.lastArchiveAt ?? null,
+    archiveDue: conn ? archiveDue(conn, new Date()) : false,
+    archives: archives.map((a) => ({
+      label: a.label,
+      folderId: a.folderId,
+      fileCount: a.fileCount,
+      lockedCount: a.lockedCount,
+      status: a.status,
+      createdAt: a.createdAt,
+    })),
   });
 });
 
@@ -212,6 +239,9 @@ parDriveRoutes.get("/callback", requirePARRole("par_admin"), async (c) => {
 
 const settingsSchema = z.object({
   syncEnabled: z.boolean().optional(),
+  archiveEnabled: z.boolean().optional(),
+  /** La câte zile se arhivează. 7–90: sub o săptămână e zgomot, peste trei luni nu mai e istoric. */
+  archiveIntervalDays: z.number().int().min(7).max(90).optional(),
   /** ISO-8601: 1 = luni … 7 = duminică. */
   syncDayOfWeek: z.number().int().min(1).max(7).optional(),
   rootFolderName: z.string().min(1).max(120).optional(),
@@ -238,6 +268,10 @@ parDriveRoutes.patch(
       .set({
         ...(body.syncEnabled !== undefined ? { syncEnabled: body.syncEnabled } : {}),
         ...(body.syncDayOfWeek !== undefined ? { syncDayOfWeek: body.syncDayOfWeek } : {}),
+        ...(body.archiveEnabled !== undefined ? { archiveEnabled: body.archiveEnabled } : {}),
+        ...(body.archiveIntervalDays !== undefined
+          ? { archiveIntervalDays: body.archiveIntervalDays }
+          : {}),
         ...(body.rootFolderName !== undefined ? { rootFolderName: body.rootFolderName } : {}),
         // Numele rădăcinii s-a schimbat: următoarea rulare creează mapa nouă. Cea veche rămâne
         // în Drive cu dosarele de până acum — nu ștergem nimic din Drive-ul omului.
@@ -279,6 +313,17 @@ parDriveRoutes.post("/resync-all", requirePARRole("par_admin"), async (c) => {
     .where(eq(parDriveFiles.tenantId, tenantId));
   const summary = await runDriveSyncForTenant(tenantId, { force: true });
   return c.json(summary);
+});
+
+/**
+ * POST /api/par/drive/archive-now — îngheață acum dosarele urcate, fără să aștepte intervalul.
+ *
+ * Arhiva rulează oricum automat, după o sincronizare completă, când a trecut intervalul. Butonul
+ * există pentru momentele în care omul vrea o fotografie ACUM (închidere de an, audit anunțat).
+ */
+parDriveRoutes.post("/archive-now", requirePARRole("par_admin"), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  return c.json(await runArchiveForTenant(tenantId, { force: true }));
 });
 
 /** POST /api/par/drive/disconnect — revocă accesul și uită tot ce știam despre Drive-ul lui. */

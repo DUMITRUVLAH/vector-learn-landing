@@ -17,7 +17,9 @@ import {
   CloudUpload,
   ExternalLink,
   FolderTree,
+  Archive,
   Loader2,
+  Lock,
   RefreshCw,
   ShieldCheck,
   Unplug,
@@ -26,13 +28,15 @@ import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import {
   DRIVE_WEEKDAYS,
+  archiveDriveNow,
   disconnectDrive,
   driveCallbackMessage,
   driveConnectUrl,
   getDriveStatus,
   resyncDriveAll,
-  syncDriveNow,
+  syncDriveUntilDone,
   updateDriveSettings,
+  type ParDriveArchiveSummary,
   type ParDriveStatus,
   type ParDriveSyncSummary,
 } from "@/lib/api/parDrive";
@@ -54,8 +58,11 @@ export function ParDrive() {
   const [status, setStatus] = useState<ParDriveStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"sync" | "resync" | "disconnect" | "save" | null>(null);
+  const [busy, setBusy] = useState<"sync" | "resync" | "disconnect" | "save" | "archive" | null>(null);
   const [summary, setSummary] = useState<ParDriveSyncSummary | null>(null);
+  const [archiveSummary, setArchiveSummary] = useState<ParDriveArchiveSummary | null>(null);
+  /** Textul din buton în timpul lanțului de loturi: altfel pare blocat minute în șir. */
+  const [progress, setProgress] = useState<string | null>(null);
   const [folderName, setFolderName] = useState("");
 
   // Mesajul întoarcerii de la Google trăiește în URL (`?rezultat=…`), ca un refresh să nu-l piardă.
@@ -79,7 +86,13 @@ export function ParDrive() {
     void load();
   }, [load]);
 
-  const patch = async (next: { syncEnabled?: boolean; syncDayOfWeek?: number; rootFolderName?: string }) => {
+  const patch = async (next: {
+    syncEnabled?: boolean;
+    syncDayOfWeek?: number;
+    rootFolderName?: string;
+    archiveEnabled?: boolean;
+    archiveIntervalDays?: number;
+  }) => {
     setBusy("save");
     try {
       await updateDriveSettings(next);
@@ -91,14 +104,44 @@ export function ParDrive() {
     }
   };
 
+  /**
+   * Rulează loturi până nu mai rămâne nimic de urcat.
+   *
+   * O invocare a serverului urcă un lot, ca să nu depășească limita de timp a platformei. Bucla o
+   * face aici, în browser, ca să nu rămână dosare „pe dinafară" doar pentru că nimeni n-a apăsat
+   * butonul a doua oară.
+   */
   const runSync = async (mode: "sync" | "resync") => {
     setBusy(mode);
     setSummary(null);
+    setProgress(null);
     try {
-      setSummary(mode === "sync" ? await syncDriveNow() : await resyncDriveAll());
+      if (mode === "resync") await resyncDriveAll();
+      const final = await syncDriveUntilDone((s, round) => {
+        setProgress(
+          s.remaining > 0
+            ? `lotul ${round} · ${s.remaining} rămase`
+            : `lotul ${round} · gata`
+        );
+      });
+      setSummary(final);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sincronizarea a eșuat.");
+    } finally {
+      setBusy(null);
+      setProgress(null);
+    }
+  };
+
+  const runArchive = async () => {
+    setBusy("archive");
+    setArchiveSummary(null);
+    try {
+      setArchiveSummary(await archiveDriveNow());
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Arhivarea a eșuat.");
     } finally {
       setBusy(null);
     }
@@ -335,7 +378,7 @@ export function ParDrive() {
             <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
               <Button onClick={() => void runSync("sync")} disabled={busy !== null}>
                 {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Sincronizează acum
+                {busy === "sync" && progress ? `Sincronizez… ${progress}` : "Sincronizează acum"}
               </Button>
               <Button variant="secondary" onClick={() => void runSync("resync")} disabled={busy !== null}>
                 {busy === "resync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
@@ -364,9 +407,124 @@ export function ParDrive() {
             )}
 
             <p className="mt-4 text-xs text-muted-foreground">
-              O rulare urcă un lot de dosare, ca să nu depășească timpul maxim al unei funcții.
-              Restul se iau la rulările următoare, în ordinea plății — nu se pierde nimic.
+              Butonul rulează loturi în lanț până nu mai rămâne nimic — un lot per invocare, ca să nu
+              depășească timpul maxim al unei funcții. Automat, jobul revine zilnic până ajunge la
+              zero, nu doar în ziua aleasă.
             </p>
+          </Card>
+        )}
+
+        {/* ── Arhiva: fotografii înghețate ale dosarelor ──────────────────── */}
+        {status?.connected && (
+          <Card className="p-5">
+            <div className="flex items-center gap-2">
+              <Archive className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-base font-semibold text-foreground">Arhivă periodică</h2>
+            </div>
+            <p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">
+              La fiecare {status.archiveIntervalDays} zile copiem dosarele urcate într-o mapă datată,
+              sub <span className="font-medium text-foreground">Arhive/</span>, și le blocăm la scriere.
+              Copiile nu se mai schimbă când dosarul viu se actualizează, iar manifestul din mapă
+              păstrează amprenta MD5 a fiecărui fișier, ca orice lipsă sau înlocuire să fie dovedibilă.
+            </p>
+
+            <Alert className="mt-3" icon={<Lock className="h-4 w-4" />}>
+              Copiile sunt blocate la editare prin Google Drive. Ștergerea, însă, rămâne la mâna
+              proprietarului contului — niciun program nu o poate împiedica. De aceea evidența
+              arhivelor se păstrează și în aplicație, nu doar în Drive.
+            </Alert>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-3.5">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Arhivare automată</p>
+                  <p className="text-xs text-muted-foreground">
+                    Ultima: {formatDateTime(status.lastArchiveAt)}
+                    {status.archiveDue && status.archiveEnabled ? " · urmează la prima sincronizare completă" : ""}
+                  </p>
+                </div>
+                <Switch
+                  checked={status.archiveEnabled}
+                  onChange={(next) => void patch({ archiveEnabled: next })}
+                  disabled={busy !== null}
+                  aria-label="Arhivare automată activă"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="drive-interval">La câte zile</Label>
+                <Select
+                  id="drive-interval"
+                  value={String(status.archiveIntervalDays)}
+                  disabled={busy !== null}
+                  onChange={(e) => void patch({ archiveIntervalDays: Number(e.target.value) })}
+                >
+                  {[7, 14, 30, 90].map((d) => (
+                    <option key={d} value={d}>
+                      {d} de zile
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+              <Button variant="secondary" onClick={() => void runArchive()} disabled={busy !== null}>
+                {busy === "archive" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+                Arhivează acum
+              </Button>
+              {status.syncedCount === 0 && (
+                <span className="text-xs text-muted-foreground">
+                  Nu există încă dosare urcate de arhivat.
+                </span>
+              )}
+            </div>
+
+            {archiveSummary && (
+              <Alert
+                className="mt-4"
+                variant={archiveSummary.status === "error" ? "destructive" : "default"}
+                icon={
+                  archiveSummary.status === "error" ? (
+                    <AlertCircle className="h-4 w-4" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )
+                }
+              >
+                {archiveSummary.message}
+              </Alert>
+            )}
+
+            {status.archives.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-sm font-medium text-foreground">Arhive existente</h3>
+                <ul className="mt-2 divide-y divide-border/60 rounded-xl border border-border/60">
+                  {status.archives.map((a) => (
+                    <li key={a.label} className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                        <span className="text-sm font-medium text-foreground">{a.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {a.fileCount} dosare · {a.lockedCount} blocate
+                        </span>
+                        {a.status !== "ok" && <Badge variant="secondary">parțială</Badge>}
+                      </div>
+                      {a.folderId && (
+                        <a
+                          href={`https://drive.google.com/drive/folders/${a.folderId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                        >
+                          Deschide în Drive
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
         )}
 
