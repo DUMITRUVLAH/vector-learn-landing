@@ -134,7 +134,12 @@ export function Sheet({ open, onClose, title, description, side = "right", size 
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "absolute inset-y-0 w-full overflow-y-auto border-border bg-background p-6 shadow-xl animate-slide-in",
+          "absolute inset-y-0 w-full overflow-y-auto border-border p-6 shadow-xl animate-slide-in",
+          // Pe ecran întreg fundalul e STINS, nu alb: singurul fel în care se văd ca secțiuni
+          // separate cardurile dinăuntru (`--card` e alb, `--background` e gri deschis). Un panou
+          // alb cu conținut alb e o coală, nu un ecran.
+          // OPAC, fără `/40`: cu transparență se vedea tabla prin fișă, ca un ecran stricat.
+          "bg-background",
           SHEET_SIZES[size],
           // Pe ecran întreg nu mai există „lateral": panoul ocupă tot, deci nici bordura de
           // margine n-are ce despărți.

@@ -879,7 +879,7 @@ export function LeadDetailSheet({
             {/* Bara de context: starea afacerii, pe toată lățimea. Înghesuită în coloana din
                 stânga, se pierdea între câmpuri — deși ea e primul lucru pe care îl cauți când
                 deschizi fișa: în ce etapă e, cât valorează, al cui e, când s-a sunat ultima dată. */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border pb-4">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-border bg-card px-5 py-3 shadow-sm">
               {currentStage && (
                 <Badge
                   className={cn(
@@ -916,7 +916,8 @@ export function LeadDetailSheet({
                 numere se sună. Până acum datele astea erau într-o FILĂ („Detalii"), deci ca
                 să te uiți la telefonul omului în timp ce scriai nota trebuia să pleci din
                 notă. Pe ecran întreg încap amândouă, una lângă alta. */}
-              <div className="flex flex-col gap-6 lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
+              <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-5 shadow-sm lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Clientul</h2>
 
                 {/* Etichete */}
                 <div className="flex flex-col gap-2">
@@ -1327,7 +1328,10 @@ export function LeadDetailSheet({
 
               {/* ── DREAPTA: ce facem noi ───────────────────────────────────────────
                 Zona de lucru: activitate, taskuri, fișiere, contacte, acte, istoric. */}
-              <div className="flex min-w-0 flex-col gap-6">
+              <div className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card p-5 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Ce lucrăm
+                </h2>
                 {/* Filele fișei. Până acum totul era un singur scroll de ~1000 de linii: taskurile
                 stăteau peste acte, actele peste formular, iar ca să ajungi la istoric derulai
                 pe lângă tot. Antetul (etapă, valoare, etichete, acțiuni rapide) rămâne mereu
