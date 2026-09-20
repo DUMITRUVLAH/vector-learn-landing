@@ -1346,6 +1346,14 @@ function Footer() {
           <a href={`mailto:${CONTACT_EMAIL}`} className="transition-colors hover:text-foreground">
             Contact
           </a>
+          {/* Pagini statice pre-randate (scripts/build-legal.ts), nu rute din SPA: ecranul de
+              consimțământ Google cere politici publice care răspund fără JavaScript. */}
+          <a href="/confidentialitate" className="transition-colors hover:text-foreground">
+            Confidențialitate
+          </a>
+          <a href="/termeni" className="transition-colors hover:text-foreground">
+            Termeni
+          </a>
           <Link to="/" className="transition-colors hover:text-foreground">
             CRM educațional →
           </Link>

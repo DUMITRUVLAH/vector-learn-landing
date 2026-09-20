@@ -194,6 +194,10 @@ writeFileSync(
         // ar servi shell-ul aplicației cu status 200, adică o pagină goală pentru crawlere.
         { src: "/blog/?$", dest: "/blog/index.html" },
         { src: "/blog/([^/.]+)/?$", dest: "/blog/$1.html" },
+        // Politicile legale, tot pre-randate: linkurile din ecranul de consimțământ Google
+        // trebuie să răspundă cu conținut, nu cu shell-ul SPA.
+        { src: "/confidentialitate/?$", dest: "/confidentialitate.html" },
+        { src: "/termeni/?$", dest: "/termeni.html" },
         { handle: "filesystem" },
         // Un fișier cu hash care NU există trebuie să dea 404, nu pagina SPA.
         // Bug 2026-08-29 („eroarea asta e mereu"): fără regula asta, `/assets/<chunk>.js` lipsă

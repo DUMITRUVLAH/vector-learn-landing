@@ -49,6 +49,8 @@ for (const article of articles) {
 const urls = [
   { loc: `${BASE_URL}/business`, lastmod: undefined as string | undefined, priority: "1.0" },
   { loc: `${BASE_URL}/blog`, lastmod: articles[0]?.lastVerified, priority: "0.8" },
+  { loc: `${BASE_URL}/confidentialitate`, lastmod: undefined as string | undefined, priority: "0.3" },
+  { loc: `${BASE_URL}/termeni`, lastmod: undefined as string | undefined, priority: "0.3" },
   ...articles.map((a) => ({ loc: `${BASE_URL}/blog/${a.slug}`, lastmod: a.lastVerified, priority: "0.7" })),
 ];
 

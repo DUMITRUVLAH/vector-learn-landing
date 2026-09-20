@@ -41,6 +41,8 @@ const STEPS = [
   //    /blog/* ar cădea în fallback-ul SPA și ar servi shell-ul aplicației — adică o pagină
   //    goală pentru orice crawler.
   ["blog pre-randat", "tsx scripts/build-blog.ts"],
+  // Paginile legale: Google le cere publice, pe domeniul autorizat, servite fără JavaScript.
+  ["pagini legale pre-randate", "tsx scripts/build-legal.ts"],
 
   // ── Porți pe ARTEFACTUL construit: se pot verifica doar după ce dist/ există.
   ["React de producție în dist/", "node scripts/check-react-prod-build.mjs"],

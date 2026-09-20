@@ -339,7 +339,7 @@ function renderRelated(slugs: string[], all: Article[]): string {
 
 /* ─────────────────────────── documentul HTML ─────────────────────────── */
 
-type DocOptions = {
+export type DocOptions = {
   title: string;
   description: string;
   canonical: string;
@@ -347,9 +347,31 @@ type DocOptions = {
   /** Unul sau mai multe grafuri JSON-LD; fiecare iese în propriul `<script>`. */
   jsonLd?: unknown;
   ogType?: "website" | "article";
+  /**
+   * Subsolul paginii. Implicit e nota de transparență a blogului („scriem despre propriul
+   * produs"). Paginile legale au alt subsol: acolo nota aia ar suna ca o reclamă în mijlocul
+   * unei politici de confidențialitate.
+   */
+  footer?: string;
 };
 
-function renderDocument(o: DocOptions): string {
+/** Subsolul implicit: nota de transparență a blogului. */
+function defaultFooter(): string {
+  return `<footer class="site-foot">
+  <div class="site-foot__inner">
+    <p style="margin:0">
+      Scris de echipa ${SITE.name}, care vinde software de aprobare a plăților. Recomandăm, la final,
+      propriul produs — o spunem aici, ca să o poți lua în calcul când citești.
+    </p>
+    <p style="margin:0">
+      <a href="${SITE.appUrl}">Vezi produsul</a> · <a href="/blog">Toate ghidurile</a> ·
+      <a href="mailto:${SITE.contactEmail}">${SITE.contactEmail}</a>
+    </p>
+  </div>
+</footer>`;
+}
+
+export function renderDocument(o: DocOptions): string {
   return `<!doctype html>
 <html lang="ro">
 <head>
@@ -385,18 +407,7 @@ ${(Array.isArray(o.jsonLd) ? o.jsonLd : o.jsonLd ? [o.jsonLd] : [])
   </div>
 </header>
 ${o.body}
-<footer class="site-foot">
-  <div class="site-foot__inner">
-    <p style="margin:0">
-      Scris de echipa ${SITE.name}, care vinde software de aprobare a plăților. Recomandăm, la final,
-      propriul produs — o spunem aici, ca să o poți lua în calcul când citești.
-    </p>
-    <p style="margin:0">
-      <a href="${SITE.appUrl}">Vezi produsul</a> · <a href="/blog">Toate ghidurile</a> ·
-      <a href="mailto:${SITE.contactEmail}">${SITE.contactEmail}</a>
-    </p>
-  </div>
-</footer>
+${o.footer ?? defaultFooter()}
 </body>
 </html>`;
 }
