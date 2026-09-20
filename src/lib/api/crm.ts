@@ -162,8 +162,26 @@ export function listCrmPipelines(): Promise<ListCrmPipelinesResponse> {
 }
 
 /** Pâlnia nouă se naște cu cele 5 etape implicite ale ei — altfel Kanbanul ei ar fi fără coloane. */
-export function createCrmPipeline(name: string): Promise<CrmPipeline> {
-  return api<CrmPipeline>("/api/crm/pipelines", { method: "POST", body: JSON.stringify({ name }) });
+/**
+ * Șabloanele de etape cu care poate porni o pâlnie nouă.
+ *
+ * Etichetele sunt duplicate din `server/lib/crm/stages.ts` înadins: ecranul trebuie să le poată
+ * arăta fără o cerere în plus, iar cheile — singurul lucru pe care serverul îl validează — sunt
+ * aceleași. Etapele propriu-zise NU se duplică aici; ele se seamănă pe server.
+ */
+export const PIPELINE_TEMPLATES = [
+  { key: "default", label: "Standard (Lead nou → Client)" },
+  { key: "spanco", label: "SPANCO (Suspect → Comandă)" },
+  { key: "call_center", label: "Call-center B2B (Rezervă rece → Contract)" },
+] as const;
+
+export type PipelineTemplateKey = (typeof PIPELINE_TEMPLATES)[number]["key"];
+
+export function createCrmPipeline(name: string, template?: PipelineTemplateKey): Promise<CrmPipeline> {
+  return api<CrmPipeline>("/api/crm/pipelines", {
+    method: "POST",
+    body: JSON.stringify(template && template !== "default" ? { name, template } : { name }),
+  });
 }
 
 export function renameCrmPipeline(id: string, name: string): Promise<CrmPipeline> {

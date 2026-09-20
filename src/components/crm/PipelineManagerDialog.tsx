@@ -6,17 +6,21 @@
  * lor întâi (409 `pipeline_not_empty`) — codurile serverului se traduc în propoziții, niciodată
  * afișate ca atare.
  *
- * Pâlnia nouă se naște cu cele 5 etape implicite (le face serverul) — deci e utilizabilă din
- * prima, nu un Kanban fără coloane.
+ * Pâlnia nouă se naște cu etapele ei deja semănate de server — deci e utilizabilă din prima, nu
+ * un Kanban fără coloane. Setul se alege dintr-un șablon: „Standard", SPANCO sau call-center
+ * B2B. Fără șabloane, o firmă care lucrează SPANCO trebuia să șteargă cinci etape și să creeze
+ * șase, ghicind unde se pun flagurile „câștigat"/„pierdut" de care depind toate rapoartele.
  */
 import { useEffect, useState } from "react";
 import { Loader2, Plus, Trash2, Check, X, Pencil } from "lucide-react";
-import { Alert, Button, Dialog, Input, Label } from "@/components/ds";
+import { Alert, Button, Dialog, Input, Label, Select } from "@/components/ds";
 import { ApiError } from "@/lib/api";
 import {
   createCrmPipeline,
   deleteCrmPipeline,
   renameCrmPipeline,
+  PIPELINE_TEMPLATES,
+  type PipelineTemplateKey,
   type CrmPipeline,
 } from "@/lib/api/crm";
 
@@ -58,6 +62,8 @@ export function PipelineManagerDialog({
   onToast,
 }: PipelineManagerDialogProps) {
   const [newName, setNewName] = useState("");
+  /** Setul de etape al pâlniei noi. „Standard" rămâne implicit — nimeni nu e obligat să aleagă. */
+  const [newTemplate, setNewTemplate] = useState<PipelineTemplateKey>("default");
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
@@ -66,6 +72,7 @@ export function PipelineManagerDialog({
   useEffect(() => {
     if (!open) return;
     setNewName("");
+    setNewTemplate("default");
     setEditingId(null);
     setEditingName("");
   }, [open]);
@@ -75,8 +82,9 @@ export function PipelineManagerDialog({
     if (!name) return;
     setAdding(true);
     try {
-      const created = await createCrmPipeline(name);
+      const created = await createCrmPipeline(name, newTemplate);
       setNewName("");
+      setNewTemplate("default");
       onToast({ kind: "success", message: `Pâlnia „${created.name}” a fost creată, cu etapele ei.` });
       // Selectăm pâlnia nouă: omul tocmai a creat-o, vrea s-o vadă, nu s-o caute în selector.
       onChanged({ selectId: created.id });
@@ -229,8 +237,8 @@ export function PipelineManagerDialog({
           </ul>
         )}
 
-        <div className="flex items-end gap-2">
-          <div className="flex flex-1 flex-col gap-1">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex min-w-[10rem] flex-1 flex-col gap-1">
             <Label htmlFor="crm-new-pipeline">Pâlnie nouă</Label>
             <Input
               id="crm-new-pipeline"
@@ -244,6 +252,20 @@ export function PipelineManagerDialog({
               }}
               placeholder="ex: B2B"
             />
+          </div>
+          <div className="flex min-w-[14rem] flex-1 flex-col gap-1">
+            <Label htmlFor="crm-new-pipeline-template">Etapele pornesc de la</Label>
+            <Select
+              id="crm-new-pipeline-template"
+              value={newTemplate}
+              onChange={(e) => setNewTemplate(e.target.value as PipelineTemplateKey)}
+            >
+              {PIPELINE_TEMPLATES.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                </option>
+              ))}
+            </Select>
           </div>
           <Button onClick={() => void addPipeline()} disabled={!newName.trim() || adding}>
             {adding ? (

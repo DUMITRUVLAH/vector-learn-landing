@@ -59,6 +59,12 @@ const listCrmLostReasons = vi.fn().mockResolvedValue({ items: [] });
 const listCrmLeads = vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 });
 
 vi.mock("@/lib/api/crm", () => ({
+  // Șabloanele de etape: dialogul le afișează în selectul „Etapele pornesc de la".
+  PIPELINE_TEMPLATES: [
+    { key: "default", label: "Standard (Lead nou → Client)" },
+    { key: "spanco", label: "SPANCO (Suspect → Comandă)" },
+    { key: "call_center", label: "Call-center B2B (Rezervă rece → Contract)" },
+  ],
   // Catalogul de produse: fișa îl cere pentru select-ul „Produs".
   listCrmProducts: vi.fn().mockResolvedValue({ items: [] }),
   // Drepturile utilizatorului: ecranele CRM le cer ca să știe ce butoane să arate.
@@ -212,8 +218,26 @@ describe("Administrarea pâlniilor", () => {
     fireEvent.change(await screen.findByLabelText("Pâlnie nouă"), { target: { value: "B2B" } });
     fireEvent.click(screen.getByRole("button", { name: "Adaugă" }));
 
-    await waitFor(() => expect(createCrmPipeline).toHaveBeenCalledWith("B2B"));
+    // Al doilea argument e șablonul de etape (CC-2); fără alegere explicită, „Standard".
+    await waitFor(() => expect(createCrmPipeline).toHaveBeenCalledWith("B2B", "default"));
     await waitFor(() => expect(getCrmPipeline).toHaveBeenLastCalledWith(B2B.id, {}));
+  });
+
+  it("[blocant] pâlnia poate porni de la șablonul SPANCO, nu doar de la etapele standard", async () => {
+    // Fără asta, o firmă care vinde B2B pe SPANCO trebuia să șteargă cinci etape și să creeze
+    // șase, punând manual flagurile „câștigat"/„pierdut" de care depind toate rapoartele.
+    getCrmPipeline.mockResolvedValue(makeResponse([VANZARI], VANZARI.id, [makeLead({})]));
+    createCrmPipeline.mockResolvedValue(B2B);
+
+    render(<CrmPipelinePage />);
+    await findLeadCards("Maria Popescu");
+
+    fireEvent.click(screen.getByRole("button", { name: /Pâlnie nouă/ }));
+    fireEvent.change(await screen.findByLabelText("Pâlnie nouă"), { target: { value: "Vânzări B2B" } });
+    fireEvent.change(screen.getByLabelText("Etapele pornesc de la"), { target: { value: "spanco" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adaugă" }));
+
+    await waitFor(() => expect(createCrmPipeline).toHaveBeenCalledWith("Vânzări B2B", "spanco"));
   });
 
   it("[blocant] implicita nu are buton de ștergere, celelalte da", async () => {

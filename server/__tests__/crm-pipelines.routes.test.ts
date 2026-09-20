@@ -74,11 +74,14 @@ async function listPipelines(): Promise<{ status: number; items: PipelineRow[] }
   return { status: res.status, items: body.items ?? [] };
 }
 
-async function createPipeline(name: string): Promise<{ status: number; body: Record<string, unknown> }> {
+async function createPipeline(
+  name: string,
+  template?: string
+): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await app.request("/api/crm/pipelines", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(template ? { name, template } : { name }),
   });
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
@@ -216,6 +219,54 @@ describe("POST /api/crm/pipelines — pâlnia nouă se naște cu etapele ei", ()
       .from(crmPipelineStages)
       .where(and(eq(crmPipelineStages.tenantId, vectorTenant), eq(crmPipelineStages.key, "new")));
     expect(allNew.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("[blocant] șablonul SPANCO seamănă cele 7 etape ale lui, cu flagurile puse corect", async () => {
+    session = { id: anaVector, tenantId: vectorTenant, role: "admin", email: "ana@vector.md" };
+    const { status, body } = await createPipeline("Vânzări B2B", "spanco");
+    expect(status).toBe(201);
+
+    const stages = await testDb
+      .select()
+      .from(crmPipelineStages)
+      .where(and(eq(crmPipelineStages.tenantId, vectorTenant), eq(crmPipelineStages.pipelineId, body.id as string)))
+      .orderBy(crmPipelineStages.orderIndex);
+
+    expect(stages.map((s) => s.key)).toEqual([
+      "suspect",
+      "prospect",
+      "analiza",
+      "negociere",
+      "concluzie",
+      "comanda",
+      "pierdut",
+    ]);
+    // Flagurile, nu etichetele, sunt ce citesc rapoartele: „contracte semnate” numără tranzițiile
+    // către etapa marcată câștigată. Un flag pus greșit face raportul să mintă în tăcere.
+    expect(stages.find((s) => s.key === "comanda")?.isWon).toBe(true);
+    expect(stages.find((s) => s.key === "pierdut")?.isLost).toBe(true);
+    expect(stages.filter((s) => s.isWon)).toHaveLength(1);
+    expect(stages.filter((s) => s.isLost)).toHaveLength(1);
+    // Probabilitățile cresc monoton — sunt punctul de plecare al prognozei.
+    const open = stages.filter((s) => !s.isLost).map((s) => s.probabilityPct);
+    expect([...open].sort((a, b) => a - b)).toEqual(open);
+  });
+
+  it("șablonul call-center are etapa „Decident atins”, cea care separă un apel de o discuție", async () => {
+    session = { id: anaVector, tenantId: vectorTenant, role: "admin", email: "ana@vector.md" };
+    const { body } = await createPipeline("Outreach", "call_center");
+    const stages = await testDb
+      .select()
+      .from(crmPipelineStages)
+      .where(eq(crmPipelineStages.pipelineId, body.id as string));
+    expect(stages.map((s) => s.key)).toContain("decident");
+    expect(stages.map((s) => s.key)).toContain("rezerva");
+  });
+
+  it("un șablon inventat e respins, nu semănat pe tăcute cu altceva", async () => {
+    session = { id: anaVector, tenantId: vectorTenant, role: "admin", email: "ana@vector.md" };
+    const { status } = await createPipeline("Ceva", "sablonul_meu");
+    expect(status).toBe(400);
   });
 });
 

@@ -27,7 +27,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import { ensureTenantPipeline, nextPipelineOrderIndex } from "../lib/crm/pipelines";
 import { logCrmAudit } from "../lib/crm/audit";
-import { ensureTenantStages } from "../lib/crm/stages";
+import { ensureTenantStages, PIPELINE_TEMPLATE_KEYS } from "../lib/crm/stages";
 
 export const crmPipelinesRoutes = new Hono<{ Variables: AuthVariables }>();
 crmPipelinesRoutes.use("/*", requireAuth);
@@ -38,6 +38,8 @@ crmPipelinesRoutes.delete("/*", requireCrmPermission("pipelines.manage"));
 
 const createPipelineSchema = z.object({
   name: z.string().trim().min(1, "Numele pâlniei este obligatoriu").max(200),
+  /** Setul de etape cu care pornește pâlnia. Lipsă → cele implicite (comportamentul de până acum). */
+  template: z.enum(PIPELINE_TEMPLATE_KEYS).optional(),
 });
 
 const updatePipelineSchema = z.object({
@@ -71,7 +73,7 @@ crmPipelinesRoutes.get("/", async (c) => {
 
 crmPipelinesRoutes.post("/", zValidator("json", createPipelineSchema), async (c) => {
   const user = c.get("user");
-  const { name } = c.req.valid("json");
+  const { name, template } = c.req.valid("json");
 
   // Implicita trebuie să existe înaintea oricărei pâlnii noi: fără ea, leadurile fără
   // `pipeline_id` n-ar mai avea unde fi citite.
@@ -88,7 +90,7 @@ crmPipelinesRoutes.post("/", zValidator("json", createPipelineSchema), async (c)
 
   // Etapele pâlniei noi. Dacă seed-ul eșuează, ștergem pâlnia: mai bine o eroare curată decât o
   // pâlnie fără nicio coloană, în care nu se poate lucra (același raționament ca în crm-vector).
-  await ensureTenantStages(user.tenantId, row.id);
+  await ensureTenantStages(user.tenantId, row.id, template);
   const [{ cnt }] = await db
     .select({ cnt: count() })
     .from(crmPipelineStages)
@@ -104,7 +106,7 @@ crmPipelinesRoutes.post("/", zValidator("json", createPipelineSchema), async (c)
     action: "pipeline.created",
     target: "crm_pipeline",
     targetId: row.id,
-    after: { name: row.name },
+    after: { name: row.name, template: template ?? "default" },
   });
 
   return c.json(row, 201);
