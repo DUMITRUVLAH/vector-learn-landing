@@ -33,9 +33,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads } from "../db/schema/leads";
+import { leads, leadTags, customFields, leadFieldValues } from "../db/schema/leads";
 import { users } from "../db/schema/users";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmCompanies, crmImportJobs, crmImportMappings } from "../db/schema/crmCompanies";
@@ -51,10 +51,14 @@ import {
   mapSourceText,
   mapStageText,
   IMPORT_TARGET_FIELDS,
+  isImportTarget,
+  customFieldKeyOf,
+  normalizeIdno,
   type Delimiter,
   type FieldMapping,
   type ImportDraftLead,
   type ImportTargetField,
+  type ImportTarget,
   type DuplicateStatus,
 } from "../lib/crm/importFile";
 import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
@@ -85,7 +89,16 @@ const SOURCE_VALUES = new Set([
   "other",
 ]);
 
-const mappingSchema = z.record(z.string(), z.enum(IMPORT_TARGET_FIELDS));
+/**
+ * Maparea acceptată din exterior: câmpurile fixe SAU `cf:<cheie>` pentru un câmp personalizat.
+ * Nu mai e un `z.enum`, fiindcă lista de ținte depinde de workspace — dar nici un `z.string()`
+ * liber: `isImportTarget` respinge orice altceva, ca o cheie inventată să nu ajungă în jurnalul
+ * de importuri și de acolo într-o mapare salvată pe care nimeni n-o mai poate citi.
+ */
+const mappingSchema = z.record(
+  z.string(),
+  z.string().refine(isImportTarget, "Țintă de mapare necunoscută.")
+) as unknown as z.ZodType<FieldMapping>;
 
 const planInput = z.object({
   /**
@@ -106,6 +119,17 @@ const runInput = planInput.extend({
   /** Implicit sărim peste duplicate — importul repetat al aceluiași fișier nu trebuie să dubleze baza. */
   skipDuplicates: z.boolean().default(true),
 });
+
+/**
+ * Cheia după care se unifică firmele dintr-un import: codul fiscal când există, altfel numele
+ * normalizat. Prefixul „idno:" ține cele două spații de chei separate — un cod format din cifre
+ * n-are cum să coincidă cu un nume, dar cheile trebuie oricum să nu se poată confunda.
+ */
+function companyKeyOf(draft: ImportDraftLead): string | null {
+  const idno = normalizeIdno(draft.idno);
+  if (idno) return `idno:${idno}`;
+  return normalizeCompanyName(draft.company);
+}
 
 function normalizeCompanyName(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -169,6 +193,8 @@ export interface ImportPlan {
   };
   stages: { key: string; label: string }[];
   owners: { id: string; name: string }[];
+  /** Câmpurile personalizate ale workspace-ului — țintele `cf:<cheie>` din select-ul de mapare. */
+  customFields: { id: string; key: string; label: string }[];
 }
 
 /**
@@ -188,9 +214,32 @@ async function buildImportPlan(
     input.format === "xlsx"
       ? await parseWorkbookTable(Buffer.from(input.text, "base64"))
       : parseDelimited(input.text, delimiter);
-  const mapping = input.mapping && Object.keys(input.mapping).length > 0 ? input.mapping : suggestMapping(table.headers);
+  // Câmpurile personalizate ale workspace-ului: și propunerea de mapare, și validarea țintelor
+  // `cf:<cheie>` se sprijină pe ele, deci se citesc ÎNAINTE de a interpreta maparea.
+  const customFieldRows = await loadCustomFields(tenantId);
+  const customFieldByKey = new Map(customFieldRows.map((f) => [f.key, f]));
 
-  const drafts = applyMapping(table.rows, mapping);
+  const mapping =
+    input.mapping && Object.keys(input.mapping).length > 0
+      ? input.mapping
+      : suggestMapping(table.headers, customFieldRows);
+
+  // O țintă `cf:<cheie>` care nu mai există (câmpul a fost șters după ce s-a salvat maparea) nu
+  // are unde scrie. O scoatem din mapare ȘI o spunem în avertismente — mai bine o coloană
+  // declarată pierdută decât una pierdută în tăcere.
+  const droppedCustomTargets: string[] = [];
+  const effectiveMapping: FieldMapping = {};
+  for (const [idx, target] of Object.entries(mapping)) {
+    const key = customFieldKeyOf(target);
+    if (key && !customFieldByKey.has(key)) {
+      droppedCustomTargets.push(key);
+      effectiveMapping[Number(idx)] = "ignore";
+      continue;
+    }
+    effectiveMapping[Number(idx)] = target as ImportTarget;
+  }
+
+  const drafts = applyMapping(table.rows, effectiveMapping);
 
   // Oamenii și etapele workspace-ului — o singură citire pentru tot fișierul.
   await ensureTenantStages(tenantId);
@@ -228,11 +277,15 @@ async function buildImportPlan(
   // Cheile deja existente în bază, limitate la ce apare în fișier: o listă
   // bounded de fișierul omului, nu o citire a întregii baze.
   const fileKeys = new Set<string>();
+  const fileIdnos = new Set<string>();
   for (const d of drafts) {
     if (d.phone_normalized) fileKeys.add(d.phone_normalized);
     if (d.email_normalized) fileKeys.add(d.email_normalized);
+    const idno = normalizeIdno(d.idno);
+    if (idno) fileIdnos.add(idno);
   }
   const existingKeys = await loadExistingKeys(tenantId, [...fileKeys]);
+  for (const idno of await loadExistingIdnos(tenantId, [...fileIdnos])) existingKeys.add(`idno:${idno}`);
   const statuses = findDuplicates(drafts, existingKeys);
 
   const rows: PlannedRow[] = drafts.map((draft, i) => {
@@ -280,10 +333,18 @@ async function buildImportPlan(
     };
   });
 
+  if (droppedCustomTargets.length > 0) {
+    for (const row of rows) {
+      row.warnings.push(
+        `Câmpurile personalizate ${droppedCustomTargets.map((k) => `„${k}"`).join(", ")} nu mai există — coloanele lor nu se importă.`
+      );
+    }
+  }
+
   return {
     headers: table.headers,
     delimiter,
-    mapping,
+    mapping: effectiveMapping,
     rows,
     counts: {
       total: rows.length,
@@ -300,7 +361,55 @@ async function buildImportPlan(
     },
     stages,
     owners: memberRows.map((m) => ({ id: m.id, name: m.name ?? m.email })),
+    customFields: customFieldRows,
   };
+}
+
+/** Definițiile câmpurilor personalizate ale workspace-ului. Tabela există din migrarea 0007, dar
+ *  o bază veche poate să n-o aibă — atunci importul merge mai departe fără ținte `cf:`, nu cade. */
+async function loadCustomFields(tenantId: string): Promise<{ id: string; key: string; label: string }[]> {
+  try {
+    return await db
+      .select({ id: customFields.id, key: customFields.key, label: customFields.label })
+      .from(customFields)
+      .where(eq(customFields.tenantId, tenantId))
+      .orderBy(customFields.orderIndex);
+  } catch (err) {
+    if (!isMissingSchemaError(err)) throw err;
+    console.error("[crm-import] câmpurile personalizate nu s-au putut citi:", err);
+    return [];
+  }
+}
+
+/**
+ * Codurile fiscale deja prezente în workspace, dintre cele din fișier.
+ *
+ * Comparația se face pe forma NORMALIZATĂ, calculată în bază: fișele vechi pot avea „MD 1003…"
+ * sau „1003-600-012345", iar un `IN` pe textul brut le-ar rata și am crea a doua fișă pentru
+ * aceeași firmă. Importul scrie de acum codul deja normalizat (vezi `upsertCompanies`), deci
+ * forma din bază converge singură.
+ */
+async function loadExistingIdnos(tenantId: string, idnos: string[]): Promise<string[]> {
+  if (idnos.length === 0) return [];
+  const out: string[] = [];
+  const normalizedColumn = sql<string>`upper(regexp_replace(${crmCompanies.idno}, '[^A-Za-z0-9]', '', 'g'))`;
+  try {
+    const CHUNK = 500;
+    for (let i = 0; i < idnos.length; i += CHUNK) {
+      const rows = await db
+        .select({ idno: normalizedColumn })
+        .from(crmCompanies)
+        .where(and(eq(crmCompanies.tenantId, tenantId), inArray(normalizedColumn, idnos.slice(i, i + CHUNK))));
+      for (const r of rows) {
+        const norm = normalizeIdno(r.idno);
+        if (norm) out.push(norm);
+      }
+    }
+  } catch (err) {
+    if (!isMissingSchemaError(err)) throw err;
+    console.error("[crm-import] codurile fiscale existente nu s-au putut citi:", err);
+  }
+  return out;
 }
 
 /**
@@ -356,6 +465,7 @@ crmImportRoutes.post("/preview", zValidator("json", planInput), async (c) => {
       counts: plan.counts,
       stages: plan.stages,
       owners: plan.owners,
+      customFields: plan.customFields,
       // Trunchiat: omul vede primele rânduri, numărătorile sunt pe tot fișierul.
       rows: plan.rows.slice(0, PREVIEW_ROWS),
       truncated: plan.rows.length > PREVIEW_ROWS,
@@ -407,6 +517,8 @@ crmImportRoutes.post("/run", zValidator("json", runInput), async (c) => {
   const companyIds = await upsertCompanies(user.tenantId, toInsert);
 
   let created = 0;
+  /** Rândul din fișier → id-ul lead-ului scris, pentru etichete și câmpuri personalizate. */
+  const insertedPairs: { row: PlannedRow; leadId: string }[] = [];
   const BATCH = 200;
   for (let i = 0; i < toInsert.length; i += BATCH) {
     const slice = toInsert[i] ? toInsert.slice(i, i + BATCH) : [];
@@ -426,12 +538,24 @@ crmImportRoutes.post("/run", zValidator("json", runInput), async (c) => {
       notes: row.draft.notes?.slice(0, 2000) ?? null,
       valueCents: row.draft.value_cents ?? 0,
       company: row.draft.company?.slice(0, 300) ?? null,
-      companyId: companyIds.get(normalizeCompanyName(row.draft.company) ?? "") ?? null,
+      companyId: companyIds.get(companyKeyOf(row.draft) ?? "") ?? null,
       dealName: row.draft.deal_name?.slice(0, 300) ?? null,
     }));
     const inserted = await db.insert(leads).values(values).returning({ id: leads.id });
     created += inserted.length;
+    // `RETURNING` respectă ordinea din `VALUES`, deci rândul `k` din felie e lead-ul `k`. Când
+    // baza întoarce mai puține rânduri decât am trimis (nu se întâmplă azi, dar un
+    // `onConflictDoNothing` adăugat mâine ar face-o), ne oprim la cât avem — mai bine câteva
+    // etichete nescrise decât etichetele unui lead puse pe altul.
+    for (let k = 0; k < inserted.length && k < slice.length; k++) {
+      insertedPairs.push({ row: slice[k], leadId: inserted[k].id });
+    }
   }
+
+  // Etichetele și câmpurile personalizate, DUPĂ lead-uri: amândouă au nevoie de `lead_id`.
+  // Eșecul lor nu anulează importul — lead-urile sunt deja scrise, iar un „importul a eșuat"
+  // l-ar face pe om să reimporte și să dubleze baza.
+  const extrasWritten = await writeLeadExtras(user.tenantId, insertedPairs);
 
   // Jurnalul: cine, ce fișier, cu ce mapare, cu ce rezultat. Un import prost
   // peste o bază reală trebuie să poată fi explicat după fapt.
@@ -465,8 +589,64 @@ crmImportRoutes.post("/run", zValidator("json", runInput), async (c) => {
     skipped: skipped.length,
     counts: plan.counts,
     details: skipped.slice(0, 200),
+    tagsWritten: extrasWritten.tags,
+    customValuesWritten: extrasWritten.customValues,
   });
 });
+
+/**
+ * Scrie etichetele și valorile câmpurilor personalizate ale lead-urilor tocmai importate.
+ *
+ * `onConflictDoNothing` pe etichete: indexul `ltags_unique_idx` e pe (lead_id, tag), iar același
+ * fișier poate repeta o etichetă pe același rând din două coloane diferite.
+ */
+async function writeLeadExtras(
+  tenantId: string,
+  pairs: { row: PlannedRow; leadId: string }[]
+): Promise<{ tags: number; customValues: number }> {
+  let tags = 0;
+  let customValues = 0;
+  if (pairs.length === 0) return { tags, customValues };
+
+  const tagValues = pairs.flatMap(({ row, leadId }) =>
+    row.draft.tags.map((tag) => ({ tenantId, leadId, tag: tag.slice(0, 100) }))
+  );
+  if (tagValues.length > 0) {
+    try {
+      const BATCH = 500;
+      for (let i = 0; i < tagValues.length; i += BATCH) {
+        await db.insert(leadTags).values(tagValues.slice(i, i + BATCH)).onConflictDoNothing();
+      }
+      tags = tagValues.length;
+    } catch (err) {
+      console.error("[crm-import] etichetele nu s-au putut scrie:", err);
+    }
+  }
+
+  try {
+    const fieldRows = await loadCustomFields(tenantId);
+    const idByKey = new Map(fieldRows.map((f) => [f.key, f.id]));
+    const valueRows = pairs.flatMap(({ row, leadId }) =>
+      Object.entries(row.draft.custom_values)
+        .map(([key, value]) => {
+          const fieldId = idByKey.get(key);
+          return fieldId ? { tenantId, leadId, fieldId, value } : null;
+        })
+        .filter((v): v is { tenantId: string; leadId: string; fieldId: string; value: string } => v !== null)
+    );
+    if (valueRows.length > 0) {
+      const BATCH = 500;
+      for (let i = 0; i < valueRows.length; i += BATCH) {
+        await db.insert(leadFieldValues).values(valueRows.slice(i, i + BATCH)).onConflictDoNothing();
+      }
+      customValues = valueRows.length;
+    }
+  } catch (err) {
+    console.error("[crm-import] câmpurile personalizate nu s-au putut scrie:", err);
+  }
+
+  return { tags, customValues };
+}
 
 /**
  * Creează/găsește firmele din rândurile care se vor importa și întoarce
@@ -475,24 +655,42 @@ crmImportRoutes.post("/run", zValidator("json", runInput), async (c) => {
  * câmpurile goale.
  */
 async function upsertCompanies(tenantId: string, rows: PlannedRow[]): Promise<Map<string, string>> {
-  const byName = new Map<string, PlannedRow>();
+  const byKey = new Map<string, PlannedRow>();
   for (const row of rows) {
-    const key = normalizeCompanyName(row.draft.company);
-    if (key && !byName.has(key)) byName.set(key, row);
+    const key = companyKeyOf(row.draft);
+    if (key && !byKey.has(key)) byKey.set(key, row);
   }
   const out = new Map<string, string>();
-  if (byName.size === 0) return out;
+  if (byKey.size === 0) return out;
+
+  const idnoKeys = [...byKey.keys()].filter((k) => k.startsWith("idno:")).map((k) => k.slice(5));
+  const nameKeys = [...byKey.keys()].filter((k) => !k.startsWith("idno:"));
+  const normalizedIdno = sql<string>`upper(regexp_replace(${crmCompanies.idno}, '[^A-Za-z0-9]', '', 'g'))`;
 
   try {
-    const existing = await db
-      .select({ id: crmCompanies.id, nameNormalized: crmCompanies.nameNormalized })
-      .from(crmCompanies)
-      .where(and(eq(crmCompanies.tenantId, tenantId), inArray(crmCompanies.nameNormalized, [...byName.keys()])));
-    for (const e of existing) {
-      if (e.nameNormalized) out.set(e.nameNormalized, e.id);
+    // Codul fiscal bate numele: „SRL Alfa" și „Alfa SRL" sunt aceeași firmă dacă au același IDNO,
+    // iar două firme distincte pot avea nume aproape identice.
+    if (idnoKeys.length > 0) {
+      const existingByIdno = await db
+        .select({ id: crmCompanies.id, idno: normalizedIdno })
+        .from(crmCompanies)
+        .where(and(eq(crmCompanies.tenantId, tenantId), inArray(normalizedIdno, idnoKeys)));
+      for (const e of existingByIdno) {
+        if (e.idno) out.set(`idno:${e.idno}`, e.id);
+      }
     }
 
-    const missing = [...byName.entries()].filter(([key]) => !out.has(key));
+    if (nameKeys.length > 0) {
+      const existing = await db
+        .select({ id: crmCompanies.id, nameNormalized: crmCompanies.nameNormalized })
+        .from(crmCompanies)
+        .where(and(eq(crmCompanies.tenantId, tenantId), inArray(crmCompanies.nameNormalized, nameKeys)));
+      for (const e of existing) {
+        if (e.nameNormalized) out.set(e.nameNormalized, e.id);
+      }
+    }
+
+    const missing = [...byKey.entries()].filter(([key]) => !out.has(key));
     if (missing.length > 0) {
       const inserted = await db
         .insert(crmCompanies)
@@ -500,7 +698,9 @@ async function upsertCompanies(tenantId: string, rows: PlannedRow[]): Promise<Ma
           missing.map(([key, row]) => ({
             tenantId,
             name: (row.draft.company ?? "").slice(0, 300),
-            nameNormalized: key.slice(0, 300),
+            nameNormalized: normalizeCompanyName(row.draft.company)?.slice(0, 300) ?? key.slice(0, 300),
+            // Codul se scrie NORMALIZAT: așa cheia de dedup din bază e aceeași cu cea din import.
+            idno: normalizeIdno(row.draft.idno)?.slice(0, 40) ?? null,
             industry: row.draft.industry?.slice(0, 120) ?? null,
             region: row.draft.region?.slice(0, 120) ?? null,
             companySize: row.draft.company_size?.slice(0, 40) ?? null,
@@ -512,9 +712,10 @@ async function upsertCompanies(tenantId: string, rows: PlannedRow[]): Promise<Ma
             emailNormalized: normalizeEmail(row.draft.email),
           }))
         )
-        .returning({ id: crmCompanies.id, nameNormalized: crmCompanies.nameNormalized });
-      for (const e of inserted) {
-        if (e.nameNormalized) out.set(e.nameNormalized, e.id);
+        .returning({ id: crmCompanies.id });
+      // Ca la lead-uri: `RETURNING` păstrează ordinea din `VALUES`.
+      for (let i = 0; i < inserted.length && i < missing.length; i++) {
+        out.set(missing[i][0], inserted[i].id);
       }
     }
   } catch (err) {

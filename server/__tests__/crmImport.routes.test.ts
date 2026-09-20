@@ -23,7 +23,7 @@ import { and, eq } from "drizzle-orm";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
-import { tenants, users, leads } from "../db/schema";
+import { tenants, users, leads, leadTags, customFields, leadFieldValues } from "../db/schema";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmCompanies, crmImportJobs, crmImportMappings } from "../db/schema/crmCompanies";
 
@@ -438,5 +438,137 @@ describe("jurnalul importurilor", () => {
       .where(and(eq(crmImportMappings.tenantId, tenantA), eq(crmImportMappings.name, "Export vechi")));
     expect(rows).toHaveLength(1);
     expect(rows[0].mapping).toMatchObject({ 0: "full_name", 1: "phone" });
+  });
+});
+
+// ─── CC-1: orice coloană are unde ateriza ────────────────────────────────────
+
+describe("CC-1 — coloane arbitrare: cod fiscal, etichete, câmpuri personalizate", () => {
+  /** Creează o definiție de câmp personalizat direct în bază (ruta ei e testată separat). */
+  async function makeField(label: string, key: string) {
+    const [row] = await testDb
+      .insert(customFields)
+      .values({ tenantId: tenantA, key, label })
+      .returning();
+    return row;
+  }
+
+  beforeEach(async () => {
+    await testDb.delete(leadFieldValues);
+    await testDb.delete(leadTags);
+    await testDb.delete(customFields);
+  });
+
+  it("[blocant] codul fiscal din fișier ajunge pe fișa firmei, normalizat", async () => {
+    const csv = ["Denumire,IDNO,Telefon", "SRL Alfa,MD 1003-600-012345,069391979"].join("\n");
+    const res = await post("/api/crm/import/run", { text: csv, mapping: { 0: "company", 1: "idno", 2: "phone" } });
+    expect(res.body.created).toBe(1);
+
+    const [firma] = await testDb.select().from(crmCompanies).where(eq(crmCompanies.tenantId, tenantA));
+    expect(firma.idno).toBe("MD1003600012345");
+  });
+
+  it("[blocant] aceeași firmă cu ALT nume, dar același cod fiscal, nu se dublează", async () => {
+    // Exact cazul care strică o bază de outreach: „SRL Alfa" azi, „Alfa S.R.L." în lista
+    // cumpărată luna viitoare. Fără cod fiscal ar fi două firme și doi agenți care sună.
+    await post("/api/crm/import/run", {
+      text: ["Denumire,IDNO,Telefon", "SRL Alfa,1003600012345,069391979"].join("\n"),
+      mapping: { 0: "company", 1: "idno", 2: "phone" },
+    });
+    await post("/api/crm/import/run", {
+      text: ["Denumire,IDNO,Telefon", "Alfa S.R.L.,1003-600-012345,069111111"].join("\n"),
+      mapping: { 0: "company", 1: "idno", 2: "phone" },
+    });
+
+    const firme = await testDb.select().from(crmCompanies).where(eq(crmCompanies.tenantId, tenantA));
+    expect(firme).toHaveLength(1);
+  });
+
+  it("[blocant] un rând cu cod fiscal deja existent e raportat ca duplicat, nu importat tăcut", async () => {
+    const csv = ["Denumire,IDNO,Telefon", "SRL Alfa,1003600012345,069391979"].join("\n");
+    const mapping = { 0: "company", 1: "idno", 2: "phone" };
+    await post("/api/crm/import/run", { text: csv, mapping });
+
+    // Al doilea fișier: alt telefon, alt nume — dar aceeași firmă.
+    const prev = await post("/api/crm/import/preview", {
+      text: ["Denumire,IDNO,Telefon", "Alfa SRL,1003600012345,069555555"].join("\n"),
+      mapping,
+    });
+    const rows = prev.body.rows as { status: string }[];
+    expect(rows[0].status).toBe("duplicate_in_db");
+  });
+
+  it("[blocant] o coloană mapată pe „Etichetă\" devine etichete pe lead, una pentru fiecare valoare", async () => {
+    const csv = ["Nume,Telefon,Segmente", "Ion Popescu,069391979,\"alimentar; retail\""].join("\n");
+    await post("/api/crm/import/run", { text: csv, mapping: { 0: "full_name", 1: "phone", 2: "tag" } });
+
+    const tags = await testDb.select().from(leadTags).where(eq(leadTags.tenantId, tenantA));
+    expect(tags.map((t) => t.tag).sort()).toEqual(["alimentar", "retail"]);
+  });
+
+  it("[blocant] o coloană mapată pe un câmp personalizat se scrie ca valoare pe lead", async () => {
+    const camp = await makeField("Cod CAEN", "cod_caen");
+    const csv = ["Nume,Telefon,Cod CAEN", "Ion Popescu,069391979,4711"].join("\n");
+    await post("/api/crm/import/run", {
+      text: csv,
+      mapping: { 0: "full_name", 1: "phone", 2: "cf:cod_caen" },
+    });
+
+    const values = await testDb.select().from(leadFieldValues).where(eq(leadFieldValues.tenantId, tenantA));
+    expect(values).toHaveLength(1);
+    expect(values[0].fieldId).toBe(camp.id);
+    expect(values[0].value).toBe("4711");
+  });
+
+  it("propunerea de mapare recunoaște singură un câmp personalizat după eticheta lui", async () => {
+    await makeField("Cod CAEN", "cod_caen");
+    const prev = await post("/api/crm/import/preview", {
+      text: ["Nume,Telefon,Cod CAEN", "Ion Popescu,069391979,4711"].join("\n"),
+    });
+    expect((prev.body.mapping as Record<number, string>)[2]).toBe("cf:cod_caen");
+    expect(prev.body.customFields).toEqual([{ id: expect.any(String), key: "cod_caen", label: "Cod CAEN" }]);
+  });
+
+  it("[blocant] un câmp personalizat ȘTERS nu rupe importul — coloana lui se ignoră, cu avertisment", async () => {
+    // Cazul real: o mapare salvată acum două luni, pe un câmp pe care cineva l-a șters între timp.
+    const prev = await post("/api/crm/import/preview", {
+      text: ["Nume,Telefon,Cod CAEN", "Ion Popescu,069391979,4711"].join("\n"),
+      mapping: { 0: "full_name", 1: "phone", 2: "cf:camp_disparut" },
+    });
+    expect(prev.status).toBe(200);
+    expect((prev.body.mapping as Record<number, string>)[2]).toBe("ignore");
+    const rows = prev.body.rows as { warnings: string[] }[];
+    expect(rows[0].warnings.join(" ")).toContain("camp_disparut");
+  });
+
+  it("[blocant] o țintă inventată e respinsă, nu salvată într-o mapare pe care nimeni n-o mai poate citi", async () => {
+    const res = await post("/api/crm/import/preview", {
+      text: ["Nume,Telefon", "Ion Popescu,069391979"].join("\n"),
+      mapping: { 0: "full_name", 1: "inventat" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("„Circuit\" nu e citit drept cod fiscal fiindcă are „cui\" în el", async () => {
+    // Potrivirea pe subșir ar fi pus coloana greșită pe fișa firmei — de aceea cuvintele scurte
+    // se cer ca whole word.
+    const prev = await post("/api/crm/import/preview", {
+      text: ["Nume,Telefon,Circuit", "Ion Popescu,069391979,A12"].join("\n"),
+    });
+    expect((prev.body.mapping as Record<number, string>)[2]).not.toBe("idno");
+  });
+
+  it("etichetele și valorile personalizate ale unui workspace nu ajung în altul", async () => {
+    await makeField("Cod CAEN", "cod_caen");
+    currentUser = { id: boId, tenantId: tenantB, role: "admin", email: "bo@beta.md" };
+    await post("/api/crm/import/run", {
+      text: ["Nume,Telefon,Segmente", "Ion Popescu,069391979,alimentar"].join("\n"),
+      mapping: { 0: "full_name", 1: "phone", 2: "tag" },
+    });
+
+    const inA = await testDb.select().from(leadTags).where(eq(leadTags.tenantId, tenantA));
+    expect(inA).toHaveLength(0);
+    const inB = await testDb.select().from(leadTags).where(eq(leadTags.tenantId, tenantB));
+    expect(inB).toHaveLength(1);
   });
 });

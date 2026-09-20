@@ -239,6 +239,7 @@ export const IMPORT_TARGET_FIELDS = [
   "phone",
   "email",
   "company",
+  "idno",
   "interest_course",
   "value_cents",
   "source",
@@ -250,10 +251,49 @@ export const IMPORT_TARGET_FIELDS = [
   "annual_consumption_kwh",
   "notes",
   "deal_name",
+  "tag",
   "ignore",
 ] as const;
 
 export type ImportTargetField = (typeof IMPORT_TARGET_FIELDS)[number];
+
+/**
+ * Ținta unei coloane: fie un câmp fix de mai sus, fie un CÂMP PERSONALIZAT al
+ * workspace-ului, scris `cf:<cheie>`.
+ *
+ * De ce nu doar lista fixă, cum era până acum: lista fusese croită pe un singur client (panouri
+ * fotovoltaice — de aici `annual_consumption_kwh`). Un fișier real de outreach B2B are „Cod CAEN",
+ * „Nr. angajați", „Sursa listei" — coloane pe care nicio listă fixă nu le poate anticipa. Până
+ * acum singura lor destinație era „— ignoră coloana —", adică aruncate. Câmpurile personalizate
+ * existau deja în produs (`custom_fields`), doar că importul nu le putea scrie.
+ *
+ * Prefixul e obligatoriu: fără el, o cheie de câmp personalizat numită „notes" ar fi confundată
+ * cu câmpul fix cu același nume, iar valoarea ar ajunge în altă coloană decât a cerut omul.
+ */
+export const CUSTOM_FIELD_PREFIX = "cf:";
+export type ImportTarget = ImportTargetField | `${typeof CUSTOM_FIELD_PREFIX}${string}`;
+
+const FIXED_TARGETS: ReadonlySet<string> = new Set(IMPORT_TARGET_FIELDS);
+
+/** Ținta e un câmp fix cunoscut? (îngustează tipul, pentru `applyMapping`) */
+export function isFixedTarget(target: string): target is ImportTargetField {
+  return FIXED_TARGETS.has(target);
+}
+
+/** Cheia câmpului personalizat dintr-o țintă `cf:<cheie>`, sau `null` dacă nu e una. */
+export function customFieldKeyOf(target: string): string | null {
+  if (!target.startsWith(CUSTOM_FIELD_PREFIX)) return null;
+  const key = target.slice(CUSTOM_FIELD_PREFIX.length).trim();
+  return key.length > 0 ? key : null;
+}
+
+/** Validator pentru ce vine din exterior (zod-ul rutei). Cheia unui câmp personalizat respectă
+ *  aceeași regulă ca `slugifyLabel` din ruta de câmpuri: litere mici, cifre și `_`. */
+export function isImportTarget(value: string): value is ImportTarget {
+  if (isFixedTarget(value)) return true;
+  const key = customFieldKeyOf(value);
+  return key !== null && /^[a-z0-9_]{1,64}$/.test(key);
+}
 
 /** Etichete în română pentru select-ul de mapare din UI. */
 export const IMPORT_TARGET_LABELS: Record<ImportTargetField, string> = {
@@ -261,6 +301,7 @@ export const IMPORT_TARGET_LABELS: Record<ImportTargetField, string> = {
   phone: "Telefon",
   email: "Email",
   company: "Companie",
+  idno: "Cod fiscal (IDNO/CUI)",
   interest_course: "Curs / produs de interes",
   value_cents: "Valoare (oportunitate)",
   source: "Sursă",
@@ -272,17 +313,19 @@ export const IMPORT_TARGET_LABELS: Record<ImportTargetField, string> = {
   annual_consumption_kwh: "Consum anual (kWh)",
   notes: "Notițe",
   deal_name: "Denumire oportunitate",
+  tag: "Etichetă",
   ignore: "— ignoră coloana —",
 };
 
 /** index coloană (0-based, în ordinea header-ului din fișier) → câmp țintă. */
-export type FieldMapping = Record<number, ImportTargetField>;
+export type FieldMapping = Record<number, ImportTarget>;
 
 const FIELD_KEYWORDS: Record<Exclude<ImportTargetField, "ignore">, string[]> = {
   email: ["email", "e mail", "mail"],
   phone: ["telefon", "phone", "mobil", "gsm", "tel"],
   full_name: ["nume complet", "nume", "name", "client", "contact"],
   company: ["companie", "firma", "company", "organizatie", "denumire firma"],
+  idno: ["idno", "cod fiscal", "codul fiscal", "cui", "cif", "fiscal code", "vat", "tax id"],
   value_cents: ["valoare", "value", "suma", "pret", "amount"],
   annual_consumption_kwh: ["consum anual", "consum", "kwh", "consumption"],
   industry: ["industrie", "industry", "domeniu"],
@@ -294,6 +337,7 @@ const FIELD_KEYWORDS: Record<Exclude<ImportTargetField, "ignore">, string[]> = {
   stage: ["etapa", "stage", "status"],
   deal_name: ["oportunitate", "deal", "denumire oportunitate"],
   notes: ["observatii", "note", "notes", "comentarii", "mentiuni"],
+  tag: ["eticheta", "etichete", "tag", "tags", "marcaj"],
 };
 
 /** Ordinea în care se încearcă potrivirea — cele mai specifice/frecvente
@@ -301,6 +345,7 @@ const FIELD_KEYWORDS: Record<Exclude<ImportTargetField, "ignore">, string[]> = {
 const FIELD_MATCH_ORDER: Exclude<ImportTargetField, "ignore">[] = [
   "email",
   "phone",
+  "idno",
   "full_name",
   "company",
   "value_cents",
@@ -313,8 +358,22 @@ const FIELD_MATCH_ORDER: Exclude<ImportTargetField, "ignore">[] = [
   "assigned_to",
   "stage",
   "deal_name",
+  "tag",
   "notes",
 ];
+
+/**
+ * Se potrivește un cuvânt-cheie cu un header normalizat?
+ *
+ * Cuvintele SCURTE (≤4 litere: „cui", „cif", „vat", „tag") se cer ca cuvânt întreg, nu ca
+ * subșir — altfel „Circuit" ar fi citit drept cod fiscal („cui" e subșir în „circuit") și
+ * coloana greșită ar ajunge pe fișa firmei. Cele lungi rămân subșir, ca „denumire companie" să
+ * prindă „companie".
+ */
+function keywordHits(normalizedHeader: string, keyword: string): boolean {
+  if (keyword.length > 4) return normalizedHeader.includes(keyword);
+  return normalizedHeader.split(" ").includes(keyword);
+}
 
 /** Normalizează un header pentru comparație: fără diacritice, minuscule,
  * punctuație/underscore transformate în spații, spații multiple colapsate. */
@@ -329,20 +388,44 @@ function normalizeHeader(raw: string): string {
  * și englezești. Fiecare câmp țintă e folosit cel mult o dată (prima coloană
  * potrivită câștigă); restul rămân "ignore" — owner-ul le poate remapa manual.
  */
-export function suggestMapping(headers: string[]): FieldMapping {
+export function suggestMapping(
+  headers: string[],
+  /** Câmpurile personalizate ale workspace-ului: o coloană al cărei antet e chiar eticheta unui
+   *  câmp existent se mapează singură pe el. Fără ele, omul ar remapa manual, la fiecare import,
+   *  exact coloanele pentru care ȘI-A făcut câmpuri. */
+  customFields: readonly { key: string; label: string }[] = []
+): FieldMapping {
   const mapping: FieldMapping = {};
-  const used = new Set<ImportTargetField>();
+  const used = new Set<string>();
+
+  const customByHeader = new Map<string, string>();
+  for (const f of customFields) {
+    const label = normalizeHeader(f.label);
+    if (label) customByHeader.set(label, `${CUSTOM_FIELD_PREFIX}${f.key}`);
+    // Și după cheie: un fișier exportat din CRM are antetul „cod_caen", nu „Cod CAEN".
+    const key = normalizeHeader(f.key);
+    if (key && !customByHeader.has(key)) customByHeader.set(key, `${CUSTOM_FIELD_PREFIX}${f.key}`);
+  }
 
   headers.forEach((header, idx) => {
     const norm = normalizeHeader(header);
-    let matched: ImportTargetField = "ignore";
+    let matched: ImportTarget = "ignore";
     if (norm.length > 0) {
-      for (const field of FIELD_MATCH_ORDER) {
-        if (used.has(field)) continue;
-        const hit = FIELD_KEYWORDS[field].some((kw) => norm.includes(kw));
-        if (hit) {
-          matched = field;
-          break;
+      // Câmpul personalizat are prioritate: dacă omul a creat un câmp „Sursă listă", acela e
+      // răspunsul mai bun pentru coloana „Sursa listei" decât câmpul fix `source`.
+      const custom = customByHeader.get(norm);
+      if (custom && !used.has(custom)) {
+        matched = custom as ImportTarget;
+      } else {
+        for (const field of FIELD_MATCH_ORDER) {
+          // Eticheta e singura țintă care poate primi mai multe coloane (fiecare devine
+          // etichetă separată); restul, o singură dată.
+          if (field !== "tag" && used.has(field)) continue;
+          const hit = FIELD_KEYWORDS[field].some((kw) => keywordHits(norm, kw));
+          if (hit) {
+            matched = field;
+            break;
+          }
         }
       }
     }
@@ -499,6 +582,12 @@ export interface ImportDraftLead {
   annual_consumption_kwh: number | null;
   notes: string | null;
   deal_name: string | null;
+  /** Cod fiscal al firmei (IDNO în RM, CUI/CIF în RO) — cheia cea mai tare la dedup. */
+  idno: string | null;
+  /** Etichetele rezultate din coloanele mapate pe „Etichetă", deduplicate. */
+  tags: string[];
+  /** Valorile câmpurilor personalizate: cheia câmpului → text. */
+  custom_values: Record<string, string>;
 }
 
 function findColumnFor(mapping: FieldMapping, field: ImportTargetField): number | null {
@@ -506,6 +595,27 @@ function findColumnFor(mapping: FieldMapping, field: ImportTargetField): number 
     if (mapped === field) return Number(idx);
   }
   return null;
+}
+
+/** Codul fiscal redus la cifre/litere, ca „MD 1003600012345" și „1003600012345" să nu fie două
+ *  firme diferite. Gol → `null`: un IDNO din care nu rămâne nimic nu e o cheie de dedup. */
+export function normalizeIdno(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = String(raw).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+/** „alimentar, retail ; HoReCa" → ["alimentar", "retail", "HoReCa"]. O celulă de etichete
+ *  conține de regulă mai multe, separate cum a apucat fiecare export. */
+export function splitTagCell(raw: string): string[] {
+  return [
+    ...new Set(
+      raw
+        .split(/[,;|]/)
+        .map((t) => t.trim().slice(0, 100))
+        .filter((t) => t.length > 0)
+    ),
+  ];
 }
 
 /** Aplică maparea configurată peste rândurile brute → draft-uri tipizate,
@@ -518,6 +628,19 @@ export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDra
     if (idx !== null) columnFor.set(field, idx);
   }
 
+  // Etichetele și câmpurile personalizate pot veni din MAI MULTE coloane, deci nu încap în
+  // `columnFor` (o coloană per câmp). Le strângem separat, păstrând ordinea din fișier.
+  const tagColumns: number[] = [];
+  const customColumns: { idx: number; key: string }[] = [];
+  for (const [rawIdx, target] of Object.entries(mapping)) {
+    const idx = Number(rawIdx);
+    if (target === "tag") tagColumns.push(idx);
+    const key = customFieldKeyOf(target);
+    if (key) customColumns.push({ idx, key });
+  }
+  tagColumns.sort((a, b) => a - b);
+  customColumns.sort((a, b) => a.idx - b.idx);
+
   const cell = (row: string[], field: ImportTargetField): string => {
     const idx = columnFor.get(field);
     if (idx === undefined) return "";
@@ -527,17 +650,25 @@ export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDra
   return rows.map((row, i) => {
     const phone = cell(row, "phone") || null;
     const email = cell(row, "email") || null;
+    const company = cell(row, "company") || null;
+    /**
+     * În B2B, lista cumpărată are de multe ori DOAR firma: „SRL Alfa, IDNO, telefon recepție" —
+     * numele persoanei se află abia la primul apel. Până acum un astfel de rând era respins ca
+     * „lipsește numele", adică un import de 800 de companii se termina cu 0 create. Când numele
+     * lipsește dar firma există, firma E numele lead-ului; nu inventăm o persoană.
+     */
+    const fullName = cell(row, "full_name") || company || "";
     const valueRaw = cell(row, "value_cents");
     const consumptionRaw = cell(row, "annual_consumption_kwh");
 
     return {
       rowNumber: i + 1,
-      full_name: cell(row, "full_name"),
+      full_name: fullName,
       phone,
       phone_normalized: normalizePhone(phone),
       email,
       email_normalized: normalizeEmail(email),
-      company: cell(row, "company") || null,
+      company,
       interest_course: cell(row, "interest_course") || null,
       value_cents: valueRaw ? parseMoneyToCents(valueRaw) : null,
       source: cell(row, "source") || null,
@@ -549,6 +680,15 @@ export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDra
       annual_consumption_kwh: consumptionRaw ? parseDecimalNumber(consumptionRaw) : null,
       notes: cell(row, "notes") || null,
       deal_name: cell(row, "deal_name") || null,
+      idno: cell(row, "idno") || null,
+      tags: [...new Set(tagColumns.flatMap((idx) => splitTagCell((row[idx] ?? "").trim())))],
+      custom_values: Object.fromEntries(
+        customColumns
+          .map(({ idx, key }) => [key, (row[idx] ?? "").trim().slice(0, 1000)] as const)
+          // O celulă goală NU e o valoare: ar scrie rânduri fără conținut în `lead_field_values`
+          // și ar face filtrele „are valoare" să mintă.
+          .filter(([, value]) => value.length > 0)
+      ),
     };
   });
 }
@@ -585,12 +725,15 @@ export function validateDraft(draft: ImportDraftLead): DraftValidation {
 export type DuplicateStatus = "new" | "duplicate_in_file" | "duplicate_in_db";
 
 /**
- * Marchează fiecare draft cu statusul de duplicat, potrivind pe telefon SAU
+ * Marchează fiecare draft cu statusul de duplicat, potrivind pe COD FISCAL, telefon SAU
  * email normalizat. `existingKeys` conține cheile normalizate deja prezente
  * în baza de date (vezi `loadExistingDedupKeys` din `useImport.ts`). În caz de
  * coliziune ȘI cu DB ȘI cu alt rând din fișier, câștigă `duplicate_in_db` —
  * e semnalul mai important pentru owner (deja există lead-ul, nu doar
  * repetat în fișier).
+ *
+ * Codul fiscal intră în cheie cu prefixul `idno:`: fără el, un IDNO format numai din cifre ar
+ * putea coincide cu un telefon normalizat și ar declara duplicate două firme fără legătură.
  */
 export function findDuplicates(
   drafts: ImportDraftLead[],
@@ -599,7 +742,8 @@ export function findDuplicates(
   const seenInFile = new Set<string>();
 
   return drafts.map((draft) => {
-    const keys = [draft.phone_normalized, draft.email_normalized].filter(
+    const idno = normalizeIdno(draft.idno);
+    const keys = [idno ? `idno:${idno}` : null, draft.phone_normalized, draft.email_normalized].filter(
       (k): k is string => Boolean(k)
     );
     if (keys.length === 0) return "new";

@@ -48,7 +48,13 @@ import {
   DUPLICATE_LABELS,
   type FieldMapping,
   type ImportTargetField,
+  type ImportTarget,
+  type ImportCustomField,
+  CUSTOM_FIELD_PREFIX,
+  customFieldKeyOf,
+  createCrmCustomField,
   type ImportPreviewResponse,
+  type ImportPreviewRow,
   type ImportRunResponse,
   type CrmImportJob,
   type CrmImportMapping,
@@ -62,6 +68,37 @@ type Step = "sursa" | "mapare" | "verificare";
 function money(cents: number | null | undefined): string {
   if (cents == null) return "—";
   return new Intl.NumberFormat("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
+}
+
+/**
+ * Ce s-a citit din prima linie pentru coloana asta — după mapare, nu textul brut.
+ * Țintele dinamice (etichetă, câmp personalizat) nu stau pe draft ca proprietăți simple, deci
+ * un `draft[target]` ar afișa gol exact pentru coloanele nou adăugate.
+ */
+function sampleCell(row: ImportPreviewRow | undefined, target: ImportTarget): string {
+  if (!row) return "";
+  const draft = row.draft as ImportPreviewRow["draft"] & {
+    tags?: string[];
+    custom_values?: Record<string, string>;
+  };
+  if (target === "ignore") return "";
+  if (target === "tag") return (draft.tags ?? []).join(", ");
+  const key = customFieldKeyOf(target);
+  if (key) return draft.custom_values?.[key] ?? "";
+  return String(draft[target] ?? "");
+}
+
+/** Aceeași regulă ca `slugifyLabel` din `server/routes/crmCustomFields.ts` — cheia pe care o va
+ *  fi primit un câmp creat din eticheta asta. */
+function slugifyLabel(label: string): string {
+  const slug = label
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+  return slug.length > 0 ? slug : "camp";
 }
 
 function errText(err: unknown, fallback: string): string {
@@ -85,6 +122,10 @@ export function CrmImportPage() {
   const [mapping, setMapping] = useState<FieldMapping | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
 
+  /** Câmpurile personalizate ale workspace-ului: vin din previzualizare, cresc când omul creează
+   *  unul dintr-o coloană. */
+  const [customFields, setCustomFields] = useState<ImportCustomField[]>([]);
+  const [creatingField, setCreatingField] = useState<number | null>(null);
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +159,9 @@ export function CrmImportPage() {
         const res = await previewCrmImport({ text, format, mapping: nextMapping });
         setPreview(res);
         setMapping(res.mapping);
+        // Serverul e sursa adevărului și pentru lista de câmpuri: dacă altcineva a adăugat unul
+        // între timp, apare aici fără reîncărcarea paginii.
+        if (res.customFields) setCustomFields(res.customFields);
       } catch (err) {
         setError(errText(err, "Nu am putut citi fișierul."));
       } finally {
@@ -161,10 +205,38 @@ export function CrmImportPage() {
     setStep("mapare");
   }
 
-  function changeColumn(index: number, field: ImportTargetField) {
+  function changeColumn(index: number, field: ImportTarget) {
     const next: FieldMapping = { ...(mapping ?? {}), [index]: field };
     setMapping(next);
     void refreshPreview(next);
+  }
+
+  /**
+   * Coloana devine un câmp personalizat nou, cu numele antetului ei, și se mapează pe el.
+   *
+   * De ce aici și nu în Setări: o coloană precum „Cod CAEN" se descoperă TOCMAI când te uiți la
+   * fișier. Dacă pentru ea trebuie să pleci din ecran, să creezi câmpul și să reîncepi importul,
+   * nimeni n-o face — se alege „ignoră" și datele se pierd la prima încărcare.
+   */
+  async function makeCustomField(index: number, header: string) {
+    const label = header.trim() || `Coloana ${index + 1}`;
+    setCreatingField(index);
+    setError(null);
+    try {
+      const field = await createCrmCustomField({ label });
+      setCustomFields((prev) => (prev.some((f) => f.key === field.key) ? prev : [...prev, field]));
+      changeColumn(index, `${CUSTOM_FIELD_PREFIX}${field.key}`);
+    } catch (err) {
+      // Câmpul există deja (altcineva l-a făcut, sau două coloane au același antet): nu e o
+      // eroare pentru om — e exact câmpul pe care îl voia. Îl mapăm pe cel existent.
+      if (errText(err, "").includes("field_key_taken")) {
+        changeColumn(index, `${CUSTOM_FIELD_PREFIX}${slugifyLabel(label)}`);
+      } else {
+        setError(errText(err, "Câmpul personalizat nu s-a putut crea."));
+      }
+    } finally {
+      setCreatingField(null);
+    }
   }
 
   async function doImport() {
@@ -341,28 +413,59 @@ export function CrmImportPage() {
                 </TableHeader>
                 <TableBody>
                   {preview.headers.map((header, i) => {
-                    const chosen = (mapping?.[i] ?? "ignore") as ImportTargetField;
-                    const onCompany = COMPANY_SCOPED_FIELDS.includes(chosen);
+                    const chosen = (mapping?.[i] ?? "ignore") as ImportTarget;
+                    const customKey = customFieldKeyOf(chosen);
+                    const onCompany = COMPANY_SCOPED_FIELDS.includes(chosen as ImportTargetField);
                     return (
                       <TableRow key={`${header}-${i}`}>
                         <TableCell className="font-medium">{header || `Coloana ${i + 1}`}</TableCell>
                         <TableCell className="max-w-[16rem] truncate text-muted-foreground">
-                          {String(preview.rows[0]?.draft?.[chosen] ?? "") || "—"}
+                          {sampleCell(preview.rows[0], chosen) || "—"}
                         </TableCell>
                         <TableCell>
                           <Select
                             aria-label={`Câmpul pentru coloana ${header || i + 1}`}
                             value={chosen}
-                            onChange={(e) => changeColumn(i, e.target.value as ImportTargetField)}
+                            onChange={(e) => changeColumn(i, e.target.value as ImportTarget)}
                           >
                             {IMPORT_TARGET_FIELDS.map((f) => (
                               <option key={f} value={f}>
                                 {IMPORT_TARGET_LABELS[f]}
                               </option>
                             ))}
+                            {customFields.length > 0 && (
+                              <optgroup label="Câmpuri personalizate">
+                                {customFields.map((f) => (
+                                  <option key={f.key} value={`${CUSTOM_FIELD_PREFIX}${f.key}`}>
+                                    {f.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
                           </Select>
                           {onCompany && (
                             <p className="mt-1 text-xs text-muted-foreground">Se salvează pe fișa firmei.</p>
+                          )}
+                          {customKey && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Câmp personalizat — se poate filtra în listă și în pâlnie.
+                            </p>
+                          )}
+                          {chosen === "tag" && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Valorile separate prin „,", „;" sau „|" devin etichete distincte.
+                            </p>
+                          )}
+                          {chosen === "ignore" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mt-1 h-auto px-0 text-xs"
+                              disabled={creatingField === i}
+                              onClick={() => void makeCustomField(i, header)}
+                            >
+                              {creatingField === i ? "Se creează…" : "Creează câmp din coloană"}
+                            </Button>
                           )}
                         </TableCell>
                       </TableRow>
