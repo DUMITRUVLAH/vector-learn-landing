@@ -76,8 +76,8 @@ vi.mock("@/lib/api/crm", () => ({
     sizes: [],
     products: [],
     consumption: null,
-    tags: [],
-    customFields: [],
+    tags: ["prioritar", "listă achiziționată"],
+    customFields: [{ key: "cod_caen", label: "Cod CAEN", values: ["4711", "6201"] }],
   }),
   getCrmPermissions: vi.fn().mockResolvedValue({ role: "admin", permissions: ["assignment.manage"] }),
 }));
@@ -221,5 +221,71 @@ describe("Repartizarea pe loturi", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /Repartizează 50 contacte/ })).not.toBeInTheDocument()
     );
+  });
+});
+
+describe("Manual sau automat", () => {
+  it("[blocant] modul automat cere agenți bifați și o strategie, nu numere scrise de mână", async () => {
+    previewCrmDistribution.mockResolvedValue(plan({ available: 500 }));
+    render(<CrmDistributionPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Automat" }));
+
+    // Câmpurile de număr dispar; apar bifele.
+    expect(screen.queryByLabelText("Câte contacte primește Ana Pop")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Ana Pop/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Bo Rusu/ }));
+
+    previewCrmDistribution.mockResolvedValue(
+      plan({
+        allocations: [
+          { userId: "ana", name: "Ana Pop", requested: 250, given: 250 },
+          { userId: "bo", name: "Bo Rusu", requested: 250, given: 250 },
+        ],
+        remaining: 0,
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Vezi ce se va întâmpla" }));
+
+    await waitFor(() => expect(previewCrmDistribution).toHaveBeenCalled());
+    const sent = previewCrmDistribution.mock.calls.at(-1)![0] as {
+      mode: string;
+      userIds: string[];
+      strategy: string;
+    };
+    expect(sent.mode).toBe("auto");
+    expect(sent.userIds.sort()).toEqual(["ana", "bo"]);
+    expect(sent.strategy).toBe("round_robin");
+  });
+
+  it("[blocant] strategia aleasă pleacă la server, cu explicația ei pe ecran", async () => {
+    previewCrmDistribution.mockResolvedValue(plan());
+    render(<CrmDistributionPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Automat" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Ana Pop/ }));
+    fireEvent.change(screen.getByLabelText("Cum împarte"), { target: { value: "capacity" } });
+
+    // Omul trebuie să afle CE face strategia, fără să ghicească din nume.
+    expect(screen.getByText(/norma zilnică/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Vezi ce se va întâmpla" }));
+    await waitFor(() => {
+      const sent = previewCrmDistribution.mock.calls.at(-1)![0] as { strategy: string };
+      expect(sent.strategy).toBe("capacity");
+    });
+  });
+
+  it("[blocant] eticheta se alege dintr-un click și ajunge în filtrul cererii", async () => {
+    // Motivul principal pentru care cineva deschide ecranul: „dă-i lui Ana doar retailul".
+    previewCrmDistribution.mockResolvedValue(plan({ available: 500 }));
+    render(<CrmDistributionPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "prioritar" }));
+
+    await waitFor(() => {
+      const sent = previewCrmDistribution.mock.calls.at(-1)![0] as { filters: Record<string, string> };
+      expect(sent.filters.tag).toBe("prioritar");
+    });
   });
 });

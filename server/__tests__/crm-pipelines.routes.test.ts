@@ -232,19 +232,30 @@ describe("POST /api/crm/pipelines — pâlnia nouă se naște cu etapele ei", ()
       .where(and(eq(crmPipelineStages.tenantId, vectorTenant), eq(crmPipelineStages.pipelineId, body.id as string)))
       .orderBy(crmPipelineStages.orderIndex);
 
+    // Etichetele (și cheile) sunt în engleză: SPANCO e un acronim englezesc, iar „Analiză" ar
+    // rupe legătura cu litera A din metodă.
     expect(stages.map((s) => s.key)).toEqual([
       "suspect",
       "prospect",
-      "analiza",
-      "negociere",
-      "concluzie",
-      "comanda",
-      "pierdut",
+      "analysis",
+      "negotiation",
+      "conclusion",
+      "order",
+      "lost",
+    ]);
+    expect(stages.map((s) => s.label)).toEqual([
+      "Suspect",
+      "Prospect",
+      "Analysis",
+      "Negotiation",
+      "Conclusion",
+      "Order",
+      "Lost",
     ]);
     // Flagurile, nu etichetele, sunt ce citesc rapoartele: „contracte semnate” numără tranzițiile
     // către etapa marcată câștigată. Un flag pus greșit face raportul să mintă în tăcere.
-    expect(stages.find((s) => s.key === "comanda")?.isWon).toBe(true);
-    expect(stages.find((s) => s.key === "pierdut")?.isLost).toBe(true);
+    expect(stages.find((s) => s.key === "order")?.isWon).toBe(true);
+    expect(stages.find((s) => s.key === "lost")?.isLost).toBe(true);
     expect(stages.filter((s) => s.isWon)).toHaveLength(1);
     expect(stages.filter((s) => s.isLost)).toHaveLength(1);
     // Probabilitățile cresc monoton — sunt punctul de plecare al prognozei.

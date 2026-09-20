@@ -24,9 +24,17 @@ import { Loader2, Send, Users, AlertTriangle, CheckCircle2, Snowflake } from "lu
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Badge, Button, Card, Checkbox, Input, Label, Select } from "@/components/ds";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useRouter } from "@/router/HashRouter";
 import { SegmentFilterBar } from "@/components/crm/SegmentFilterBar";
 import { crmSegmentParams, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
-import { listCrmPipelines, getCrmStages, type CrmPipeline, type CrmStage } from "@/lib/api/crm";
+import {
+  listCrmPipelines,
+  getCrmStages,
+  getCrmSegmentOptions,
+  type CrmPipeline,
+  type CrmStage,
+  type CrmSegmentOptions,
+} from "@/lib/api/crm";
 import {
   previewCrmDistribution,
   runCrmDistribution,
@@ -36,6 +44,7 @@ import {
   type DistributionRequest,
   type CrmRecallSettings,
 } from "@/lib/api/crmDistribution";
+import { AUTO_STRATEGIES, type AutoStrategyKey } from "@/lib/crm/distributionStrategies";
 
 /** Rolurile care nu sună clienți — nu au ce căuta în lista de repartizare. */
 const NON_SALES_ROLES = new Set(["student", "parent"]);
@@ -45,18 +54,37 @@ function errText(err: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Pâlnia cerută în adresă (`?pipelineId=…`), când vii cu butonul „Repartizare" de pe tablă. */
+function pipelineFromPath(path: string): string | null {
+  const i = path.indexOf("?");
+  if (i < 0) return null;
+  return new URLSearchParams(path.slice(i + 1)).get("pipelineId");
+}
+
 export function CrmDistributionPage() {
   const { members, loading: loadingMembers } = useTeamMembers();
+  const { path } = useRouter();
+  const requestedPipeline = pipelineFromPath(path);
 
   const [pipelines, setPipelines] = useState<CrmPipeline[]>([]);
-  const [pipelineId, setPipelineId] = useState<string>("");
+  const [pipelineId, setPipelineId] = useState<string>(requestedPipeline ?? "");
   const [stages, setStages] = useState<CrmStage[]>([]);
   const [stage, setStage] = useState<string>("all");
   const [segments, setSegments] = useState<CrmSegmentFilters>({});
+  /** Etichetele workspace-ului, arătate ca butoane: filtrarea pe etichetă e motivul principal
+   *  pentru care cineva deschide ecranul ăsta („dă-i lui Ana doar retailul"), deci n-are ce
+   *  căuta ascunsă într-un panou care se deschide. */
+  const [segmentOptions, setSegmentOptions] = useState<CrmSegmentOptions | null>(null);
   const [onlyUnassigned, setOnlyUnassigned] = useState(true);
 
   /** Câte contacte îi dăm fiecărui agent (id → text, ca un câmp gol să nu devină 0). */
   const [counts, setCounts] = useState<Record<string, string>>({});
+
+  /** „Manual" = scriu eu numerele; „Automat" = le calculează sistemul, după o strategie. */
+  const [mode, setMode] = useState<"manual" | "auto">("manual");
+  const [autoUserIds, setAutoUserIds] = useState<string[]>([]);
+  const [autoCount, setAutoCount] = useState("");
+  const [strategy, setStrategy] = useState<AutoStrategyKey>("round_robin");
 
   const [plan, setPlan] = useState<DistributionPlanResponse | null>(null);
   const [done, setDone] = useState<DistributionPlanResponse | null>(null);
@@ -74,6 +102,12 @@ export function CrmDistributionPage() {
   const [savingRecall, setSavingRecall] = useState(false);
 
   useEffect(() => {
+    getCrmSegmentOptions()
+      .then(setSegmentOptions)
+      .catch(() => setSegmentOptions(null));
+  }, []);
+
+  useEffect(() => {
     getCrmRecallSettings()
       .then(setRecall)
       // Setarea e o funcție secundară: lipsa ei nu are voie să strice ecranul de repartizare.
@@ -84,11 +118,12 @@ export function CrmDistributionPage() {
     listCrmPipelines()
       .then((res) => {
         setPipelines(res.items);
+        if (requestedPipeline && res.items.some((p) => p.id === requestedPipeline)) return;
         const def = res.items.find((p) => p.isDefault) ?? res.items[0];
         if (def) setPipelineId(def.id);
       })
       .catch(() => setPipelines([]));
-  }, []);
+  }, [requestedPipeline]);
 
   useEffect(() => {
     if (!pipelineId) return;
@@ -133,10 +168,20 @@ export function CrmDistributionPage() {
 
   const probeMemberId = salesMembers[0]?.id ?? null;
 
-  const request = useCallback(
-    (): DistributionRequest => ({ ...(JSON.parse(filterKey) as DistributionRequest), allocations }),
-    [filterKey, allocations]
-  );
+  const request = useCallback((): DistributionRequest => {
+    const base = JSON.parse(filterKey) as DistributionRequest;
+    if (mode === "auto") {
+      const count = Number.parseInt(autoCount, 10);
+      return {
+        ...base,
+        mode: "auto",
+        userIds: autoUserIds,
+        strategy,
+        ...(Number.isFinite(count) && count > 0 ? { count } : {}),
+      };
+    }
+    return { ...base, mode: "manual", allocations };
+  }, [filterKey, allocations, mode, autoUserIds, autoCount, strategy]);
 
   /**
    * Câte contacte sunt disponibile ACUM, cu filtrul curent. Se cere cu o alocare simbolică de 1:
@@ -150,6 +195,7 @@ export function CrmDistributionPage() {
     try {
       const res = await previewCrmDistribution({
         ...(JSON.parse(filterKey) as DistributionRequest),
+        mode: "manual",
         allocations: [{ userId: probeMemberId, count: 1 }],
       });
       setAvailable(res.available);
@@ -190,6 +236,7 @@ export function CrmDistributionPage() {
       setDone(res);
       setPlan(null);
       setCounts({});
+      setAutoCount("");
       await refreshAvailable();
     } catch (err) {
       setError(errText(err, "Repartizarea a eșuat."));
@@ -235,6 +282,38 @@ export function CrmDistributionPage() {
             </div>
           </div>
 
+          {/* Eticheta, la un click. Restul filtrelor (industrie, regiune, coloane importate) stau
+              în „Segmentare", unde e loc pentru ele. */}
+          {(segmentOptions?.tags?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">Etichetă:</span>
+              {(segmentOptions?.tags ?? []).map((tag) => {
+                const active = segments.tag === tag;
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSegments((prev) => ({ ...prev, tag: active ? undefined : tag }))}
+                    className={
+                      "rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
+                      (active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-foreground hover:bg-muted")
+                    }
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+              {segments.tag && (
+                <Button variant="ghost" size="sm" onClick={() => setSegments((prev) => ({ ...prev, tag: undefined }))}>
+                  Toate
+                </Button>
+              )}
+            </div>
+          )}
+
           <SegmentFilterBar value={segments} onChange={setSegments} />
 
           <Checkbox
@@ -268,18 +347,54 @@ export function CrmDistributionPage() {
           )}
         </Card>
 
-        {/* 3. Cui, câte */}
+        {/* 3. Cui, câte — manual sau automat */}
         <Card className="space-y-4 p-4">
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-            <h2 className="text-lg font-semibold">Cui, câte</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+              <h2 className="text-lg font-semibold">Cui, câte</h2>
+            </div>
+
+            {/* Alegerea dintre „hotărăsc eu" și „hotărăște sistemul" e prima decizie a ecranului,
+                deci stă sus și se vede. Ascunsă într-un select, nimeni n-ar bănui că există. */}
+            <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="Cum se împarte">
+              {(
+                [
+                  ["manual", "Manual"],
+                  ["auto", "Automat"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={mode === key}
+                  onClick={() => {
+                    setMode(key);
+                    setPlan(null);
+                    setDone(null);
+                  }}
+                  className={
+                    "inline-flex h-9 items-center rounded-md px-4 text-sm font-medium transition-colors " +
+                    (mode === key ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted")
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            {mode === "manual"
+              ? "Scrii tu câte contacte primește fiecare agent. Cele mai vechi pleacă primele."
+              : "Bifezi agenții, sistemul împarte. Contactele rămân în ordine: cele mai vechi pleacă primele."}
+          </p>
 
           {loadingMembers ? (
             <p className="text-sm text-muted-foreground">Se încarcă echipa…</p>
           ) : salesMembers.length === 0 ? (
             <Alert>Workspace-ul n-are încă agenți de vânzări.</Alert>
-          ) : (
+          ) : mode === "manual" ? (
             <ul className="grid gap-2 sm:grid-cols-2">
               {salesMembers.map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5">
@@ -300,14 +415,80 @@ export function CrmDistributionPage() {
                 </li>
               ))}
             </ul>
+          ) : (
+            <div className="space-y-3">
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {salesMembers.map((m) => (
+                  <li key={m.id} className="rounded-lg border border-border p-2.5">
+                    <Checkbox
+                      id={`auto-${m.id}`}
+                      checked={autoUserIds.includes(m.id)}
+                      onChange={(next) =>
+                        setAutoUserIds((prev) => (next ? [...prev, m.id] : prev.filter((id) => id !== m.id)))
+                      }
+                      label={
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{m.fullName || m.email}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{m.email}</span>
+                        </span>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="dist-strategy">Cum împarte</Label>
+                  <Select
+                    id="dist-strategy"
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value as AutoStrategyKey)}
+                  >
+                    {AUTO_STRATEGIES.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {AUTO_STRATEGIES.find((s) => s.key === strategy)?.hint}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="dist-count">Câte contacte împarți</Label>
+                  <Input
+                    id="dist-count"
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    value={autoCount}
+                    onChange={(e) => setAutoCount(e.target.value)}
+                    placeholder={available !== null ? `toate (${available})` : "toate"}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">Gol = tot segmentul filtrat mai sus.</p>
+                </div>
+              </div>
+
+              {strategy === "rules" && (
+                <Alert variant="info">
+                  Regulile se scriu în <strong>Automatizări → Distribuire</strong>. Dacă nu e nicio regulă
+                  activă, nu se mută nimic — și îți spune asta în previzualizare.
+                </Alert>
+              )}
+            </div>
           )}
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void doPreview()} disabled={allocations.length === 0 || loading}>
+            <Button
+              variant="outline"
+              onClick={() => void doPreview()}
+              disabled={(mode === "manual" ? allocations.length === 0 : autoUserIds.length === 0) || loading}
+            >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               Vezi ce se va întâmpla
             </Button>
-            {salesMembers.length > 1 && !counting && available !== null && available > 0 && (
+            {mode === "manual" && salesMembers.length > 1 && !counting && available !== null && available > 0 && (
               <Button
                 variant="ghost"
                 onClick={() => {

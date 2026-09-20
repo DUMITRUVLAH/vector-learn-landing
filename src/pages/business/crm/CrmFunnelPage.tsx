@@ -24,6 +24,14 @@ import { FunnelChart, money } from "@/components/crm/FunnelChart";
 import { crmSegmentParams, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
 import { listCrmPipelines, type CrmPipeline } from "@/lib/api/crm";
 import { getCrmFunnel, type CrmFunnelResponse } from "@/lib/api/crmFunnel";
+import { useRouter } from "@/router/HashRouter";
+
+/** Pâlnia cerută în adresă (`?pipelineId=…`), când vii cu un buton de pe tablă. */
+function pipelineFromPath(path: string): string | null {
+  const i = path.indexOf("?");
+  if (i < 0) return null;
+  return new URLSearchParams(path.slice(i + 1)).get("pipelineId");
+}
 
 /** Perioadele uzuale. „Tot timpul" e implicit: o bază importată ieri n-are istoric de o lună,
  *  iar o pâlnie goală la prima deschidere ar părea o defecțiune. */
@@ -43,8 +51,10 @@ function rangeFor(period: string): { from?: string; to?: string } {
 }
 
 export function CrmFunnelPage() {
+  const { path } = useRouter();
+  const requestedPipeline = pipelineFromPath(path);
   const [pipelines, setPipelines] = useState<CrmPipeline[]>([]);
-  const [pipelineId, setPipelineId] = useState("");
+  const [pipelineId, setPipelineId] = useState(requestedPipeline ?? "");
   const [period, setPeriod] = useState<string>("all");
   const [owner, setOwner] = useState<string>("all");
   const [segments, setSegments] = useState<CrmSegmentFilters>({});
@@ -57,11 +67,14 @@ export function CrmFunnelPage() {
     listCrmPipelines()
       .then((res) => {
         setPipelines(res.items);
+        // Pâlnia din adresă bate implicita: ai apăsat „Analiza pâlniei" DE PE tabla ei, deci
+        // despre ea vrei să vezi cifrele — nu despre cea implicită a workspace-ului.
+        if (requestedPipeline && res.items.some((p) => p.id === requestedPipeline)) return;
         const def = res.items.find((p) => p.isDefault) ?? res.items[0];
         if (def) setPipelineId(def.id);
       })
       .catch(() => setPipelines([]));
-  }, []);
+  }, [requestedPipeline]);
 
   // Aceeași regulă ca la repartizare: efectul atârnă de VALORI serializate, nu de identitatea
   // unei funcții — altfel o re-randare oarecare ar reîncărca ecranul fără motiv.

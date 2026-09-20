@@ -27,6 +27,8 @@ import * as schema from "../db/schema/index";
 import { tenants, users } from "../db/schema";
 import { leads, leadInteractions, leadTags, customFields, leadFieldValues } from "../db/schema/leads";
 import { crmPipelines } from "../db/schema/crmPipelines";
+import { crmCompanies } from "../db/schema/crmCompanies";
+import { crmSalesSettings, crmAssignmentRules } from "../db/schema/crmAutomations";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 
 let pglite: PGlite;
@@ -139,11 +141,14 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  await testDb.delete(crmAssignmentRules);
+  await testDb.delete(crmSalesSettings);
   await testDb.delete(leadFieldValues);
   await testDb.delete(leadTags);
   await testDb.delete(customFields);
   await testDb.delete(leadInteractions);
   await testDb.delete(leads);
+  await testDb.delete(crmCompanies);
   session = { id: managerId, tenantId: tenantA, role: "admin", email: "sef@callco.md" };
 });
 
@@ -354,5 +359,128 @@ describe("Urma lăsată", () => {
     const res = await app.request("/api/crm/distribution/pool");
     expect(res.status).toBe(200);
     expect(((await res.json()) as { pool: number }).pool).toBe(4);
+  });
+});
+
+// ─── Repartizarea AUTOMATĂ (mod „auto") ─────────────────────────────────────
+
+describe("Împarte sistemul, nu omul", () => {
+  it("[blocant] „egal, pe rând” — 10 contacte între 2 agenți = 5 și 5", async () => {
+    await seedLeads(10);
+
+    const res = await call("/run", {
+      mode: "auto",
+      strategy: "round_robin",
+      userIds: [anaId, boId],
+    });
+
+    const allocations = res.body.allocations as Alloc[];
+    expect(allocations.map((a) => a.given).sort()).toEqual([5, 5]);
+    expect(res.body.remaining).toBe(0);
+  });
+
+  it("[blocant] restul de la împărțire nu se pierde: 7 între 2 = 4 + 3", async () => {
+    await seedLeads(7);
+    const res = await call("/run", { mode: "auto", userIds: [anaId, boId] });
+    const given = (res.body.allocations as Alloc[]).map((a) => a.given).sort((x, y) => y - x);
+    expect(given).toEqual([4, 3]);
+    expect(given[0] + given[1]).toBe(7);
+  });
+
+  it("se poate cere doar o parte din segment", async () => {
+    await seedLeads(20);
+    const res = await call("/run", { mode: "auto", userIds: [anaId, boId], count: 6 });
+    expect((res.body.allocations as Alloc[]).map((a) => a.given).sort()).toEqual([3, 3]);
+    expect(res.body.remaining).toBe(14);
+  });
+
+  it("[blocant] „după capacitate” — cine și-a atins norma zilnică nu mai primește", async () => {
+    // Ana are normă 3/zi, Bogdan 20. Din 10 contacte, Ana ia 3, Bogdan restul.
+    await testDb.insert(crmSalesSettings).values([
+      { tenantId: tenantA, userId: anaId, dailyCapacity: 3, weight: 1, orderIndex: 0 },
+      { tenantId: tenantA, userId: boId, dailyCapacity: 20, weight: 1, orderIndex: 1 },
+    ]);
+    await seedLeads(10);
+
+    const res = await call("/run", { mode: "auto", strategy: "capacity", userIds: [anaId, boId] });
+    const byUser = Object.fromEntries((res.body.allocations as Alloc[]).map((a) => [a.userId, a.given]));
+    expect(byUser[anaId]).toBe(3);
+    expect(byUser[boId]).toBe(7);
+  });
+
+  it("[blocant] „ponderat” — greutatea 2 primește dublu față de greutatea 1", async () => {
+    await testDb.insert(crmSalesSettings).values([
+      { tenantId: tenantA, userId: anaId, dailyCapacity: 0, weight: 2, orderIndex: 0 },
+      { tenantId: tenantA, userId: boId, dailyCapacity: 0, weight: 1, orderIndex: 1 },
+    ]);
+    await seedLeads(9);
+
+    const res = await call("/run", { mode: "auto", strategy: "weighted", userIds: [anaId, boId] });
+    const byUser = Object.fromEntries((res.body.allocations as Alloc[]).map((a) => [a.userId, a.given]));
+    expect(byUser[anaId]).toBe(6);
+    expect(byUser[boId]).toBe(3);
+  });
+
+  it("[blocant] „după reguli” — teritoriul trimite leadul la agentul zonei", async () => {
+    // Ana acoperă Nordul, Bogdan Sudul. Două firme, două regiuni, fiecare la omul ei.
+    const [nord] = await testDb
+      .insert(crmCompanies)
+      .values({ tenantId: tenantA, name: "Firma Nord", region: "Nord" })
+      .returning();
+    const [sud] = await testDb
+      .insert(crmCompanies)
+      .values({ tenantId: tenantA, name: "Firma Sud", region: "Sud" })
+      .returning();
+    await testDb.insert(crmSalesSettings).values([
+      { tenantId: tenantA, userId: anaId, dailyCapacity: 20, weight: 1, orderIndex: 0, regions: ["Nord"] },
+      { tenantId: tenantA, userId: boId, dailyCapacity: 20, weight: 1, orderIndex: 1, regions: ["Sud"] },
+    ]);
+    await testDb.insert(crmAssignmentRules).values({
+      tenantId: tenantA,
+      name: "Teritoriu",
+      enabled: true,
+      strategy: "territory",
+      conditions: [],
+      userIds: [],
+      orderIndex: 0,
+    });
+
+    const base = new Date("2026-01-01T08:00:00Z");
+    await testDb.insert(leads).values([
+      { tenantId: tenantA, pipelineId, fullName: "Nordica", phone: "069111111", stage: "new", source: "import", companyId: nord.id, createdAt: base },
+      { tenantId: tenantA, pipelineId, fullName: "Sudica", phone: "069222222", stage: "new", source: "import", companyId: sud.id, createdAt: new Date(base.getTime() + 60000) },
+    ]);
+
+    const res = await call("/run", { mode: "auto", strategy: "rules", userIds: [anaId, boId] });
+    const byUser = Object.fromEntries((res.body.allocations as Alloc[]).map((a) => [a.userId, a.given]));
+    expect(byUser[anaId]).toBe(1);
+    expect(byUser[boId]).toBe(1);
+
+    const [nordica] = await testDb.select().from(leads).where(eq(leads.fullName, "Nordica"));
+    expect(nordica.assignedTo).toBe(anaId);
+  });
+
+  it("[blocant] fără nicio regulă activă, „după reguli” nu mută nimic — și o spune", async () => {
+    await seedLeads(5);
+    const res = await call("/run", { mode: "auto", strategy: "rules", userIds: [anaId, boId] });
+    expect((res.body.allocations as Alloc[]).every((a) => a.given === 0)).toBe(true);
+    expect(res.body.remaining).toBe(5);
+
+    const atinse = await testDb.select().from(leads).where(isNull(leads.assignedTo));
+    expect(atinse).toHaveLength(5);
+  });
+
+  it("[blocant] modul automat fără niciun agent bifat e respins, nu „reușit cu 0”", async () => {
+    await seedLeads(5);
+    const res = await call("/run", { mode: "auto", userIds: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it("previzualizarea automată nu scrie nimic", async () => {
+    await seedLeads(8);
+    const res = await call("/preview", { mode: "auto", userIds: [anaId, boId] });
+    expect((res.body.allocations as Alloc[]).map((a) => a.given).sort()).toEqual([4, 4]);
+    const atinse = await testDb.select().from(leads).where(isNull(leads.assignedTo));
+    expect(atinse).toHaveLength(8);
   });
 });

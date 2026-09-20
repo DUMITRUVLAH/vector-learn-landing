@@ -18,8 +18,9 @@
  * `drop` citește o valoare învechită (stale closure).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, KanbanSquare, LayoutList, Download, Bell } from "lucide-react";
+import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, KanbanSquare, LayoutList, Download, Bell, BarChart3 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { useRouter } from "@/router/HashRouter";
 import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
@@ -175,6 +176,9 @@ export function CrmPipelinePage() {
   // apărarea e pe server (`requireCrmPermission`), nu aici.
   const { can } = useCrmPermissions();
   const canManagePipelines = can("pipelines.manage");
+  /** Cine poate repartiza — același drept ca pe ecranul de repartizare. */
+  const canAssign = can("assignment.manage");
+  const { navigate } = useRouter();
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.id, m.fullName]));
 
   /** Comutarea vederii, cu preferința salvată. Stocarea poate arunca (mod privat) — vederea se
@@ -434,6 +438,29 @@ export function CrmPipelinePage() {
           />
           {/* Butonul „Pâlnii" a plecat: pastilele de deasupra tablei fac același lucru, vizibil.
               „Etape" rămâne — configurarea coloanelor e altă treabă decât alegerea pâlniei. */}
+          {/* Cele două întrebări care urmează imediat după „m-am uitat pe tablă": *cum arată
+              pâlnia întreagă* și *cui dau contactele*. Amândouă duc pâlnia CURENTĂ cu ele, ca
+              ecranul următor să nu ceară din nou ce tocmai a fost ales aici. */}
+          <Button
+            variant="outline"
+            onClick={() =>
+              navigate(`/business/crm/palnie${activePipelineId ? `?pipelineId=${activePipelineId}` : ""}`)
+            }
+          >
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
+            Analiza pâlniei
+          </Button>
+          {canAssign && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                navigate(`/business/crm/repartizare${activePipelineId ? `?pipelineId=${activePipelineId}` : ""}`)
+              }
+            >
+              <Users className="h-4 w-4" aria-hidden="true" />
+              Repartizare
+            </Button>
+          )}
           {canManagePipelines && (
             <Button variant="outline" onClick={() => setShowStageEditor(true)}>
               <Settings className="h-4 w-4" aria-hidden="true" />

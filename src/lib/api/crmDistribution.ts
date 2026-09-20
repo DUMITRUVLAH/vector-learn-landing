@@ -31,13 +31,24 @@ export interface DistributionPlanResponse {
   ok?: true;
 }
 
+/** Strategiile (constante pure) stau în `src/lib/crm/distributionStrategies.ts` — vezi motivul
+ *  acolo: un export nou aici pică fiecare suită care mochează modulul. */
+import type { AutoStrategyKey } from "@/lib/crm/distributionStrategies";
+
 export interface DistributionRequest {
   pipelineId?: string | null;
   stage?: string | null;
   onlyUnassigned?: boolean;
   /** Filtrele de segment, cu aceleași chei ca în lista de leaduri (`industry`, `tag`, `cf_<cheie>`…). */
   filters?: Record<string, string>;
-  allocations: DistributionAllocationInput[];
+  /** `manual` = omul scrie numerele; `auto` = le calculează sistemul. */
+  mode?: "manual" | "auto";
+  allocations?: DistributionAllocationInput[];
+  /** `auto`: agenții bifați. */
+  userIds?: string[];
+  /** `auto`: câte contacte se împart în total. Lipsă = tot segmentul. */
+  count?: number;
+  strategy?: AutoStrategyKey;
 }
 
 export function previewCrmDistribution(body: DistributionRequest): Promise<DistributionPlanResponse> {

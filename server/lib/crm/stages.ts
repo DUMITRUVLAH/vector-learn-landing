@@ -66,15 +66,20 @@ export const DEFAULT_STAGES: readonly DefaultStageSeed[] = [
  *
  * Probabilitățile cresc monoton: sunt punctul de plecare al prognozei, iar un Suspect nu are
  * aceeași șansă ca o Negociere. Se pot schimba oricând per etapă sau per oportunitate.
+ *
+ * ETICHETELE SUNT ÎN ENGLEZĂ, deliberat (cerere owner, 20.09.2026): SPANCO e un acronim englezesc
+ * și se citește doar dacă fiecare etapă păstrează litera lui — „Analiză" rupe legătura cu A-ul
+ * din metodă. Restul interfeței rămâne în română; etichetele se pot oricum redenumi per workspace
+ * din editorul de etape, fără să atingă cheile (deci fără să miște rapoartele).
  */
 export const SPANCO_STAGES: readonly DefaultStageSeed[] = [
   { key: "suspect", label: "Suspect", color: "sky", orderIndex: 0, isWon: false, isLost: false, probabilityPct: 5 },
   { key: "prospect", label: "Prospect", color: "sky", orderIndex: 1, isWon: false, isLost: false, probabilityPct: 15 },
-  { key: "analiza", label: "Analiză", color: "lavender", orderIndex: 2, isWon: false, isLost: false, probabilityPct: 35 },
-  { key: "negociere", label: "Negociere", color: "peach", orderIndex: 3, isWon: false, isLost: false, probabilityPct: 60 },
-  { key: "concluzie", label: "Concluzie", color: "peach", orderIndex: 4, isWon: false, isLost: false, probabilityPct: 85 },
-  { key: "comanda", label: "Comandă", color: "mint", orderIndex: 5, isWon: true, isLost: false, probabilityPct: 100 },
-  { key: "pierdut", label: "Pierdut", color: "rose", orderIndex: 6, isWon: false, isLost: true, probabilityPct: 0 },
+  { key: "analysis", label: "Analysis", color: "lavender", orderIndex: 2, isWon: false, isLost: false, probabilityPct: 35 },
+  { key: "negotiation", label: "Negotiation", color: "peach", orderIndex: 3, isWon: false, isLost: false, probabilityPct: 60 },
+  { key: "conclusion", label: "Conclusion", color: "peach", orderIndex: 4, isWon: false, isLost: false, probabilityPct: 85 },
+  { key: "order", label: "Order", color: "mint", orderIndex: 5, isWon: true, isLost: false, probabilityPct: 100 },
+  { key: "lost", label: "Lost", color: "rose", orderIndex: 6, isWon: false, isLost: true, probabilityPct: 0 },
 ] as const;
 
 /**

@@ -117,6 +117,39 @@ const STAGES = [
 
 const PIPELINE_NAME = "Call-center B2B";
 
+/**
+ * A doua pâlnie: SPANCO, cu etapele ÎN ENGLEZĂ — acronimul e englezesc, iar „Analiză" ar rupe
+ * legătura cu litera A din metodă. Primește un lot mai mic, dar cu aceeași structură, ca ecranele
+ * să poată fi comparate pe două procese diferite (call-center vs. vânzare consultativă).
+ */
+const SPANCO_PIPELINE_NAME = "SPANCO";
+const SPANCO_STAGES = [
+  { key: "suspect", label: "Suspect", color: "sky", probability: 5, won: false, lost: false },
+  { key: "prospect", label: "Prospect", color: "sky", probability: 15, won: false, lost: false },
+  { key: "analysis", label: "Analysis", color: "lavender", probability: 35, won: false, lost: false },
+  { key: "negotiation", label: "Negotiation", color: "peach", probability: 60, won: false, lost: false },
+  { key: "conclusion", label: "Conclusion", color: "peach", probability: 85, won: false, lost: false },
+  { key: "order", label: "Order", color: "mint", probability: 100, won: true, lost: false },
+  { key: "lost", label: "Lost", color: "rose", probability: 0, won: false, lost: true },
+];
+
+/** Lotul SPANCO: 12 în rezervă (Suspect, nerepartizate) + 9 + 9. */
+const SPANCO_RESERVE = 12;
+const SPANCO_ANA = [
+  ["prospect", 3],
+  ["analysis", 2],
+  ["negotiation", 2],
+  ["conclusion", 1],
+  ["order", 1],
+];
+const SPANCO_BOGDAN = [
+  ["prospect", 2],
+  ["analysis", 3],
+  ["negotiation", 2],
+  ["order", 1],
+  ["lost", 1],
+];
+
 // ─── Firme fictive, generate determinist ──────────────────────────────────────
 
 const PREFIX = ["Alfa", "Nord", "Sud", "Vest", "Prime", "Crystal", "Vector", "Magna", "Terra", "Aqua", "Lider", "Forte", "Stil", "Rapid", "Optim", "Unic", "Codru", "Plai", "Luceafăr", "Steaua"];
@@ -208,6 +241,17 @@ const OUTCOMES_BY_STAGE = {
 };
 const TERMINAL = new Set(["wrong_number", "refused"]);
 
+/** Aceeași idee, pe etapele SPANCO: unde a ajuns leadul explică ce s-a întâmplat la telefon. */
+const SPANCO_OUTCOMES = {
+  suspect: ["no_answer"],
+  prospect: ["no_answer", "gatekeeper", "callback"],
+  analysis: ["answered", "gatekeeper"],
+  negotiation: ["answered"],
+  conclusion: ["answered"],
+  order: ["answered"],
+  lost: ["not_interested", "refused"],
+};
+
 const TAGS = ["listă achiziționată", "prioritar", "buget aprobat", "revenire toamnă", "sector public", "grup mare"];
 
 // ─── Raport ───────────────────────────────────────────────────────────────────
@@ -267,45 +311,7 @@ async function main() {
       agentIds[agent.email] = row.id;
     }
 
-    // ── 2. Pâlnia de call-center ─────────────────────────────────────────────
-    let [pipeline] = await sql`
-      select id, name from crm_pipelines where tenant_id = ${tenantId} and name = ${PIPELINE_NAME}`;
-    if (pipeline) {
-      add(plan.skipped, "pâlnie");
-    } else {
-      add(plan.created, "pâlnie");
-      if (APPLY) {
-        const [maxRow] = await sql`select coalesce(max(order_index), -1) as m from crm_pipelines where tenant_id = ${tenantId}`;
-        const [row] = await sql`
-          insert into crm_pipelines (tenant_id, name, order_index, is_default, created_at, updated_at)
-          values (${tenantId}, ${PIPELINE_NAME}, ${Number(maxRow.m) + 1}, false, ${NOW}, ${NOW})
-          returning id, name`;
-        pipeline = row;
-      } else {
-        pipeline = { id: "(nou)", name: PIPELINE_NAME };
-      }
-    }
-
-    if (APPLY && pipeline.id !== "(nou)") {
-      for (const [i, stage] of STAGES.entries()) {
-        const [has] = await sql`
-          select id from crm_pipeline_stages
-          where tenant_id = ${tenantId} and pipeline_id = ${pipeline.id} and key = ${stage.key}`;
-        if (has) {
-          add(plan.skipped, "etape");
-          continue;
-        }
-        add(plan.created, "etape");
-        await sql`
-          insert into crm_pipeline_stages
-            (tenant_id, pipeline_id, key, label, color, order_index, is_won, is_lost, is_default, probability_pct, created_at, updated_at)
-          values (${tenantId}, ${pipeline.id}, ${stage.key}, ${stage.label}, ${stage.color}, ${i},
-                  ${stage.won}, ${stage.lost}, false, ${stage.probability}, ${NOW}, ${NOW})`;
-      }
-    } else if (!APPLY) {
-      add(plan.created, "etape", STAGES.length);
-    }
-
+    // ── 2–4. Cele două pâlnii, fiecare cu lotul ei ───────────────────────────
     // ── 3. Câmpurile personalizate (coloanele „importate") ───────────────────
     const FIELDS = [
       { key: "cod_caen", label: "Cod CAEN" },
@@ -329,13 +335,78 @@ async function main() {
       fieldIds[field.key] = row.id;
     }
 
-    // ── 4. Contactele ────────────────────────────────────────────────────────
-    /** 50 în rezervă + 25 + 25. Repartiția e explicită: numerele se verifică cu ochiul pe ecran. */
-    const assignments = [
-      { agent: null, stages: [["rezerva", 50]] },
-      { agent: AGENTS[0].email, stages: ANA_MIX },
-      { agent: AGENTS[1].email, stages: BOGDAN_MIX },
+    /**
+     * Două procese comerciale diferite, ca ecranele să poată fi comparate pe amândouă:
+     * call-centerul (multe contacte, multe apeluri) și SPANCO (lot mic, vânzare consultativă).
+     * Etapele SPANCO sunt în engleză — acronimul e englezesc.
+     */
+    const PROGRAMS = [
+      {
+        pipelineName: PIPELINE_NAME,
+        stages: STAGES,
+        staleStage: "repartizat",
+        outcomes: OUTCOMES_BY_STAGE,
+        assignments: [
+          { agent: null, stages: [["rezerva", 50]] },
+          { agent: AGENTS[0].email, stages: ANA_MIX },
+          { agent: AGENTS[1].email, stages: BOGDAN_MIX },
+        ],
+      },
+      {
+        pipelineName: SPANCO_PIPELINE_NAME,
+        stages: SPANCO_STAGES,
+        staleStage: "prospect",
+        outcomes: SPANCO_OUTCOMES,
+        assignments: [
+          { agent: null, stages: [["suspect", SPANCO_RESERVE]] },
+          { agent: AGENTS[0].email, stages: SPANCO_ANA },
+          { agent: AGENTS[1].email, stages: SPANCO_BOGDAN },
+        ],
+      },
     ];
+
+    for (const program of PROGRAMS) {
+    // ── 2. Pâlnia de call-center ─────────────────────────────────────────────
+    let [pipeline] = await sql`
+      select id, name from crm_pipelines where tenant_id = ${tenantId} and name = ${program.pipelineName}`;
+    if (pipeline) {
+      add(plan.skipped, "pâlnie");
+    } else {
+      add(plan.created, "pâlnie");
+      if (APPLY) {
+        const [maxRow] = await sql`select coalesce(max(order_index), -1) as m from crm_pipelines where tenant_id = ${tenantId}`;
+        const [row] = await sql`
+          insert into crm_pipelines (tenant_id, name, order_index, is_default, created_at, updated_at)
+          values (${tenantId}, ${program.pipelineName}, ${Number(maxRow.m) + 1}, false, ${NOW}, ${NOW})
+          returning id, name`;
+        pipeline = row;
+      } else {
+        pipeline = { id: "(nou)", name: program.pipelineName };
+      }
+    }
+
+    if (APPLY && pipeline.id !== "(nou)") {
+      for (const [i, stage] of program.stages.entries()) {
+        const [has] = await sql`
+          select id from crm_pipeline_stages
+          where tenant_id = ${tenantId} and pipeline_id = ${pipeline.id} and key = ${stage.key}`;
+        if (has) {
+          add(plan.skipped, "etape");
+          continue;
+        }
+        add(plan.created, "etape");
+        await sql`
+          insert into crm_pipeline_stages
+            (tenant_id, pipeline_id, key, label, color, order_index, is_won, is_lost, is_default, probability_pct, created_at, updated_at)
+          values (${tenantId}, ${pipeline.id}, ${stage.key}, ${stage.label}, ${stage.color}, ${i},
+                  ${stage.won}, ${stage.lost}, false, ${stage.probability}, ${NOW}, ${NOW})`;
+      }
+    } else if (!APPLY) {
+      add(plan.created, "etape", program.stages.length);
+    }
+
+    // Contactele pâlniei. Repartiția e explicită: numerele se verifică cu ochiul pe ecran.
+    const assignments = program.assignments;
     const total = assignments.reduce((sum, a) => sum + a.stages.reduce((s, [, n]) => s + n, 0), 0);
     const companies = makeCompanies(total);
 
@@ -376,13 +447,13 @@ async function main() {
 
           // Cât de demult a fost repartizat. Pentru câteva din „repartizat" punem o dată VECHE și
           // nicio activitate — exact cazul pe care îl prinde regula de întoarcere în rezervă.
-          const staleOne = assignedTo && stageKey === "repartizat" && i < 2;
+          const staleOne = assignedTo && stageKey === program.staleStage && i < 2;
           const assignedDaysAgo = staleOne ? between(21, 30) : between(2, 16);
           const createdAt = daysAgo(assignedDaysAgo + between(1, 10), workHour());
           const assignedAt = assignedTo ? daysAgo(assignedDaysAgo, workHour()) : null;
 
           const value = between(12, 90) * 1000 * 100; // 12.000–90.000 MDL, în cenți
-          const stageIndex = STAGES.findIndex((s) => s.key === stageKey);
+          const stageIndex = program.stages.findIndex((s) => s.key === stageKey);
 
           const [lead] = await sql`
             insert into leads
@@ -432,7 +503,7 @@ async function main() {
             callAt = new Date(callAt.getTime() + between(1, 3) * 86400000);
             if (callAt > NOW) break;
             callAt.setHours(workHour(), pick([0, 15, 30, 45]), 0, 0);
-            const pool = OUTCOMES_BY_STAGE[stageKey] ?? ["no_answer"];
+            const pool = program.outcomes[stageKey] ?? ["no_answer"];
             // Ultimul apel al unui lead ajuns departe trebuie să fie cel care explică unde e.
             const outcome = a === attempts - 1 ? pool[pool.length - 1] : pick(pool);
             lastOutcome = outcome;
@@ -455,11 +526,13 @@ async function main() {
             await sql`
               insert into lead_interactions (tenant_id, lead_id, type, direction, body, metadata, user_id, occurred_at)
               values (${tenantId}, ${lead.id}, 'stage_change', 'internal',
-                      ${`Etapă: ${STAGES[s - 1].label} → ${STAGES[s].label}`},
-                      ${sql.json({ from: STAGES[s - 1].key, to: STAGES[s].key })}, ${assignedTo}, ${moveAt})`;
+                      ${`Etapă: ${program.stages[s - 1].label} → ${program.stages[s].label}`},
+                      ${sql.json({ from: program.stages[s - 1].key, to: program.stages[s].key })}, ${assignedTo}, ${moveAt})`;
           }
         }
       }
+    }
+
     }
 
     // ── 5. Normele KPI (ca gradul de realizare să aibă față de ce se măsura) ──
@@ -493,13 +566,19 @@ async function main() {
       for (const [k, v] of Object.entries(plan.skipped)) console.log(`  · ${k}: ${v}`);
     }
     if (APPLY) {
-      const [counts] = await sql`
-        select
-          count(*) filter (where assigned_to is null) as rezerva,
-          count(*) filter (where assigned_to is not null) as repartizate,
-          count(*) as total
-        from leads where tenant_id = ${tenantId} and pipeline_id = ${pipeline.id}`;
-      console.log(`\nÎn pâlnia „${PIPELINE_NAME}": ${counts.total} contacte — ${counts.rezerva} în rezervă, ${counts.repartizate} repartizate.`);
+      // Raportul final citește din bază, nu din contoarele de mai sus: ce vezi aici e ce EXISTĂ,
+      // inclusiv ce fusese scris la o rulare anterioară.
+      for (const name of [PIPELINE_NAME, SPANCO_PIPELINE_NAME]) {
+        const [row] = await sql`
+          select
+            count(*) filter (where l.assigned_to is null) as rezerva,
+            count(*) filter (where l.assigned_to is not null) as repartizate,
+            count(*) as total
+          from leads l
+          join crm_pipelines p on p.id = l.pipeline_id
+          where l.tenant_id = ${tenantId} and p.name = ${name}`;
+        console.log(`\nÎn pâlnia „${name}": ${row.total} contacte — ${row.rezerva} în rezervă, ${row.repartizate} repartizate.`);
+      }
       console.log(`Agenți: ${AGENTS.map((a) => `${a.name} <${a.email}>`).join(", ")}`);
       console.log(`Parola lor: ${PASSWORD}`);
     } else {

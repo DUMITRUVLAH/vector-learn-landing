@@ -36,7 +36,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions } from "../db/schema/leads";
 import { users } from "../db/schema/users";
@@ -46,6 +46,10 @@ import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { ensureTenantStages } from "../lib/crm/stages";
 import { parseSegmentFilters, segmentConditions } from "../lib/crm/segments";
+import { AUTO_STRATEGIES, splitCounts, type AutoMember, type AutoStrategy } from "../lib/crm/distribution";
+import { crmSalesSettings, crmAssignmentRules } from "../db/schema/crmAutomations";
+import { crmCompanies } from "../db/schema/crmCompanies";
+import { isAssignmentStrategy, selectAssignee, type AssignmentRuleView } from "../lib/crm/assignment";
 import { logCrmAudit } from "../lib/crm/audit";
 import { getRecallSettings, runRecall } from "../lib/crm/recall";
 import { crmRecallSettings } from "../db/schema/crmRecall";
@@ -80,6 +84,14 @@ const distributionSchema = z.object({
    * repartizare să poată refolosi bara de filtre fără o a doua gramatică.
    */
   filters: z.record(z.string(), z.string()).default({}),
+  /**
+   * Cine hotărăște câte primește fiecare:
+   *  - `manual` — omul scrie numărul pentru fiecare agent (`allocations`);
+   *  - `auto`   — sistemul împarte între agenții bifați (`userIds`), după `strategy`.
+   *
+   * Implicit rămâne `manual`, ca o cerere veche să însemne exact ce însemna înainte.
+   */
+  mode: z.enum(["manual", "auto"]).default("manual"),
   allocations: z
     .array(
       z.object({
@@ -87,9 +99,22 @@ const distributionSchema = z.object({
         count: z.number().int().min(1).max(MAX_TOTAL),
       })
     )
-    .min(1, "Alege cel puțin un agent.")
-    .max(50),
-});
+    .max(50)
+    .optional(),
+  /** `auto`: agenții care participă la împărțire. */
+  userIds: z.array(z.string().uuid()).max(50).optional(),
+  /** `auto`: câte contacte se împart în total. Lipsă = tot segmentul. */
+  count: z.number().int().min(1).max(MAX_TOTAL).optional(),
+  strategy: z.enum(AUTO_STRATEGIES).default("round_robin"),
+})
+  .refine((v) => v.mode !== "manual" || (v.allocations?.length ?? 0) > 0, {
+    message: "Scrie câte contacte primește fiecare agent.",
+    path: ["allocations"],
+  })
+  .refine((v) => v.mode !== "auto" || (v.userIds?.length ?? 0) > 0, {
+    message: "Bifează cel puțin un agent.",
+    path: ["userIds"],
+  });
 
 type DistributionInput = z.infer<typeof distributionSchema>;
 
@@ -119,8 +144,7 @@ interface DistributionPlan {
  * Nu scrie nimic — doar alege.
  */
 async function buildPlan(tenantId: string, input: DistributionInput): Promise<DistributionPlan> {
-  const requested = input.allocations.reduce((sum, a) => sum + a.count, 0);
-  const total = Math.min(requested, MAX_TOTAL);
+  const participants = input.mode === "auto" ? (input.userIds ?? []) : (input.allocations ?? []).map((a) => a.userId);
 
   await ensureTenantStages(tenantId);
   const pipeline = await ensureTenantPipeline(tenantId);
@@ -130,15 +154,7 @@ async function buildPlan(tenantId: string, input: DistributionInput): Promise<Di
   const memberRows = await db
     .select({ id: users.id, name: users.name, email: users.email })
     .from(users)
-    .where(
-      and(
-        eq(users.tenantId, tenantId),
-        inArray(
-          users.id,
-          input.allocations.map((a) => a.userId)
-        )
-      )
-    );
+    .where(and(eq(users.tenantId, tenantId), inArray(users.id, participants)));
   const nameById = new Map(memberRows.map((m) => [m.id, m.name ?? m.email]));
 
   const conditions = [eq(leads.tenantId, tenantId), isNull(leads.mergedIntoId)];
@@ -178,31 +194,70 @@ async function buildPlan(tenantId: string, input: DistributionInput): Promise<Di
     .where(and(...conditions));
   const available = Number(cnt ?? 0);
 
+  // CÂTE contacte se iau din bază. La `manual` e suma cerută de om; la `auto`, cât a cerut sau
+  // tot segmentul. Citirea e aceeași în ambele cazuri — ordinea și limita nu depind de mod.
+  const requested =
+    input.mode === "auto"
+      ? Math.min(input.count ?? available, available, MAX_TOTAL)
+      : (input.allocations ?? []).reduce((sum, a) => sum + a.count, 0);
+  const total = Math.min(requested, MAX_TOTAL);
+
   // Ordinea: cele mai vechi întâi, cu `id` ca departajare — două rulări identice trebuie să dea
   // exact aceeași listă, altfel o repartizare greșită nu mai poate fi refăcută.
   const candidateRows =
     total > 0
       ? await db
-          .select({ id: leads.id })
+          .select({ id: leads.id, companyId: leads.companyId })
           .from(leads)
           .where(and(...conditions))
           .orderBy(asc(leads.createdAt), asc(leads.id))
           .limit(total)
       : [];
 
+  // La `auto`, numerele pe agent le calculează SISTEMUL; de aici încolo drumul e identic cu cel
+  // manual, deci previzualizarea și execuția rămân aceeași funcție.
+  const effectiveAllocations: { userId: string; count: number }[] =
+    input.mode === "auto" && input.strategy !== "rules"
+      ? await autoAllocations(tenantId, input.userIds ?? [], total, input.strategy)
+      : (input.allocations ?? []);
+
   const picks = new Map<string, string[]>();
   const allocations: AllocationResult[] = [];
-  let cursor = 0;
-  for (const alloc of input.allocations) {
-    const slice = candidateRows.slice(cursor, cursor + alloc.count).map((r) => r.id);
-    cursor += slice.length;
-    picks.set(alloc.userId, slice);
-    allocations.push({
-      userId: alloc.userId,
-      name: nameById.get(alloc.userId) ?? "(utilizator necunoscut)",
-      requested: alloc.count,
-      given: slice.length,
-    });
+
+  if (input.mode === "auto" && input.strategy === "rules") {
+    // Singura strategie care se uită la CE e leadul (teritoriu, condiții), nu doar la cine e
+    // liber: motorul existent, lead cu lead. Cine n-a fost prins de nicio regulă rămâne în
+    // rezervă și se vede ca lipsă, nu dispare.
+    const byRules = await allocateByRules(tenantId, candidateRows, input.userIds ?? []);
+    for (const [userId, ids] of byRules) {
+      picks.set(userId, ids);
+      allocations.push({
+        userId,
+        name: nameById.get(userId) ?? "(utilizator necunoscut)",
+        requested: ids.length,
+        given: ids.length,
+      });
+    }
+    // Agenții bifați care n-au primit nimic rămân în listă, cu 0: altfel omul n-ar înțelege dacă
+    // i-a sărit regula sau i-a uitat el.
+    for (const userId of input.userIds ?? []) {
+      if (picks.has(userId)) continue;
+      picks.set(userId, []);
+      allocations.push({ userId, name: nameById.get(userId) ?? "(utilizator necunoscut)", requested: 0, given: 0 });
+    }
+  } else {
+    let cursor = 0;
+    for (const alloc of effectiveAllocations) {
+      const slice = candidateRows.slice(cursor, cursor + alloc.count).map((r) => r.id);
+      cursor += slice.length;
+      picks.set(alloc.userId, slice);
+      allocations.push({
+        userId: alloc.userId,
+        name: nameById.get(alloc.userId) ?? "(utilizator necunoscut)",
+        requested: alloc.count,
+        given: slice.length,
+      });
+    }
   }
 
   const given = allocations.reduce((sum, a) => sum + a.given, 0);
@@ -214,6 +269,167 @@ async function buildPlan(tenantId: string, input: DistributionInput): Promise<Di
     shortfall: requested - given,
     picks,
   };
+}
+
+/**
+ * Câte contacte primește fiecare agent bifat, când împarte sistemul.
+ *
+ * Setările de vânzări (`crm_sales_settings`) dau greutatea și norma zilnică; lipsa rândului
+ * înseamnă setări implicite (activ, 20/zi, greutate 1) — exact ca la distribuirea automată de la
+ * crearea leadului. Un agent care ȘI-A ATINS norma azi nu mai primește la strategia „după
+ * capacitate", iar contactele lui rămân în rezervă, nu peste norma altcuiva.
+ */
+async function autoAllocations(
+  tenantId: string,
+  userIds: string[],
+  total: number,
+  strategy: Exclude<AutoStrategy, "rules">
+): Promise<{ userId: string; count: number }[]> {
+  if (userIds.length === 0 || total <= 0) return [];
+
+  const rows = await db
+    .select({
+      userId: users.id,
+      name: users.name,
+      email: users.email,
+      weight: crmSalesSettings.weight,
+      dailyCapacity: crmSalesSettings.dailyCapacity,
+      orderIndex: crmSalesSettings.orderIndex,
+      isActive: crmSalesSettings.isActive,
+    })
+    .from(users)
+    .leftJoin(crmSalesSettings, and(eq(crmSalesSettings.userId, users.id), eq(crmSalesSettings.tenantId, tenantId)))
+    .where(and(eq(users.tenantId, tenantId), inArray(users.id, userIds)));
+
+  // Câte a primit fiecare AZI — norma zilnică se măsoară pe ziua în curs, nu pe lot.
+  const since = new Date();
+  since.setHours(0, 0, 0, 0);
+  const todayRows = await db
+    .select({ userId: leads.assignedTo, cnt: sql<number>`count(*)::int` })
+    .from(leads)
+    .where(and(eq(leads.tenantId, tenantId), isNotNull(leads.assignedTo), gte(leads.assignedAt, since)))
+    .groupBy(leads.assignedTo);
+  const todayByUser = new Map(todayRows.map((r) => [r.userId ?? "", Number(r.cnt ?? 0)]));
+
+  const members: AutoMember[] = rows
+    // Scos din tragere din setări = nu participă, chiar dacă a fost bifat din greșeală.
+    .filter((r) => r.isActive !== false)
+    .map((r) => {
+      const capacity = r.dailyCapacity ?? DEFAULT_DAILY_CAPACITY;
+      return {
+        userId: r.userId,
+        name: r.name ?? r.email,
+        weight: r.weight ?? 1,
+        // Norma 0 = nelimitat, la fel ca în motorul de distribuire automată.
+        remainingCapacity: capacity === 0 ? null : Math.max(0, capacity - (todayByUser.get(r.userId) ?? 0)),
+        orderIndex: r.orderIndex ?? 0,
+      };
+    });
+
+  const counts = splitCounts(total, members, strategy);
+  return [...counts.entries()].filter(([, count]) => count > 0).map(([userId, count]) => ({ userId, count }));
+}
+
+/** Norma zilnică implicită, aceeași ca în `crmAssignment.ts` — un om fără setări participă. */
+const DEFAULT_DAILY_CAPACITY = 20;
+
+/**
+ * Împărțire după REGULILE workspace-ului (teritoriu, condiții pe câmpuri), lead cu lead.
+ *
+ * Regulile sunt cele din ecranul de automatizări; aici doar le aplicăm pe un lot. Teritoriul are
+ * nevoie de regiunea și industria FIRMEI, deci se citesc în bloc pentru toate leadurile din lot —
+ * o interogare, nu una pe lead.
+ *
+ * `userIds` restrânge rezultatul la agenții bifați: o regulă poate trimite leadul către cineva
+ * care nu participă la lotul ăsta, iar atunci leadul rămâne în rezervă. Preferăm asta în locul
+ * unei atribuiri „pe lângă" ce a cerut omul.
+ */
+async function allocateByRules(
+  tenantId: string,
+  candidates: { id: string; companyId: string | null }[],
+  userIds: string[]
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (candidates.length === 0) return out;
+
+  const ruleRows = await db
+    .select()
+    .from(crmAssignmentRules)
+    .where(eq(crmAssignmentRules.tenantId, tenantId))
+    .orderBy(asc(crmAssignmentRules.orderIndex));
+
+  const rules: AssignmentRuleView[] = ruleRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    enabled: r.enabled,
+    strategy: isAssignmentStrategy(r.strategy) ? r.strategy : "round_robin",
+    conditions: r.conditions ?? [],
+    userIds: r.userIds ?? [],
+    orderIndex: r.orderIndex,
+  }));
+  if (rules.every((r) => !r.enabled)) return out; // nicio regulă activă → nimic nu se mută
+
+  const memberRows = await db
+    .select({
+      userId: users.id,
+      name: users.name,
+      email: users.email,
+      isActive: crmSalesSettings.isActive,
+      dailyCapacity: crmSalesSettings.dailyCapacity,
+      weight: crmSalesSettings.weight,
+      regions: crmSalesSettings.regions,
+      industries: crmSalesSettings.industries,
+      orderIndex: crmSalesSettings.orderIndex,
+    })
+    .from(users)
+    .leftJoin(crmSalesSettings, and(eq(crmSalesSettings.userId, users.id), eq(crmSalesSettings.tenantId, tenantId)))
+    .where(and(eq(users.tenantId, tenantId), inArray(users.id, userIds)));
+
+  const members = memberRows.map((r) => ({
+    userId: r.userId,
+    name: r.name ?? r.email,
+    isActive: r.isActive ?? true,
+    dailyCapacity: r.dailyCapacity ?? DEFAULT_DAILY_CAPACITY,
+    weight: r.weight ?? 1,
+    regions: r.regions ?? [],
+    industries: r.industries ?? [],
+    orderIndex: r.orderIndex ?? 0,
+    assignedToday: 0,
+  }));
+
+  // Firmele lotului: teritoriul se citește de pe fișa firmei, nu de pe lead.
+  const companyIds = [...new Set(candidates.map((c) => c.companyId).filter((id): id is string => !!id))];
+  const companyRows = companyIds.length
+    ? await db
+        .select({ id: crmCompanies.id, region: crmCompanies.region, industry: crmCompanies.industry })
+        .from(crmCompanies)
+        .where(and(eq(crmCompanies.tenantId, tenantId), inArray(crmCompanies.id, companyIds)))
+    : [];
+  const companyById = new Map(companyRows.map((c) => [c.id, c]));
+
+  let lastAssignedUserId: string | null = null;
+  for (const candidate of candidates) {
+    const company = candidate.companyId ? companyById.get(candidate.companyId) : null;
+    const decision = selectAssignee({
+      rules,
+      members,
+      lead: { id: candidate.id, region: company?.region ?? null, industry: company?.industry ?? null },
+      lastAssignedUserId,
+    });
+    if (decision.outcome !== "assigned" || !decision.userId) continue;
+
+    lastAssignedUserId = decision.userId;
+    // Capacitatea se consumă ÎN CADRUL lotului: fără asta, toți ar părea liberi la fiecare lead
+    // și un singur om ar lua tot, exact ce strategia încearcă să evite.
+    const member = members.find((m) => m.userId === decision.userId);
+    if (member) member.assignedToday += 1;
+
+    const list = out.get(decision.userId) ?? [];
+    list.push(candidate.id);
+    out.set(decision.userId, list);
+  }
+
+  return out;
 }
 
 /** Răspunsul către interfață — fără `picks`, care e detaliu intern. */
@@ -244,22 +460,18 @@ crmDistributionRoutes.post("/run", zValidator("json", distributionSchema), async
 
   // Un id care nu e din workspace: oprim ÎNAINTE de orice scriere. Un răspuns parțial
   // („i-am dat lui Ana, pe Bo nu-l cunosc") ar lăsa o repartizare pe jumătate.
+  // Verificarea e aceeași în ambele moduri: la `manual` oamenii vin din alocări, la `auto` din
+  // bifele ecranului.
+  const requestedUserIds =
+    input.mode === "auto" ? (input.userIds ?? []) : (input.allocations ?? []).map((a) => a.userId);
   const known = await db
     .select({ id: users.id })
     .from(users)
-    .where(
-      and(
-        eq(users.tenantId, user.tenantId),
-        inArray(
-          users.id,
-          input.allocations.map((a) => a.userId)
-        )
-      )
-    );
+    .where(and(eq(users.tenantId, user.tenantId), inArray(users.id, requestedUserIds)));
   const knownIds = new Set(known.map((k) => k.id));
-  const strangers = input.allocations.filter((a) => !knownIds.has(a.userId));
+  const strangers = requestedUserIds.filter((id) => !knownIds.has(id));
   if (strangers.length > 0) {
-    return c.json({ error: "unknown_members", members: strangers.map((s) => s.userId) }, 400);
+    return c.json({ error: "unknown_members", members: strangers }, 400);
   }
 
   const plan = await buildPlan(user.tenantId, input);
