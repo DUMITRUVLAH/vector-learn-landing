@@ -58,6 +58,9 @@ vi.mock("@/lib/api/crmDistribution", () => ({
   previewCrmDistribution: (...a: unknown[]) => previewCrmDistribution(...a),
   runCrmDistribution: (...a: unknown[]) => runCrmDistribution(...a),
   getCrmLeadPool: vi.fn().mockResolvedValue({ pool: 0 }),
+  // Setarea de întoarcere în rezervă (CC-7): ecranul o cere la montare.
+  getCrmRecallSettings: vi.fn().mockResolvedValue({ enabled: false, days: 14, due: 0 }),
+  setCrmRecallSettings: vi.fn().mockResolvedValue({ enabled: true, days: 14 }),
 }));
 
 vi.mock("@/lib/api/crm", () => ({

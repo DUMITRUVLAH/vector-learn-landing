@@ -14,13 +14,12 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, Trash2, Check, X, Pencil } from "lucide-react";
 import { Alert, Button, Dialog, Input, Label, Select } from "@/components/ds";
+import { PIPELINE_TEMPLATES, type PipelineTemplateKey } from "@/lib/crm/pipelineTemplates";
 import { ApiError } from "@/lib/api";
 import {
   createCrmPipeline,
   deleteCrmPipeline,
   renameCrmPipeline,
-  PIPELINE_TEMPLATES,
-  type PipelineTemplateKey,
   type CrmPipeline,
 } from "@/lib/api/crm";
 

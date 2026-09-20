@@ -56,6 +56,18 @@ export const leads = pgTable(
      *  etapă (`crm_pipeline_stages.probability_pct`). Caietul de sarcini (cerința 10) o cere per
      *  oportunitate, nu doar per etapă: două afaceri în aceeași etapă nu au aceeași șansă. */
     probabilityPct: integer("probability_pct"),
+    /** Câte apeluri s-au dat pe leadul ăsta (migrarea 0181). Rezultatele terminale („număr
+     *  greșit", „refuz ferm") NU cresc contorul: o regulă de tipul „după 5 încercări renunțăm"
+     *  n-are voie să se consume pe un număr greșit, lăsând firma nesunată cu adevărat. */
+    callAttempts: integer("call_attempts").notNull().default(0),
+    lastCallAt: timestamp("last_call_at", { withTimezone: true }),
+    /** Ultimul rezultat, din vocabularul din `server/lib/crm/callOutcomes.ts`. */
+    lastCallOutcome: varchar("last_call_outcome", { length: 40 }),
+    /** Când a primit leadul responsabilul actual (migrarea 0182). Fără data asta, „repartizat de
+     *  N zile și neatins" ar trebui dedus din cronologie, la fiecare rulare a cronului, pentru
+     *  toată baza. `null` = leaduri de dinainte de coloană; ele nu se întorc automat în rezervă,
+     *  fiindcă nu știm de când stau. */
+    assignedAt: timestamp("assigned_at", { withTimezone: true }),
     /** Pâlnia în care stă leadul (migrarea 0166). `null` = pâlnia implicită a workspace-ului —
      *  așa migrarea nu trebuie să rescrie fiecare lead existent ca produsul să fie corect. */
     pipelineId: uuid("pipeline_id"),

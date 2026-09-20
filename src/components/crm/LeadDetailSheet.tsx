@@ -74,6 +74,7 @@ import {
   type CrmLeadTag,
 } from "@/lib/api/crm";
 import { CRM_SOURCE_LABEL, crmStageLabel, stageColorClasses } from "@/components/crm/constants";
+import { CALL_OUTCOMES, CALL_OUTCOME_LABELS, type CallOutcome } from "@/lib/crm/callOutcomes";
 import { formatCents, leadValueToCents, leadTitle, emptyToNull } from "@/components/crm/format";
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
 import { LeadContactsTab } from "@/components/crm/LeadContactsTab";
@@ -527,16 +528,30 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     }
   }
 
-  async function logCall() {
+  /**
+   * Notează apelul CU rezultatul lui.
+   *
+   * Până acum butonul trimitea doar tipul „call", fără `outcome` — iar raportul căuta exact
+   * `outcome === "answered"`, deci indicatorul „contacte reușite" era 0 la toată lumea, mereu.
+   * Într-un call-center, diferența dintre „nu răspunde" și „am vorbit cu decidentul" E raportul.
+   */
+  async function logCall(outcome: CallOutcome) {
     if (!leadId) return;
     setLoggingCall(true);
     try {
-      const created = await createCrmLeadInteraction(leadId, { type: "call", direction: "outbound" });
+      const created = await createCrmLeadInteraction(leadId, {
+        type: "call",
+        direction: "outbound",
+        metadata: { outcome },
+        body: CALL_OUTCOME_LABELS[outcome],
+      });
       setInteractions((prev) => [created, ...prev]);
       // Cerințele 10 și 17 din caietul de sarcini: fiecare activitate se încheie cu un pas
       // următor. Un lead fără pas următor e un lead uitat — nu-l cere nimeni, nu-l sună nimeni.
       // Nu blocăm apelul (acela s-a întâmplat deja), ci cerem pasul imediat după.
       if (!tasks.some((t) => t.status !== "done")) setAskNextAction(true);
+      // Contorul de încercări s-a schimbat pe server; cardul din tablă îl arată.
+      onChanged();
       onToast({ kind: "success", message: "Apel notat în istoric." });
     } catch (err) {
       onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut nota apelul." });
@@ -785,14 +800,41 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
                     Am scris pe WhatsApp
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={() => void logCall()} disabled={loggingCall}>
+                {/* Rezultatul se alege ODATĂ cu notarea apelului, nu într-un al doilea pas:
+                    un pas separat se sare, iar un apel fără rezultat nu spune nimic raportului. */}
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="lead-sheet-call" className="sr-only">
+                    Notează apelul cu rezultatul lui
+                  </Label>
                   {loggingCall ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   ) : (
-                    <Phone className="h-4 w-4" aria-hidden="true" />
+                    <Phone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   )}
-                  Am sunat
-                </Button>
+                  <Select
+                    id="lead-sheet-call"
+                    className="h-9 w-56"
+                    value=""
+                    disabled={loggingCall}
+                    onChange={(e) => {
+                      const outcome = e.target.value;
+                      if (outcome) void logCall(outcome as CallOutcome);
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="">Am sunat — rezultatul…</option>
+                    {CALL_OUTCOMES.map((o) => (
+                      <option key={o} value={o}>
+                        {CALL_OUTCOME_LABELS[o]}
+                      </option>
+                    ))}
+                  </Select>
+                  {typeof lead.callAttempts === "number" && lead.callAttempts > 0 && (
+                    <span className="text-xs text-muted-foreground" title="Încercări de apel">
+                      {lead.callAttempts} înc.
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col gap-1">
                 <Label htmlFor="lead-sheet-stage">Etapă</Label>

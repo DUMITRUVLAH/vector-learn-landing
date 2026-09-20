@@ -59,12 +59,6 @@ const listCrmLostReasons = vi.fn().mockResolvedValue({ items: [] });
 const listCrmLeads = vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 });
 
 vi.mock("@/lib/api/crm", () => ({
-  // Șabloanele de etape: dialogul le afișează în selectul „Etapele pornesc de la".
-  PIPELINE_TEMPLATES: [
-    { key: "default", label: "Standard (Lead nou → Client)" },
-    { key: "spanco", label: "SPANCO (Suspect → Comandă)" },
-    { key: "call_center", label: "Call-center B2B (Rezervă rece → Contract)" },
-  ],
   // Catalogul de produse: fișa îl cere pentru select-ul „Produs".
   listCrmProducts: vi.fn().mockResolvedValue({ items: [] }),
   // Drepturile utilizatorului: ecranele CRM le cer ca să știe ce butoane să arate.

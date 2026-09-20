@@ -18,6 +18,8 @@ import { db } from "../db/client";
 import { crmReengagementRules } from "../db/schema/crmCadences";
 import { processDueEnrollments } from "../lib/crm/cadences";
 import { runReengagement } from "../lib/crm/reengagement";
+import { runRecall } from "../lib/crm/recall";
+import { crmRecallSettings } from "../db/schema/crmRecall";
 import { runCrmTaskDigest, runCrmTaskDigestForTenant } from "../services/crm/taskDigest";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -60,7 +62,31 @@ crmCronRoutes.get("/daily", async (c) => {
     }
   }
 
-  // Pasul 3: digestul de taskuri restante (cerința 18). Decide singur dacă e ora potrivită
+  // Pasul 3: contactele repartizate și neatinse se întorc în rezervă (CC-7). Rulează doar pentru
+  // workspace-urile care au PORNIT regula — o automatizare care ia clienți de la un agent nu se
+  // aprinde singură.
+  let recall = { tenants: 0, due: 0, recalled: 0 };
+  try {
+    const tenantsWithRecall = await db
+      .select({ tenantId: crmRecallSettings.tenantId })
+      .from(crmRecallSettings)
+      .where(eq(crmRecallSettings.enabled, true));
+    recall.tenants = tenantsWithRecall.length;
+    for (const row of tenantsWithRecall) {
+      try {
+        const res = await runRecall(row.tenantId);
+        recall.due += res.due;
+        recall.recalled += res.recalled;
+      } catch (e) {
+        console.error("[crm/cron] întoarcerea în rezervă a eșuat pentru tenantul", row.tenantId, e instanceof Error ? e.message : e);
+      }
+    }
+  } catch (e) {
+    // Tabela poate lipsi pe o bază rămasă în urmă: restul cronului trebuie să meargă mai departe.
+    console.error("[crm/cron] setările de întoarcere nu s-au putut citi:", e instanceof Error ? e.message : e);
+  }
+
+  // Pasul 4: digestul de taskuri restante (cerința 18). Decide singur dacă e ora potrivită
   // local — cronul lovește în UTC, iar ora de iarnă n-are voie să mute digestul în tăcere.
   let digest;
   try {
@@ -74,6 +100,7 @@ crmCronRoutes.get("/daily", async (c) => {
     ok: true,
     cadences,
     reengagement: { tenants: tenantsWithRules.length, due, applied, failed },
+    recall,
     digest,
   });
 });

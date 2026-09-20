@@ -26,6 +26,7 @@ import { crmKpiTargets } from "../db/schema/crmKpiTargets";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { ensureTenantStages } from "../lib/crm/stages";
+import { callFunnel } from "../lib/crm/callOutcomes";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { parseSegmentFilters, segmentConditions } from "../lib/crm/segments";
 import {
@@ -263,6 +264,13 @@ crmReportsRoutes.get("/", async (c) => {
         range,
       }),
       taskCompliance: taskCompliance(scopedTasks),
+      // Contactabilitatea (CC-6): apeluri → răspunsuri → decidenți. Pe o operațiune de outreach,
+      // ăsta e raportul care spune dacă lista cumpărată face bani sau doar consumă timp.
+      callFunnel: callFunnel(
+        reportInteractions
+          .filter((i) => i.type === "call" && inRange(i.occurredAt, range) && ownedLead(i.leadId))
+          .map((i) => ({ leadId: i.leadId, outcome: i.outcome }))
+      ),
       timeline: timeline(
         // Evoluția are nevoie de TOATE leadurile agentului (ca să lege o vânzare de valoarea ei),
         // dar numără doar ce cade în perioadă — filtrarea e înăuntru.

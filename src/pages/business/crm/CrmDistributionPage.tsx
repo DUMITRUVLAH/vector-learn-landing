@@ -30,8 +30,11 @@ import { listCrmPipelines, getCrmStages, type CrmPipeline, type CrmStage } from 
 import {
   previewCrmDistribution,
   runCrmDistribution,
+  getCrmRecallSettings,
+  setCrmRecallSettings,
   type DistributionPlanResponse,
   type DistributionRequest,
+  type CrmRecallSettings,
 } from "@/lib/api/crmDistribution";
 
 /** Rolurile care nu sună clienți — nu au ce căuta în lista de repartizare. */
@@ -65,6 +68,17 @@ export function CrmDistributionPage() {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** Reversul repartizării: lotul nelucrat se întoarce în stocul din care a plecat (CC-7). */
+  const [recall, setRecall] = useState<CrmRecallSettings | null>(null);
+  const [savingRecall, setSavingRecall] = useState(false);
+
+  useEffect(() => {
+    getCrmRecallSettings()
+      .then(setRecall)
+      // Setarea e o funcție secundară: lipsa ei nu are voie să strice ecranul de repartizare.
+      .catch(() => setRecall(null));
+  }, []);
 
   useEffect(() => {
     listCrmPipelines()
@@ -347,6 +361,63 @@ export function CrmDistributionPage() {
               )}
               Repartizează {plan.allocations.reduce((s, a) => s + a.given, 0)} contacte
             </Button>
+          </Card>
+        )}
+
+        {/* Reversul repartizării */}
+        {recall && (
+          <Card className="space-y-3 p-4">
+            <h2 className="text-lg font-semibold">Contactele nelucrate se întorc în rezervă</h2>
+            <p className="text-sm text-muted-foreground">
+              Un agent primește 200 de contacte și sună 40; restul rămân blocate pe numele lui. Regula asta le
+              aduce înapoi în stoc — schimbă doar responsabilul, nu și etapa.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <Checkbox
+                id="recall-enabled"
+                checked={recall.enabled}
+                onChange={(next) => setRecall({ ...recall, enabled: next })}
+                label={<span className="text-sm">Pornită</span>}
+              />
+              <div>
+                <Label htmlFor="recall-days">După câte zile fără activitate</Label>
+                <Input
+                  id="recall-days"
+                  className="w-28"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={String(recall.days)}
+                  onChange={(e) => setRecall({ ...recall, days: Number(e.target.value) || 1 })}
+                />
+              </div>
+              <Button
+                variant="outline"
+                disabled={savingRecall}
+                onClick={async () => {
+                  setSavingRecall(true);
+                  setError(null);
+                  try {
+                    const saved = await setCrmRecallSettings({ enabled: recall.enabled, days: recall.days });
+                    // Recitim ca să aflăm câte ar pleca CU noua setare — numărul vechi ar minți.
+                    setRecall(await getCrmRecallSettings().catch(() => saved));
+                  } catch (err) {
+                    setError(errText(err, "Setarea nu s-a putut salva."));
+                  } finally {
+                    setSavingRecall(false);
+                  }
+                }}
+              >
+                {savingRecall && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                Salvează regula
+              </Button>
+            </div>
+            {recall.enabled && typeof recall.due === "number" && (
+              <p className="text-sm text-muted-foreground">
+                La următoarea rulare (mâine, 07:00) s-ar întoarce{" "}
+                <strong className="tabular-nums">{recall.due}</strong> contacte.
+              </p>
+            )}
           </Card>
         )}
 

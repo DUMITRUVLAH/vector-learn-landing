@@ -59,3 +59,20 @@ export function getCrmLeadPool(params: Record<string, string> = {}): Promise<{ p
   const qs = new URLSearchParams(params).toString();
   return api<{ pool: number }>(`/api/crm/distribution/pool${qs ? `?${qs}` : ""}`);
 }
+
+
+/** Setarea „întoarce în rezervă contactele neatinse" (CC-7), cu câte ar pleca ACUM. */
+export interface CrmRecallSettings {
+  enabled: boolean;
+  days: number;
+  /** Câte contacte ar pleca la următoarea rulare, cu setarea curentă. */
+  due?: number;
+}
+
+export function getCrmRecallSettings(): Promise<CrmRecallSettings> {
+  return api<CrmRecallSettings>("/api/crm/distribution/recall");
+}
+
+export function setCrmRecallSettings(body: { enabled: boolean; days: number }): Promise<CrmRecallSettings> {
+  return api<CrmRecallSettings>("/api/crm/distribution/recall", { method: "PUT", body: JSON.stringify(body) });
+}

@@ -171,7 +171,9 @@ describe("Fișa leadului pe file", () => {
     await screen.findByText(/Niciun fișier atașat/);
     // Contextul nu dispare când schimbi fila.
     expect(screen.getByLabelText("Etapă")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Am sunat/ })).toBeInTheDocument();
+    // „Am sunat" e acum un select de rezultat (CC-6), nu un buton: apelul se notează ÎMPREUNĂ cu
+    // ce a ieșit din el. Acțiunea rapidă e tot acolo — doar că spune ceva raportului.
+    expect(screen.getByLabelText("Notează apelul cu rezultatul lui")).toBeInTheDocument();
   });
 
   it("[blocant] „Istoric” arată alt lead al aceleiași persoane și îl poate deschide", async () => {

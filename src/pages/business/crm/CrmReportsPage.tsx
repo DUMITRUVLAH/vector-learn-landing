@@ -9,8 +9,9 @@
  * Exportul e CSV cu BOM UTF-8: fără el, Excel deschide „Preț" ca „PreÈ›".
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, Download, FileText, Loader2 } from "lucide-react";
+import { BarChart3, Download, FileText, Loader2, Target } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { KpiTargetsDialog } from "@/components/crm/KpiTargetsDialog";
 import { Alert, Button, Card, EmptyState, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { TimelineChart, ConversionChart, LostReasonsChart } from "@/components/crm/ReportsCharts";
 import { downloadCrmReportPdf } from "@/lib/crmReportPdf";
@@ -72,6 +73,7 @@ export function CrmReportsPage() {
   const [customTo, setCustomTo] = useState("");
   const [owner, setOwner] = useState<string>("all");
   const [exporting, setExporting] = useState(false);
+  const [targetsOpen, setTargetsOpen] = useState(false);
   const { data: session } = useBusinessSession();
   const [data, setData] = useState<CrmReportsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,6 +212,10 @@ export function CrmReportsPage() {
       pageDescription="Indicatorii de vânzări, pe agent și pe echipă, pentru perioada aleasă."
       actions={
         <>
+          <Button variant="outline" onClick={() => setTargetsOpen(true)}>
+            <Target className="h-4 w-4" aria-hidden="true" />
+            Norme
+          </Button>
           <Button variant="outline" onClick={exportCsv} disabled={!data || loading}>
             <Download className="h-4 w-4" aria-hidden="true" />
             Export Excel
@@ -283,14 +289,35 @@ export function CrmReportsPage() {
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {KPI_LABELS.map((k) => (
-                <Card key={k.key} className="p-4">
-                  <p className="text-sm text-muted-foreground">{k.label}</p>
-                  <p className="mt-1 text-2xl font-bold tabular-nums">
-                    {k.money ? money(data.kpis[k.key] as number) : (data.kpis[k.key] as number)}
-                  </p>
-                </Card>
-              ))}
+              {KPI_LABELS.map((k) => {
+                // Gradul de realizare apare DOAR când există o normă pentru indicatorul ăsta și
+                // perioada are capete (o țintă săptămânală n-are înțeles peste „tot timpul").
+                const att = data.attainment?.[k.key as string];
+                return (
+                  <Card key={k.key} className="p-4">
+                    <p className="text-sm text-muted-foreground">{k.label}</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums">
+                      {k.money ? money(data.kpis[k.key] as number) : (data.kpis[k.key] as number)}
+                    </p>
+                    {att && (
+                      <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                        din {k.money ? money(att.target) : att.target} ·{" "}
+                        <span
+                          className={
+                            att.pct >= 100
+                              ? "font-semibold text-emerald-600"
+                              : att.pct >= 70
+                                ? "font-semibold text-amber-600"
+                                : "font-semibold text-destructive"
+                          }
+                        >
+                          {att.pct}%
+                        </span>
+                      </p>
+                    )}
+                  </Card>
+                );
+              })}
               <Card className="p-4">
                 <p className="text-sm text-muted-foreground">Durata medie a ciclului</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums">
@@ -298,6 +325,68 @@ export function CrmReportsPage() {
                 </p>
               </Card>
             </div>
+
+            {/* Contactabilitatea (CC-6). Apare doar dacă s-a sunat: pe un workspace care nu
+                lucrează la telefon, o secțiune goală ar fi doar zgomot. */}
+            {data.callFunnel && data.callFunnel.dialed > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-lg font-semibold">Contactabilitate</h2>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Card className="p-4">
+                    <p className="text-sm text-muted-foreground">Apeluri</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums">{data.callFunnel.dialed}</p>
+                  </Card>
+                  <Card className="p-4">
+                    <p className="text-sm text-muted-foreground">A răspuns cineva</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums">{data.callFunnel.connected}</p>
+                  </Card>
+                  <Card className="p-4">
+                    <p className="text-sm text-muted-foreground">Decidenți atinși</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums">{data.callFunnel.decisionMakers}</p>
+                  </Card>
+                  <Card className="p-4">
+                    <p className="text-sm text-muted-foreground">Apeluri / decident</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums">
+                      {data.callFunnel.callsPerDecisionMaker ?? "—"}
+                    </p>
+                  </Card>
+                </div>
+
+                {data.callFunnel.byOutcome.length > 0 && (
+                  <Card className="p-4">
+                    <Table aria-label="Rezultatele apelurilor">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Rezultat</TableHead>
+                          <TableHead className="text-right">Apeluri</TableHead>
+                          <TableHead className="text-right">%</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.callFunnel.byOutcome.map((r) => (
+                          <TableRow key={r.outcome}>
+                            <TableCell>{r.label}</TableCell>
+                            <TableCell className="text-right tabular-nums">{r.count}</TableCell>
+                            <TableCell className="text-right tabular-nums">{r.pct}%</TableCell>
+                          </TableRow>
+                        ))}
+                        {data.callFunnel.unknown > 0 && (
+                          <TableRow>
+                            {/* Spus pe față: apelurile vechi n-aveau rezultat notat. Împărțite
+                                tăcut peste celelalte, ar fi înrăutățit fals statistica. */}
+                            <TableCell className="text-muted-foreground">Fără rezultat notat</TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                              {data.callFunnel.unknown}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                )}
+              </section>
+            )}
 
             {/* Evoluția perioadei — imaginea care lipsea. Un tabel îți spune cât ai vândut;
                 graficul îți spune dacă urci sau cobori. */}
@@ -428,6 +517,13 @@ export function CrmReportsPage() {
           </>
         )}
       </div>
+
+      <KpiTargetsDialog
+        open={targetsOpen}
+        onClose={() => setTargetsOpen(false)}
+        owners={data?.owners ?? []}
+        onSaved={() => void load()}
+      />
     </BusinessShell>
   );
 }

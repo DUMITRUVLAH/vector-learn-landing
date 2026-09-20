@@ -165,6 +165,29 @@ Regulă per workspace: un lead repartizat și neatins de N zile (fără nicio in
 
 ---
 
+## 3bis. Ce s-a livrat (20.09.2026)
+
+Toate cele șapte item-uri sunt pe `main`. Ce trebuie știut ca să nu se reconstruiască:
+
+| Item | Unde trăiește | Ce a ieșit altfel decât în plan |
+|---|---|---|
+| CC-1 | `server/lib/crm/importFile.ts`, `routes/crmImport.ts` | În plus față de plan: un rând FĂRĂ nume de persoană, dar cu firmă, nu mai e respins — firma devine numele leadului. Fără asta, un import de 800 de companii se termina cu 0 create. |
+| CC-2 | `server/lib/crm/stages.ts` (`PIPELINE_TEMPLATES`) | — |
+| CC-3 | `server/routes/crmDistribution.ts`, `pages/business/crm/CrmDistributionPage.tsx` | Plafonul e 5.000/cerere (nu 100, ca la acțiunile în masă): repartizarea nu rulează automatizări per lead, deci poate duce loturi mari. |
+| CC-4 | `server/lib/crm/reports.ts` (`funnelBreakdown`), `routes/crmReports.ts` → `GET /funnel`, `components/crm/FunnelChart.tsx` | Pâlnia e desenată cu CSS, nu cu Recharts: o pâlnie e o listă de bare cu două numere alături, iar un grafic ar fi mutat cifrele în tooltip. |
+| CC-5 | `db/schema/crmKpiTargets.ts`, `routes/crmKpiTargets.ts`, `reports.ts` (`kpiAttainment`) | Normele se SCALEAZĂ la perioada raportului (60/săptămână privit pe 28 de zile = 240). Fără normă nu există 0%. |
+| CC-6 | `server/lib/crm/callOutcomes.ts`, coloanele `leads.call_*` (migrarea 0181) | Butonul „Am sunat" nu scria niciun rezultat, deci „contacte reușite" era 0 la toată lumea, mereu. Acum rezultatul se alege ODATĂ cu notarea apelului. |
+| CC-7 | `server/lib/crm/recall.ts`, `leads.assigned_at` + `crm_recall_settings` (migrarea 0182), pasul 3 din cronul zilnic | Regula e OPRITĂ implicit: o automatizare care ia clienți de la un agent nu se aprinde singură. |
+
+**Migrări noi:** 0180 (norme KPI), 0181 (rezultatul apelului), 0182 (întoarcerea în rezervă) —
+toate cu heal în `server/db/ensure/crmParity.ts`, fiindcă producția nu aplică fiabil migrările.
+
+**Filtrele de segment** acceptă acum `tag` și `cf_<cheie>` peste tot unde erau doar firmografia
+fixă: listă, tablă, repartizare, pâlnie. Cheile sunt aceleași în query string și în corpul
+cererii de repartizare — o singură gramatică.
+
+---
+
 ## 4. Ce NU construim (și de ce)
 
 - **Al doilea motor de acte.** CRM-ul cheamă motorul FinFlow — vezi `PORT-DIN-CRM-VECTOR.md`.

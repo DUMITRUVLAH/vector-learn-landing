@@ -217,4 +217,21 @@ export const CRM_PARITY_ENSURE_STATEMENTS: string[] = [
   // ciocnesc într-un index unic obișnuit, deci norma generală s-ar putea dubla în tăcere.
   `CREATE UNIQUE INDEX IF NOT EXISTS "crm_kpi_targets_user_uniq" ON "crm_kpi_targets" ("tenant_id","user_id","period","metric") WHERE "user_id" IS NOT NULL`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "crm_kpi_targets_default_uniq" ON "crm_kpi_targets" ("tenant_id","period","metric") WHERE "user_id" IS NULL`,
+
+  // ── Rezultatul apelului + contorul de încercări (migrarea 0181) ────────────
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "call_attempts" integer DEFAULT 0 NOT NULL`,
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "last_call_at" timestamp with time zone`,
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "last_call_outcome" varchar(40)`,
+
+  // ── Întoarcerea în rezervă a leadurilor neatinse (migrarea 0182) ───────────
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "assigned_at" timestamp with time zone`,
+  `CREATE TABLE IF NOT EXISTS "crm_recall_settings" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+    "enabled" boolean DEFAULT false NOT NULL,
+    "days" integer DEFAULT 14 NOT NULL,
+    "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "crm_recall_settings_tenant_uniq" ON "crm_recall_settings" ("tenant_id")`,
 ];

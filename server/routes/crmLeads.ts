@@ -61,6 +61,7 @@ import {
   segmentConditions,
 } from "../lib/crm/segments";
 import { logCrmAudit } from "../lib/crm/audit";
+import { isCallOutcome, isTerminalOutcome } from "../lib/crm/callOutcomes";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
 
 /**
@@ -95,6 +96,12 @@ const LEAD_COLS = {
   // de mai sus.
   consentAt: leads.consentAt,
   consentRevokedAt: leads.consentRevokedAt,
+  // Apelurile (migrarea 0181, cu heal în `ensure/crmParity.ts` — deci prezente și pe o bază
+  // rămasă în urmă). Fără ele, „câte încercări am făcut pe firma asta" ar cere citirea întregului
+  // istoric la fiecare card din tablă.
+  callAttempts: leads.callAttempts,
+  lastCallAt: leads.lastCallAt,
+  lastCallOutcome: leads.lastCallOutcome,
   createdAt: leads.createdAt,
   updatedAt: leads.updatedAt,
 } as const;
@@ -184,12 +191,20 @@ const stageChangeSchema = z.object({
   lostReason: z.string().max(500).optional(),
 });
 
-const createInteractionSchema = z.object({
-  type: z.enum(INTERACTION_TYPES),
-  body: z.string().max(2000).optional(),
-  direction: z.enum(INTERACTION_DIRECTIONS).optional(),
-  metadata: z.record(z.unknown()).optional(),
-});
+const createInteractionSchema = z
+  .object({
+    type: z.enum(INTERACTION_TYPES),
+    body: z.string().max(2000).optional(),
+    direction: z.enum(INTERACTION_DIRECTIONS).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .refine(
+    (v) => v.type !== "call" || v.metadata?.outcome === undefined || isCallOutcome(v.metadata.outcome),
+    {
+      message: "Rezultat de apel necunoscut.",
+      path: ["metadata", "outcome"],
+    }
+  );
 
 
 // ─── Pâlnia unei cereri ───────────────────────────────────────────────────────
@@ -716,7 +731,9 @@ crmLeadsRoutes.post("/bulk", requireCrmPermission("leads.edit"), zValidator("jso
     if (ids.length > 0) {
       await db
         .update(leads)
-        .set({ assignedTo, updatedAt: new Date() })
+        // `assignedAt` pornește ceasul pentru „neatins de N zile" (CC-7) — aceeași regulă ca la
+        // repartizarea pe loturi. Scos responsabilul, se oprește și ceasul.
+        .set({ assignedTo, assignedAt: assignedTo ? new Date() : null, updatedAt: new Date() })
         .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ids)));
       updated = ids.length;
 
@@ -1491,6 +1508,23 @@ crmLeadsRoutes.post(
     if (metadata !== undefined) values.metadata = metadata;
 
     const [row] = await db.insert(leadInteractions).values(values).returning();
+
+    // Apelurile își lasă urma ȘI pe lead, nu doar în cronologie: altfel „câte încercări am făcut
+    // pe firma asta" cere citirea întregului istoric, la fiecare card din tabla kanban.
+    if (type === "call") {
+      const outcome = (metadata as Record<string, unknown> | undefined)?.outcome;
+      const known = isCallOutcome(outcome) ? outcome : null;
+      await db
+        .update(leads)
+        .set({
+          // Rezultatele terminale nu cresc contorul — vezi callOutcomes.ts.
+          callAttempts: known && isTerminalOutcome(known) ? sql`${leads.callAttempts}` : sql`${leads.callAttempts} + 1`,
+          lastCallAt: new Date(),
+          lastCallOutcome: known,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
+    }
 
     // Clientul a răspuns → urmărirea automată se oprește. Altfel, peste două zile, agentul
     // primește „sună clientul, nu răspunde" despre un om care a sunat deja.

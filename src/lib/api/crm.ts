@@ -63,6 +63,11 @@ export interface CrmLead {
   /** Taskul deschis cel mai apropiat de scadență, atașat de `/pipeline` la fiecare card.
    *  Lipsește pe celelalte rute (lista îl ia din altă parte) — de-aia e opțional. */
   nextTask?: { title: string; dueAt: string | null } | null;
+  /** Câte apeluri s-au dat pe lead (CC-6). Rezultatele terminale nu-l cresc. */
+  callAttempts?: number | null;
+  lastCallAt?: string | null;
+  /** Ultimul rezultat de apel, din vocabularul din `src/lib/crm/callOutcomes.ts`. */
+  lastCallOutcome?: string | null;
   /** Când și-a dat consimțământul (formular web). */
   consentAt?: string | null;
   /** Când l-a retras. Nenul = leadul NU mai poate fi contactat comercial. */
@@ -166,22 +171,9 @@ export function listCrmPipelines(): Promise<ListCrmPipelinesResponse> {
 }
 
 /** Pâlnia nouă se naște cu cele 5 etape implicite ale ei — altfel Kanbanul ei ar fi fără coloane. */
-/**
- * Șabloanele de etape cu care poate porni o pâlnie nouă.
- *
- * Etichetele sunt duplicate din `server/lib/crm/stages.ts` înadins: ecranul trebuie să le poată
- * arăta fără o cerere în plus, iar cheile — singurul lucru pe care serverul îl validează — sunt
- * aceleași. Etapele propriu-zise NU se duplică aici; ele se seamănă pe server.
- */
-export const PIPELINE_TEMPLATES = [
-  { key: "default", label: "Standard (Lead nou → Client)" },
-  { key: "spanco", label: "SPANCO (Suspect → Comandă)" },
-  { key: "call_center", label: "Call-center B2B (Rezervă rece → Contract)" },
-] as const;
-
-export type PipelineTemplateKey = (typeof PIPELINE_TEMPLATES)[number]["key"];
-
-export function createCrmPipeline(name: string, template?: PipelineTemplateKey): Promise<CrmPipeline> {
+/** Șablonul de etape (`src/lib/crm/pipelineTemplates.ts`) e o constantă pură — NU se exportă din
+ *  modulul ăsta: orice export nou de aici trebuie declarat în mock-ul fiecărei suite de CRM. */
+export function createCrmPipeline(name: string, template?: string): Promise<CrmPipeline> {
   return api<CrmPipeline>("/api/crm/pipelines", {
     method: "POST",
     body: JSON.stringify(template && template !== "default" ? { name, template } : { name }),

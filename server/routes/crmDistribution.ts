@@ -47,6 +47,8 @@ import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { ensureTenantStages } from "../lib/crm/stages";
 import { parseSegmentFilters, segmentConditions } from "../lib/crm/segments";
 import { logCrmAudit } from "../lib/crm/audit";
+import { getRecallSettings, runRecall } from "../lib/crm/recall";
+import { crmRecallSettings } from "../db/schema/crmRecall";
 
 export const crmDistributionRoutes = new Hono<{ Variables: AuthVariables }>();
 crmDistributionRoutes.use("/*", requireAuth);
@@ -269,7 +271,9 @@ crmDistributionRoutes.post("/run", zValidator("json", distributionSchema), async
       const slice = ids.slice(i, i + CHUNK);
       await db
         .update(leads)
-        .set({ assignedTo: alloc.userId, updatedAt: now })
+        // `assignedAt` e data de la care se numără „neatins de N zile" (CC-7). Fără ea, regula
+        // ar trebui dedusă din cronologie, pentru toată baza, la fiecare rulare a cronului.
+        .set({ assignedTo: alloc.userId, assignedAt: now, updatedAt: now })
         .where(and(eq(leads.tenantId, user.tenantId), inArray(leads.id, slice)));
 
       // Cronologia: de ce am eu firma asta. Un singur INSERT pe bucată, nu unul per lead.
@@ -343,4 +347,68 @@ crmDistributionRoutes.get("/pool", async (c) => {
     console.error("[crm/distribution] numărarea rezervei a eșuat:", e instanceof Error ? e.message : e);
     return c.json({ pool: 0, schemaLag: true });
   }
+});
+
+
+// ─── Întoarcerea în rezervă a contactelor neatinse (CC-7) ───────────────────
+
+/**
+ * Setarea trăiește lângă repartizare fiindcă e reversul ei: dacă lotul dat nu e lucrat, se
+ * întoarce în stocul din care a plecat. Regula rulează în cronul zilnic (07:00), iar `preview`
+ * de mai jos arată câte contacte ar pleca ACUM — nimeni n-ar porni pe încredere o automatizare
+ * care mută clienți de la un agent la altul.
+ */
+const recallSchema = z.object({
+  enabled: z.boolean(),
+  days: z.number().int().min(1).max(365),
+});
+
+crmDistributionRoutes.get("/recall", async (c) => {
+  const user = c.get("user");
+  const settings = await getRecallSettings(user.tenantId);
+  // Câte ar pleca acum, dacă regula ar rula. `dryRun` folosește EXACT aceeași funcție ca cronul.
+  let due = 0;
+  try {
+    due = (await runRecall(user.tenantId, { dryRun: true })).due;
+  } catch (e) {
+    console.error("[crm/distribution] previzualizarea întoarcerii a eșuat:", e instanceof Error ? e.message : e);
+  }
+  return c.json({ ...settings, due });
+});
+
+crmDistributionRoutes.put("/recall", zValidator("json", recallSchema), async (c) => {
+  const user = c.get("user");
+  const body = c.req.valid("json");
+
+  const [existing] = await db
+    .select()
+    .from(crmRecallSettings)
+    .where(eq(crmRecallSettings.tenantId, user.tenantId));
+
+  const row = existing
+    ? (
+        await db
+          .update(crmRecallSettings)
+          .set({ enabled: body.enabled, days: body.days, updatedAt: new Date() })
+          .where(eq(crmRecallSettings.id, existing.id))
+          .returning()
+      )[0]
+    : (
+        await db
+          .insert(crmRecallSettings)
+          .values({ tenantId: user.tenantId, enabled: body.enabled, days: body.days })
+          .returning()
+      )[0];
+
+  await logCrmAudit({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    action: "recall.configured",
+    target: "crm_recall_settings",
+    targetId: row.id,
+    before: existing ? { enabled: existing.enabled, days: existing.days } : null,
+    after: { enabled: row.enabled, days: row.days },
+  });
+
+  return c.json({ enabled: row.enabled, days: row.days });
 });

@@ -88,12 +88,27 @@ export interface CrmReportsResponse {
   stages: { key: string; label: string; isWon: boolean; isLost: boolean }[];
   owners: { id: string; name: string }[];
   kpis: CrmSalesKpis;
+  /** Gradul de realizare față de normă, per indicator (CC-5). Lipsă = fără normă sau perioadă
+   *  fără capete — interfața arată atunci cifra simplă, nu 0%. */
+  attainment?: Record<string, { target: number; achieved: number; pct: number }>;
+  /** Normele workspace-ului, așa cum sunt salvate (nescalate). */
+  targets?: { userId: string | null; period: string; metric: string; target: number }[];
   conversion: CrmConversionRow[];
   cycleDays: number;
   perOwner: CrmOwnerRow[];
   perProduct: CrmProductRow[];
   lostReasons: CrmLostReasonRow[];
   taskCompliance: CrmTaskCompliance;
+  /** Contactabilitatea listei (CC-6): apeluri → răspunsuri → decidenți. */
+  callFunnel?: {
+    dialed: number;
+    connected: number;
+    decisionMakers: number;
+    leadsTouched: number;
+    callsPerDecisionMaker: number | null;
+    byOutcome: { outcome: string; label: string; count: number; pct: number }[];
+    unknown: number;
+  };
   /** Evoluția în perioadă, tăiată pe zi/săptămână/lună (vezi `bucketSize`). */
   timeline?: CrmTimelineBucket[];
   bucketSize?: "day" | "week" | "month";
