@@ -16,15 +16,18 @@
  * Montat la /api/crm/reports.
  */
 import { Hono } from "hono";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions } from "../db/schema/leads";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmProducts } from "../db/schema/crmProducts";
 import { crmLeadTasks } from "../db/schema/crmTasks";
+import { crmKpiTargets } from "../db/schema/crmKpiTargets";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { ensureTenantStages } from "../lib/crm/stages";
+import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
+import { parseSegmentFilters, segmentConditions } from "../lib/crm/segments";
 import {
   salesKpis,
   stageConversion,
@@ -33,11 +36,17 @@ import {
   perProductBreakdown,
   lostReasonBreakdown,
   taskCompliance,
+  kpiAttainment,
+  funnelBreakdown,
+  funnelByOwner,
+  type FunnelLead,
+  type FunnelStage,
   type ReportLead,
   type ReportTask,
   type ReportStage,
   type ReportInteraction,
   type StageChange,
+  type KpiTargetRow,
   type DateRange,
   timeline,
   bucketSizeFor,
@@ -134,6 +143,23 @@ crmReportsRoutes.get("/", async (c) => {
       .from(users)
       .where(eq(users.tenantId, tenantId));
 
+    // Normele (CC-5). Lipsa tabelei nu are voie să rupă raportul: fără ea, ecranul arată exact
+    // ca înainte — cifre fără grad de realizare.
+    let targetRows: KpiTargetRow[] = [];
+    try {
+      targetRows = await db
+        .select({
+          userId: crmKpiTargets.userId,
+          period: crmKpiTargets.period,
+          metric: crmKpiTargets.metric,
+          target: crmKpiTargets.target,
+        })
+        .from(crmKpiTargets)
+        .where(eq(crmKpiTargets.tenantId, tenantId));
+    } catch (err) {
+      console.error("[crm/reports] normele nu s-au putut citi:", err instanceof Error ? err.message : err);
+    }
+
     // ── Normalizare în forma așteptată de funcțiile pure ──────────────────────
     const reportLeads: ReportLead[] = leadRows.map((l) => ({
       id: l.id,
@@ -186,6 +212,16 @@ crmReportsRoutes.get("/", async (c) => {
 
     const owners = memberRows.map((m) => ({ id: m.id, name: m.name ?? "—" }));
 
+    const kpiValues = salesKpis(
+      reportLeads,
+      reportInteractions,
+      reportTasks,
+      stageChanges,
+      reportStages,
+      range,
+      owner || undefined
+    );
+
     /**
      * Perioada și agentul se aplică TUTUROR secțiunilor, nu doar plăcuțelor.
      *
@@ -210,7 +246,11 @@ crmReportsRoutes.get("/", async (c) => {
       owner: owner ?? null,
       stages: reportStages,
       owners,
-      kpis: salesKpis(reportLeads, reportInteractions, reportTasks, stageChanges, reportStages, range, owner || undefined),
+      kpis: kpiValues,
+      // Gradul de realizare față de normă (CC-5). Gol = fără normă setată SAU perioadă
+      // nedefinită — interfața arată atunci cifra simplă, nu un 0% care ar acuza degeaba.
+      attainment: kpiAttainment(kpiValues, targetRows, range, owner || undefined),
+      targets: targetRows,
       conversion: stageConversion(scopedChanges, reportStages),
       cycleDays: averageCycleDays(reportLeads, scopedChanges, reportStages),
       perOwner: perOwnerBreakdown(reportLeads, reportInteractions, reportTasks, stageChanges, reportStages, range, owners),
@@ -241,6 +281,157 @@ crmReportsRoutes.get("/", async (c) => {
     if (/does not exist|undefined_table|undefined_column/i.test(msg)) {
       console.error("[crm/reports] schemă incompletă:", msg);
       return c.json({ range, owner: owner ?? null, stages: [], owners: [], schemaLag: true }, 200);
+    }
+    throw e;
+  }
+});
+
+// ─── GET /funnel — pâlnia ca pâlnie ─────────────────────────────────────────
+
+/**
+ * Pâlnia vizuală: pe fiecare etapă, banii din stânga și rata de cădere din dreapta, pentru
+ * pâlnia și segmentul cerute.
+ *
+ * De ce o rută separată de `GET /` și nu încă o secțiune în răspunsul acela: raportul general
+ * aduce taskuri, produse, motive de pierdere și evoluție — patru interogări pe care tabloul
+ * pâlniei nu le folosește. Ecranul ăsta se deschide de câteva ori pe zi și se refiltrează des;
+ * plata pentru date nefolosite s-ar simți la fiecare schimbare de filtru.
+ *
+ * Filtrele acceptate: `from`, `to`, `owner`, `pipelineId` + TOATE filtrele de segment
+ * (`industry`, `region`, `companySize`, `productId`, `tag`, `cf_<cheie>`, praguri de consum).
+ * Segmentarea pe rapoarte lipsea cu desăvârșire: se putea întreba „cum arată pâlnia", dar nu și
+ * „cum arată pâlnia pentru industria alimentară" — deși exact pentru asta se importă coloanele.
+ */
+crmReportsRoutes.get("/funnel", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const query = c.req.query();
+  const owner = query.owner || null;
+  const range: DateRange = { from: query.from ?? null, to: query.to ?? null };
+
+  try {
+    await ensureTenantStages(tenantId);
+    const pipeline = await ensureTenantPipeline(tenantId);
+    const pipelineId = query.pipelineId || pipeline?.id || null;
+
+    const stageRows = await db
+      .select()
+      .from(crmPipelineStages)
+      .where(
+        pipelineId
+          ? and(eq(crmPipelineStages.tenantId, tenantId), eq(crmPipelineStages.pipelineId, pipelineId))
+          : eq(crmPipelineStages.tenantId, tenantId)
+      )
+      .orderBy(crmPipelineStages.orderIndex);
+
+    const conditions = [eq(leads.tenantId, tenantId), isNull(leads.mergedIntoId)];
+    if (pipelineId) {
+      const cond = leadsInPipeline(pipelineId, pipelineId === pipeline?.id && Boolean(pipeline?.isDefault));
+      if (cond) conditions.push(cond);
+    }
+    conditions.push(...segmentConditions(tenantId, parseSegmentFilters(query)));
+
+    const leadRows = await db
+      .select({
+        id: leads.id,
+        stage: leads.stage,
+        assignedTo: leads.assignedTo,
+        valueCents: leads.valueCents,
+        createdAt: leads.createdAt,
+        lostReason: leads.lostReason,
+        interestCourse: leads.interestCourse,
+        productId: leads.productId,
+        probabilityPct: leads.probabilityPct,
+      })
+      .from(leads)
+      .where(and(...conditions))
+      .orderBy(desc(leads.createdAt))
+      .limit(MAX_ROWS);
+
+    // Perioada taie după DATA CREĂRII lead-ului: pâlnia răspunde la „ce am adus în intervalul
+    // ăsta și unde a ajuns", nu la „ce s-a mișcat". A doua întrebare are deja răspuns în
+    // `stageConversion` din raportul general.
+    const inPeriod = leadRows.filter((l) => inRange(iso(l.createdAt), range));
+    const scoped = owner ? inPeriod.filter((l) => l.assignedTo === owner) : inPeriod;
+
+    const funnelLeads: FunnelLead[] = scoped.map((l) => ({
+      id: l.id,
+      stage: l.stage,
+      assignedTo: l.assignedTo,
+      valueCents: l.valueCents ?? 0,
+      createdAt: iso(l.createdAt) ?? new Date(0).toISOString(),
+      lostReason: l.lostReason,
+      interestCourse: l.interestCourse,
+      productId: l.productId,
+      probabilityPct: l.probabilityPct,
+    }));
+
+    const leadIds = funnelLeads.map((l) => l.id);
+    const changeRows = leadIds.length
+      ? await db
+          .select({
+            leadId: leadInteractions.leadId,
+            occurredAt: leadInteractions.occurredAt,
+            metadata: leadInteractions.metadata,
+          })
+          .from(leadInteractions)
+          .where(
+            and(
+              eq(leadInteractions.tenantId, tenantId),
+              eq(leadInteractions.type, "stage_change"),
+              inArray(leadInteractions.leadId, leadIds)
+            )
+          )
+          .limit(MAX_ROWS * 4)
+      : [];
+
+    const changes: StageChange[] = changeRows.map((row) => {
+      const meta = (row.metadata ?? {}) as Record<string, unknown>;
+      return {
+        leadId: row.leadId,
+        occurredAt: iso(row.occurredAt) ?? undefined,
+        from: typeof meta.from === "string" ? meta.from : null,
+        to: typeof meta.to === "string" ? meta.to : null,
+      };
+    });
+
+    const funnelStages: FunnelStage[] = stageRows.map((s) => ({
+      key: s.key,
+      label: s.label,
+      orderIndex: s.orderIndex,
+      isWon: s.isWon,
+      isLost: s.isLost,
+      color: s.color,
+      probabilityPct: s.probabilityPct,
+    }));
+
+    const memberRows = await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(eq(users.tenantId, tenantId));
+
+    // Pâlnia pe fiecare agent: doar pentru cei care CHIAR au leaduri în segment — o coloană
+    // goală per coleg ar îneca exact comparația pentru care există secțiunea.
+    const ownersWithLeads = [...new Set(funnelLeads.map((l) => l.assignedTo).filter((id): id is string => !!id))];
+
+    return c.json({
+      pipelineId,
+      range,
+      owner,
+      totalLeads: funnelLeads.length,
+      stages: funnelBreakdown(funnelLeads, funnelStages, changes),
+      byOwner: ownersWithLeads.map((id) => ({
+        userId: id,
+        name: memberRows.find((m) => m.id === id)?.name ?? memberRows.find((m) => m.id === id)?.email ?? "—",
+        stages: funnelByOwner(funnelLeads, funnelStages, changes, id),
+      })),
+      owners: memberRows.map((m) => ({ id: m.id, name: m.name ?? m.email })),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/does not exist|undefined_table|undefined_column/i.test(msg)) {
+      console.error("[crm/reports] pâlnie — schemă incompletă:", msg);
+      return c.json({ stages: [], byOwner: [], owners: [], totalLeads: 0, schemaLag: true }, 200);
     }
     throw e;
   }

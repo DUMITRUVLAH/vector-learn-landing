@@ -198,4 +198,23 @@ export const CRM_PARITY_ENSURE_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS "crm_products_inventory_idx" ON "crm_products" ("tenant_id","inventory_item_id")`,
   `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "product_qty" integer DEFAULT 1 NOT NULL`,
   `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "stock_movement_id" uuid`,
+
+  // ── Norme KPI (migrarea 0180) ──────────────────────────────────────────────
+  // Fără heal, primul „Rapoarte" deschis pe un workspace unde migrarea n-a ajuns ar da 500 —
+  // iar raportul de vânzări e ecranul pe care managerul îl deschide zilnic.
+  `CREATE TABLE IF NOT EXISTS "crm_kpi_targets" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+    "user_id" uuid REFERENCES "users"("id") ON DELETE cascade,
+    "period" varchar(16) DEFAULT 'week' NOT NULL,
+    "metric" varchar(40) NOT NULL,
+    "target" integer DEFAULT 0 NOT NULL,
+    "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS "crm_kpi_targets_tenant_idx" ON "crm_kpi_targets" ("tenant_id")`,
+  // Două indexuri PARȚIALE, nu unul singur: în Postgres, două rânduri cu `user_id` NULL nu se
+  // ciocnesc într-un index unic obișnuit, deci norma generală s-ar putea dubla în tăcere.
+  `CREATE UNIQUE INDEX IF NOT EXISTS "crm_kpi_targets_user_uniq" ON "crm_kpi_targets" ("tenant_id","user_id","period","metric") WHERE "user_id" IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "crm_kpi_targets_default_uniq" ON "crm_kpi_targets" ("tenant_id","period","metric") WHERE "user_id" IS NULL`,
 ];

@@ -62,6 +62,7 @@ export * from "./leads";
 // CRM — catalogul de produse/servicii (CRM Faza 1)
 export * from "./crmProducts";
 export * from "./crmPipelines";
+export * from "./crmKpiTargets";
 export * from "./crmSavedViews";
 export * from "./crmCadences";
 export * from "./crmCaptureSources";

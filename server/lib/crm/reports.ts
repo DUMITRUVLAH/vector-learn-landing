@@ -591,3 +591,240 @@ export function timeline(
 
   return [...buckets.values()].sort((a, b) => (a.bucket < b.bucket ? -1 : 1));
 }
+
+// ─── CC-4: pâlnia ca pâlnie — bani pe etapă și cădere pe etapă ───────────────
+
+/** Etapa, îmbogățită cu ce-i trebuie pâlniei vizuale (culoare + probabilitate). */
+export interface FunnelStage extends ReportStage {
+  color?: string | null;
+  probabilityPct?: number | null;
+}
+
+/** Lead-ul, cu probabilitatea proprie (când o are) — prognoza n-o ia doar de la etapă. */
+export interface FunnelLead extends ReportLead {
+  probabilityPct?: number | null;
+}
+
+export interface FunnelStageRow {
+  key: string;
+  label: string;
+  color: string | null;
+  orderIndex: number;
+  isWon: boolean;
+  isLost: boolean;
+  /** Câte oportunități stau ACUM în etapă. */
+  currentCount: number;
+  /** Suma lor, în cenți — răspunsul la „cât e blocat aici". */
+  currentValueCents: number;
+  /** Aceeași sumă, ponderată cu probabilitatea (a leadului, altfel a etapei). */
+  weightedValueCents: number;
+  /** Câte oportunități au ajuns VREODATĂ până aici (vezi nota de mai jos). */
+  reached: number;
+  /** Dintre cele care au ajuns aici, câte au mers mai departe. */
+  advanced: number;
+  /** Câte s-au oprit aici: `reached − advanced`. */
+  dropped: number;
+  /** Cât la sută din cele ajunse aici NU au mers mai departe. */
+  dropRatePct: number;
+  /** Cât la sută au mers mai departe — complementul, calculat o dată. */
+  conversionPct: number;
+}
+
+/**
+ * Pâlnia, așa cum o cere un manager de vânzări: pe fiecare etapă, banii din stânga și rata de
+ * cădere din dreapta.
+ *
+ * CUM SE AFLĂ „a ajuns vreodată până aici" — și de ce nu doar din tranziții. `stageConversion`
+ * (mai sus) numără EXCLUSIV tranziții înregistrate, ceea ce e corect pentru mutările făcute în
+ * aplicație, dar face invizibil un lot importat în bloc: acele lead-uri n-au nicio tranziție,
+ * deci nu apar nici la numărător, nici la numitor. Pe o bază de outreach, unde 90% din leaduri
+ * intră prin import, pâlnia ar fi aproape goală.
+ *
+ * Aici combinăm cele două surse, în ordinea încrederii:
+ *   1. tranzițiile reale, când există — ele spun exact unde a fost lead-ul;
+ *   2. poziția CURENTĂ, ca prag minim: un lead aflat acum în „Negociere" a trecut prin etapele
+ *      dinaintea ei. Asumăm o pâlnie liniară — și chiar asta e o pâlnie.
+ *
+ * Etapele „pierdut" nu intră în lanț: un lead pierdut a căzut DINTR-O etapă deschisă, iar dacă
+ * l-am pune la coadă, rata de cădere ar arăta zero pe toate etapele și 100% la final. Când
+ * tranzițiile lui există, se numără corect la etapa din care a plecat; când e importat direct ca
+ * pierdut, nu avem de unde ști unde a căzut — apare doar în rândul „pierdut", nu inventăm.
+ *
+ * Etapa CÂȘTIGATĂ e ultima verigă: „a ajuns la câștigat" nu mai are unde avansa, deci rata ei de
+ * cădere e 0, nu 100%.
+ */
+export function funnelBreakdown(
+  leads: FunnelLead[],
+  stages: FunnelStage[],
+  changes: StageChange[]
+): FunnelStageRow[] {
+  // Lanțul pâlniei: etapele deschise + cea câștigată, în ordine. Cele pierdute stau deoparte.
+  const chain = stages.filter((s) => !s.isLost).sort((a, b) => a.orderIndex - b.orderIndex);
+  const indexOf = new Map(chain.map((s, i) => [s.key, i]));
+  const probabilityOf = new Map(stages.map((s) => [s.key, s.probabilityPct ?? 0]));
+
+  const currentCount = new Map<string, number>();
+  const currentValue = new Map<string, number>();
+  const weighted = new Map<string, number>();
+  /** Cel mai departe a ajuns fiecare lead, ca index în lanț. */
+  const furthest = new Map<string, number>();
+
+  for (const lead of leads) {
+    currentCount.set(lead.stage, (currentCount.get(lead.stage) ?? 0) + 1);
+    currentValue.set(lead.stage, (currentValue.get(lead.stage) ?? 0) + (lead.valueCents ?? 0));
+    const pct = lead.probabilityPct ?? probabilityOf.get(lead.stage) ?? 0;
+    weighted.set(lead.stage, (weighted.get(lead.stage) ?? 0) + Math.round(((lead.valueCents ?? 0) * pct) / 100));
+
+    const idx = indexOf.get(lead.stage);
+    if (idx !== undefined) furthest.set(lead.id, Math.max(furthest.get(lead.id) ?? -1, idx));
+  }
+
+  for (const change of changes) {
+    if (!change.leadId || !change.to) continue;
+    const idx = indexOf.get(change.to);
+    if (idx === undefined) continue; // tranziție către o etapă pierdută sau dispărută
+    furthest.set(change.leadId, Math.max(furthest.get(change.leadId) ?? -1, idx));
+  }
+
+  // Câte lead-uri au atins cel puțin indexul i.
+  const reachedAt = new Array(chain.length).fill(0) as number[];
+  for (const idx of furthest.values()) {
+    for (let i = 0; i <= idx && i < reachedAt.length; i++) reachedAt[i] += 1;
+  }
+
+  const rows: FunnelStageRow[] = chain.map((stage, i) => {
+    const reached = reachedAt[i] ?? 0;
+    // Ultima verigă (de regulă etapa câștigată) n-are unde avansa: tot ce a ajuns acolo a ajuns.
+    const advanced = i + 1 < reachedAt.length ? reachedAt[i + 1] ?? 0 : reached;
+    const dropped = Math.max(0, reached - advanced);
+    return {
+      key: stage.key,
+      label: stage.label,
+      color: stage.color ?? null,
+      orderIndex: stage.orderIndex,
+      isWon: stage.isWon,
+      isLost: stage.isLost,
+      currentCount: currentCount.get(stage.key) ?? 0,
+      currentValueCents: currentValue.get(stage.key) ?? 0,
+      weightedValueCents: weighted.get(stage.key) ?? 0,
+      reached,
+      advanced,
+      dropped,
+      dropRatePct: reached === 0 ? 0 : Math.round((dropped / reached) * 100),
+      conversionPct: reached === 0 ? 0 : Math.round((advanced / reached) * 100),
+    };
+  });
+
+  // Etapele „pierdut" se raportează separat, la coadă: sunt un rezultat, nu o verigă.
+  for (const stage of stages.filter((s) => s.isLost).sort((a, b) => a.orderIndex - b.orderIndex)) {
+    rows.push({
+      key: stage.key,
+      label: stage.label,
+      color: stage.color ?? null,
+      orderIndex: stage.orderIndex,
+      isWon: false,
+      isLost: true,
+      currentCount: currentCount.get(stage.key) ?? 0,
+      currentValueCents: currentValue.get(stage.key) ?? 0,
+      weightedValueCents: weighted.get(stage.key) ?? 0,
+      reached: currentCount.get(stage.key) ?? 0,
+      advanced: 0,
+      dropped: currentCount.get(stage.key) ?? 0,
+      dropRatePct: 100,
+      conversionPct: 0,
+    });
+  }
+
+  return rows;
+}
+
+/** Pâlnia unui singur agent — aceeași funcție, pe lead-urile lui. */
+export function funnelByOwner(
+  leads: FunnelLead[],
+  stages: FunnelStage[],
+  changes: StageChange[],
+  ownerKey: string
+): FunnelStageRow[] {
+  const mine = leads.filter((l) => l.assignedTo === ownerKey);
+  const ids = new Set(mine.map((l) => l.id));
+  return funnelBreakdown(
+    mine,
+    stages,
+    changes.filter((c) => c.leadId && ids.has(c.leadId))
+  );
+}
+
+
+// ─── CC-5: norme KPI și gradul de realizare ─────────────────────────────────
+
+/** O normă, redusă la ce folosește calculul. */
+export interface KpiTargetRow {
+  userId: string | null;
+  period: string;
+  metric: string;
+  target: number;
+}
+
+export interface KpiAttainment {
+  /** Ținta scalată la perioada raportului (vezi mai jos de ce se scalează). */
+  target: number;
+  achieved: number;
+  /** Procent din țintă, rotunjit. Peste 100 NU se taie: „140%" e o informație, nu o eroare. */
+  pct: number;
+}
+
+/** Câte zile are intervalul raportului. Fără `from`/`to` (adică „tot timpul"), normele nu se pot
+ *  scala — o țintă săptămânală n-are înțeles peste o perioadă nedefinită. */
+export function rangeDays(range: DateRange): number | null {
+  if (!range.from || !range.to) return null;
+  const from = new Date(range.from).getTime();
+  const to = new Date(range.to).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null;
+  return (to - from) / 86_400_000;
+}
+
+/**
+ * Gradul de realizare, indicator cu indicator.
+ *
+ * **Scalarea, spusă pe față.** Norma se pune „pe săptămână" (sau pe lună), dar raportul se poate
+ * cere pe orice interval. O normă de 60 de apeluri/săptămână, privită pe 30 de zile, devine
+ * 60 × 30/7 ≈ 257. Alternativa — să arătăm 60 indiferent de perioadă — ar fi produs „428%" la
+ * orice raport lunar, adică un număr care nu înseamnă nimic.
+ *
+ * **Când perioada e „tot timpul"** (fără capete), scalarea nu are sens și nu inventăm una:
+ * indicatorul rămâne fără grad de realizare, iar interfața arată cifra goală, ca înainte.
+ *
+ * **Fără normă setată nu există 0%.** Un 0% pe un indicator pe care nimeni n-a cerut nimic ar
+ * acuza degeaba — și ar face ca ecranul să pară roșu într-un workspace care doar n-a apucat să-și
+ * pună norme.
+ */
+export function kpiAttainment(
+  kpis: SalesKpis,
+  targets: KpiTargetRow[],
+  range: DateRange,
+  ownerKey?: string
+): Record<string, KpiAttainment> {
+  const days = rangeDays(range);
+  if (days === null) return {};
+
+  const out: Record<string, KpiAttainment> = {};
+
+  for (const metric of Object.keys(kpis) as (keyof SalesKpis)[]) {
+    // Norma personală bate norma generală a workspace-ului.
+    const personal = ownerKey ? targets.find((t) => t.userId === ownerKey && t.metric === metric) : undefined;
+    const general = targets.find((t) => t.userId === null && t.metric === metric);
+    const rule = personal ?? general;
+    if (!rule || rule.target <= 0) continue;
+
+    const periodDays = rule.period === "month" ? 30 : 7;
+    const scaled = Math.round((rule.target * days) / periodDays);
+    const achieved = kpis[metric] ?? 0;
+    out[metric] = {
+      target: scaled,
+      achieved,
+      pct: scaled === 0 ? 0 : Math.round((achieved / scaled) * 100),
+    };
+  }
+
+  return out;
+}

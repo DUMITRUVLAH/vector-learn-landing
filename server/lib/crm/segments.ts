@@ -22,7 +22,7 @@ import { and, asc, eq, gte, inArray, lte, type SQL } from "drizzle-orm";
 import { db } from "../../db/client";
 import { crmCompanies } from "../../db/schema/crmCompanies";
 import { crmProducts } from "../../db/schema/crmProducts";
-import { leads } from "../../db/schema/leads";
+import { leads, leadTags, customFields, leadFieldValues } from "../../db/schema/leads";
 
 export interface LeadSegmentFilters {
   /** Produsul din catalog (`crm_products`) — pe lead, nu pe firmă. */
@@ -33,6 +33,16 @@ export interface LeadSegmentFilters {
   /** Consum anual (kWh) al firmei — pragurile sunt inclusive. */
   minConsumptionKwh?: number;
   maxConsumptionKwh?: number;
+  /** Eticheta de pe lead (`lead_tags`) — inclusiv cele venite din import. */
+  tag?: string;
+  /**
+   * Câmpurile personalizate: cheie → valoare exactă. Vin din query string ca `cf_<cheie>=valoare`.
+   *
+   * Astea sunt filtrele care fac coloanele importate utile: fără ele, „Cod CAEN" se scrie în bază
+   * și nu mai poate fi întrebat nimic despre el. Firmografia fixă de mai sus (industrie, regiune,
+   * mărime, consum) acoperă doar vocabularul unui singur client.
+   */
+  customFields?: Record<string, string>;
 }
 
 /** Cheile pe care le citim din query string — o singură listă, folosită și de client. */
@@ -43,7 +53,11 @@ export const SEGMENT_QUERY_KEYS = [
   "companySize",
   "minConsumptionKwh",
   "maxConsumptionKwh",
+  "tag",
 ] as const;
+
+/** Prefixul sub care vin filtrele de câmp personalizat în query string: `cf_cod_caen=4711`. */
+export const CUSTOM_FIELD_QUERY_PREFIX = "cf_";
 
 function trimmed(value: string | undefined, max: number): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -74,6 +88,19 @@ export function parseSegmentFilters(q: Record<string, string | undefined>): Lead
   f.companySize = trimmed(q.companySize, 40);
   f.minConsumptionKwh = positiveNumber(q.minConsumptionKwh);
   f.maxConsumptionKwh = positiveNumber(q.maxConsumptionKwh);
+  f.tag = trimmed(q.tag, 100);
+
+  const custom: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(q)) {
+    if (!rawKey.startsWith(CUSTOM_FIELD_QUERY_PREFIX)) continue;
+    const key = rawKey.slice(CUSTOM_FIELD_QUERY_PREFIX.length);
+    // Aceeași regulă de cheie ca la definirea câmpului; orice altceva e gunoi din query string.
+    if (!/^[a-z0-9_]{1,64}$/.test(key)) continue;
+    const value = trimmed(rawValue, 1000);
+    if (value !== undefined) custom[key] = value;
+  }
+  if (Object.keys(custom).length > 0) f.customFields = custom;
+
   return f;
 }
 
@@ -85,7 +112,9 @@ export function hasSegmentFilters(f: LeadSegmentFilters): boolean {
     f.region !== undefined ||
     f.companySize !== undefined ||
     f.minConsumptionKwh !== undefined ||
-    f.maxConsumptionKwh !== undefined
+    f.maxConsumptionKwh !== undefined ||
+    f.tag !== undefined ||
+    (f.customFields !== undefined && Object.keys(f.customFields).length > 0)
   );
 }
 
@@ -108,6 +137,34 @@ export function segmentConditions(tenantId: string, f: LeadSegmentFilters): SQL[
   const conditions: SQL[] = [];
 
   if (f.productId) conditions.push(eq(leads.productId, f.productId));
+
+  // Eticheta: subinterogare, nu join — un lead cu trei etichete ar apărea de trei ori într-un
+  // join, iar numărătoarea din ecranul de repartizare ar promite mai multe contacte decât există.
+  if (f.tag) {
+    const tagged = db
+      .select({ id: leadTags.leadId })
+      .from(leadTags)
+      .where(and(eq(leadTags.tenantId, tenantId), eq(leadTags.tag, f.tag)));
+    conditions.push(inArray(leads.id, tagged));
+  }
+
+  // Câmpurile personalizate: câte o subinterogare per câmp, deci condițiile se adună cu ȘI —
+  // „CAEN 4711 ȘI Regiune Nord", nu „oricare dintre ele".
+  for (const [key, value] of Object.entries(f.customFields ?? {})) {
+    const matching = db
+      .select({ id: leadFieldValues.leadId })
+      .from(leadFieldValues)
+      .innerJoin(customFields, eq(customFields.id, leadFieldValues.fieldId))
+      .where(
+        and(
+          eq(leadFieldValues.tenantId, tenantId),
+          eq(customFields.tenantId, tenantId),
+          eq(customFields.key, key),
+          eq(leadFieldValues.value, value)
+        )
+      );
+    conditions.push(inArray(leads.id, matching));
+  }
 
   if (!hasFirmographicFilters(f)) return conditions;
 
@@ -139,6 +196,10 @@ export interface LeadSegmentOptions {
   regions: string[];
   sizes: string[];
   products: { id: string; name: string }[];
+  /** Etichetele folosite efectiv în workspace. */
+  tags: string[];
+  /** Câmpurile personalizate, fiecare cu valorile care există deja în bază. */
+  customFields: { key: string; label: string; values: string[] }[];
   /** Intervalul real de consum din baza tenantului — `null` când nicio firmă n-are cifra. */
   consumption: { min: number; max: number } | null;
 }
@@ -152,7 +213,7 @@ export interface LeadSegmentOptions {
  * niciodată o opțiune care întoarce zero rânduri.
  */
 export async function leadSegmentOptions(tenantId: string): Promise<LeadSegmentOptions> {
-  const [rows, productRows] = await Promise.all([
+  const [rows, productRows, tagRows, fieldValueRows] = await Promise.all([
     db
       .select({
         industry: crmCompanies.industry,
@@ -169,6 +230,17 @@ export async function leadSegmentOptions(tenantId: string): Promise<LeadSegmentO
       .from(crmProducts)
       .where(and(eq(crmProducts.tenantId, tenantId), eq(crmProducts.isActive, true)))
       .orderBy(asc(crmProducts.orderIndex), asc(crmProducts.name)),
+    // Etichetele și valorile personalizate FOLOSITE, nu cele definite: un filtru nu trebuie să
+    // ofere niciodată o opțiune care întoarce zero rânduri.
+    db
+      .selectDistinct({ tag: leadTags.tag })
+      .from(leadTags)
+      .where(eq(leadTags.tenantId, tenantId)),
+    db
+      .selectDistinct({ key: customFields.key, label: customFields.label, value: leadFieldValues.value })
+      .from(leadFieldValues)
+      .innerJoin(customFields, eq(customFields.id, leadFieldValues.fieldId))
+      .where(and(eq(leadFieldValues.tenantId, tenantId), eq(customFields.tenantId, tenantId))),
   ]);
 
   const industries = new Set<string>();
@@ -189,11 +261,27 @@ export async function leadSegmentOptions(tenantId: string): Promise<LeadSegmentO
   }
 
   const collator = new Intl.Collator("ro");
+
+  const byKey = new Map<string, { key: string; label: string; values: Set<string> }>();
+  for (const row of fieldValueRows) {
+    if (!row.value?.trim()) continue;
+    const entry = byKey.get(row.key) ?? { key: row.key, label: row.label, values: new Set<string>() };
+    entry.values.add(row.value.trim());
+    byKey.set(row.key, entry);
+  }
+
   return {
     industries: [...industries].sort(collator.compare),
     regions: [...regions].sort(collator.compare),
     sizes: [...sizes].sort(collator.compare),
     products: productRows,
     consumption: min === null || max === null ? null : { min, max },
+    tags: tagRows
+      .map((t) => t.tag)
+      .filter((t): t is string => Boolean(t?.trim()))
+      .sort(collator.compare),
+    customFields: [...byKey.values()]
+      .map((f) => ({ key: f.key, label: f.label, values: [...f.values].sort(collator.compare) }))
+      .sort((a, b) => collator.compare(a.label, b.label)),
   };
 }

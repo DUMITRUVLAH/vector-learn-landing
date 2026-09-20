@@ -34,6 +34,8 @@ const EMPTY_OPTIONS: CrmSegmentOptions = {
   sizes: [],
   products: [],
   consumption: null,
+  tags: [],
+  customFields: [],
 };
 
 /** Formatare scurtă pentru praguri: 1 500 000 kWh se citește greu, 1 500 MWh nu. */
@@ -90,6 +92,7 @@ export function SegmentFilterBar({ value, onChange }: SegmentFilterBarProps) {
     chips.push({ key: "minConsumptionKwh", label: `Consum ≥ ${formatKwh(value.minConsumptionKwh)}` });
   if (value.maxConsumptionKwh !== undefined)
     chips.push({ key: "maxConsumptionKwh", label: `Consum ≤ ${formatKwh(value.maxConsumptionKwh)}` });
+  if (value.tag) chips.push({ key: "tag", label: `Etichetă: ${value.tag}` });
 
   const nothingToSegment =
     loaded &&
@@ -97,7 +100,17 @@ export function SegmentFilterBar({ value, onChange }: SegmentFilterBarProps) {
     options.regions.length === 0 &&
     options.sizes.length === 0 &&
     options.products.length === 0 &&
-    options.consumption === null;
+    options.consumption === null &&
+    (options.tags?.length ?? 0) === 0 &&
+    (options.customFields?.length ?? 0) === 0;
+
+  /** Scoate un filtru de câmp personalizat, păstrându-le pe celelalte. */
+  function patchCustom(key: string, next: string | undefined) {
+    const custom = { ...(value.customFields ?? {}) };
+    if (next === undefined) delete custom[key];
+    else custom[key] = next;
+    onChange(cleanCrmSegments({ ...value, customFields: custom }));
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -130,6 +143,22 @@ export function SegmentFilterBar({ value, onChange }: SegmentFilterBarProps) {
             <X className="h-3 w-3" aria-hidden="true" />
           </button>
         ))}
+
+        {Object.entries(value.customFields ?? {}).map(([key, val]) => {
+          const label = options.customFields?.find((f) => f.key === key)?.label ?? key;
+          return (
+            <button
+              key={`cf-${key}`}
+              type="button"
+              onClick={() => patchCustom(key, undefined)}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Scoate filtrul ${label}: ${val}`}
+            >
+              {label}: {val}
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          );
+        })}
 
         {activeCount > 0 && (
           <Button type="button" variant="ghost" size="sm" onClick={() => onChange({})}>
@@ -198,6 +227,44 @@ export function SegmentFilterBar({ value, onChange }: SegmentFilterBarProps) {
                 ))}
               </Select>
             </div>
+
+            {(options.tags?.length ?? 0) > 0 && (
+              <div>
+                <Label htmlFor="crm-segment-tag">Etichetă</Label>
+                <Select
+                  id="crm-segment-tag"
+                  value={value.tag ?? "all"}
+                  onChange={(e) => patch({ tag: e.target.value === "all" ? undefined : e.target.value })}
+                >
+                  <option value="all">Orice etichetă</option>
+                  {(options.tags ?? []).map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+
+            {/* Coloanele importate: fără ele, „Cod CAEN" se scrie în bază și nu se mai poate
+                întreba nimic despre el. Apar doar cele care CHIAR au valori. */}
+            {(options.customFields ?? []).map((field) => (
+              <div key={field.key}>
+                <Label htmlFor={`crm-segment-cf-${field.key}`}>{field.label}</Label>
+                <Select
+                  id={`crm-segment-cf-${field.key}`}
+                  value={value.customFields?.[field.key] ?? "all"}
+                  onChange={(e) => patchCustom(field.key, e.target.value === "all" ? undefined : e.target.value)}
+                >
+                  <option value="all">Orice valoare</option>
+                  {field.values.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ))}
 
             <div>
               <Label htmlFor="crm-segment-product">Produs</Label>

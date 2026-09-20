@@ -24,6 +24,7 @@ import {
   BarChart3,
   BookOpen,
   Users,
+  Filter,
   Home,
   Receipt,
   ReceiptText,
@@ -268,8 +269,16 @@ const CRM_NAV_GROUPS: NavGroup[] = [
     section: "Analiză",
     prefix: "/business/crm",
     items: [
+      { label: "Tabloul pâlniei", href: "/business/crm/palnie", icon: Filter, tone: "sky" },
       { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3, tone: "violet" },
       { label: "Import", href: "/business/crm/import", icon: Upload, tone: "teal" },
+      {
+        label: "Repartizare",
+        href: "/business/crm/repartizare",
+        icon: Users,
+        tone: "amber",
+        crmPermission: "assignment.manage",
+      },
     ],
   },
   {

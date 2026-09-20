@@ -66,6 +66,8 @@ const CrmReportsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmRep
 const CrmTodayPage = lazyWithTimeout(() => import("./pages/business/crm/CrmTodayPage").then((m) => ({ default: m.CrmTodayPage })));
 const CrmCompaniesPage = lazyWithTimeout(() => import("./pages/business/crm/CrmCompaniesPage").then((m) => ({ default: m.CrmCompaniesPage })));
 const CrmImportPage = lazyWithTimeout(() => import("./pages/business/crm/CrmImportPage").then((m) => ({ default: m.CrmImportPage })));
+const CrmFunnelPage = lazyWithTimeout(() => import("./pages/business/crm/CrmFunnelPage").then((m) => ({ default: m.CrmFunnelPage })));
+const CrmDistributionPage = lazyWithTimeout(() => import("./pages/business/crm/CrmDistributionPage").then((m) => ({ default: m.CrmDistributionPage })));
 const CrmDocumentsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmDocumentsPage").then((m) => ({ default: m.CrmDocumentsPage })));
 const CrmAutomationsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmAutomationsPage").then((m) => ({ default: m.CrmAutomationsPage })));
 const CrmCommsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmCommsPage").then((m) => ({ default: m.CrmCommsPage })));
@@ -339,6 +341,8 @@ function Routes() {
   if (path.startsWith("/business/crm/astazi")) return <BusinessGuardPage><CrmTodayPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/clienti")) return <BusinessGuardPage><CrmCompaniesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/import")) return <BusinessGuardPage><CrmImportPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/palnie")) return <BusinessGuardPage><CrmFunnelPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/repartizare")) return <BusinessGuardPage><CrmDistributionPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/documente")) return <BusinessGuardPage><CrmDocumentsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/automatizari")) return <BusinessGuardPage><CrmAutomationsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/comunicare")) return <BusinessGuardPage><CrmCommsPage /></BusinessGuardPage>;

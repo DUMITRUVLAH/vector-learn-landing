@@ -104,6 +104,10 @@ export interface CrmSegmentOptions {
   products: { id: string; name: string }[];
   /** Intervalul real de consum din baza workspace-ului; `null` când nicio firmă n-are cifra. */
   consumption: { min: number; max: number } | null;
+  /** Etichetele folosite efectiv (inclusiv cele venite din import). */
+  tags?: string[];
+  /** Câmpurile personalizate, fiecare cu valorile care există deja în bază. */
+  customFields?: { key: string; label: string; values: string[] }[];
   schemaLag?: boolean;
 }
 
