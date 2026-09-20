@@ -366,10 +366,12 @@ const recallSchema = z.object({
 crmDistributionRoutes.get("/recall", async (c) => {
   const user = c.get("user");
   const settings = await getRecallSettings(user.tenantId);
-  // Câte ar pleca acum, dacă regula ar rula. `dryRun` folosește EXACT aceeași funcție ca cronul.
+  // Câte ar pleca acum, dacă regula ar rula — se calculează ȘI cu regula oprită (`force`), altfel
+  // ecranul ar arăta „0" până la aprindere, adică exact numărul care te face să nu o aprinzi.
+  // `dryRun` folosește EXACT aceeași funcție ca cronul.
   let due = 0;
   try {
-    due = (await runRecall(user.tenantId, { dryRun: true })).due;
+    due = (await runRecall(user.tenantId, { dryRun: true, force: true })).due;
   } catch (e) {
     console.error("[crm/distribution] previzualizarea întoarcerii a eșuat:", e instanceof Error ? e.message : e);
   }

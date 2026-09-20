@@ -69,3 +69,13 @@ describe("Cine se întoarce în rezervă", () => {
     expect(dueForRecall([lead("a", { assignedAt: "nu e o dată" })], [], 14, CLOSED, NOW)).toEqual([]);
   });
 });
+
+describe("Previzualizarea, înainte de aprindere", () => {
+  it("[blocant] regula OPRITĂ nu ia nimic — dar numărul trebuie să se poată vedea dinainte", () => {
+    // `runRecall` cu regula oprită întoarce 0 (nu mută nimic). Previzualizarea din ecran cere
+    // `force: true`, fiindcă un manager nu pornește pe încredere o automatizare care ia clienți
+    // de la un agent: vrea să vadă întâi CÂȚI ar pleca. Regula de selecție e aceeași — de aceea
+    // se testează aici funcția pură, singurul loc în care trăiește.
+    expect(dueForRecall([lead("a"), lead("b")], [], 14, CLOSED, NOW)).toEqual(["a", "b"]);
+  });
+});

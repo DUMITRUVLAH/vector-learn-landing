@@ -110,11 +110,15 @@ export interface RecallResult {
  */
 export async function runRecall(
   tenantId: string,
-  options: { dryRun?: boolean; now?: Date } = {}
+  options: { dryRun?: boolean; now?: Date; force?: boolean } = {}
 ): Promise<RecallResult> {
   const now = options.now ?? new Date();
   const settings = await getRecallSettings(tenantId);
-  if (!settings.enabled) return { due: 0, recalled: 0 };
+  // `force` e doar pentru PREVIZUALIZARE: managerul trebuie să vadă câte contacte ar pleca
+  // ÎNAINTE de a porni regula. Fără el, ecranul ar arăta „0" până la aprindere — adică exact
+  // numărul care l-ar face să creadă că regula nu face nimic.
+  if (!settings.enabled && !options.force) return { due: 0, recalled: 0 };
+  if (!settings.enabled && !options.dryRun) return { due: 0, recalled: 0 };
 
   const closedRows = await db
     .select({ key: crmPipelineStages.key })
