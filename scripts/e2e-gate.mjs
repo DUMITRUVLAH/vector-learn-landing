@@ -134,6 +134,21 @@ const AREAS = {
       ["GET", "/api/crm/tasks/today", (j) => !!j],
       ["GET", "/api/crm/companies", (j) => Array.isArray(j?.items)],
       ["GET", "/api/crm/reports", (j) => !!j],
+      // Tabloul pâlniei (CC-4): FORMA răspunsului, nu doar un 200 — o pâlnie fără `stages` ar
+      // desena un ecran gol care arată exact ca „n-ai încă leaduri".
+      ["GET", "/api/crm/reports/funnel", (j) => Array.isArray(j?.stages) && Array.isArray(j?.byOwner)],
+      // Rezerva rece și normele (CC-3, CC-5, CC-7).
+      ["GET", "/api/crm/distribution/pool", (j) => typeof j?.pool === "number"],
+      ["GET", "/api/crm/distribution/recall", (j) => typeof j?.enabled === "boolean"],
+      ["GET", "/api/crm/kpi-targets", (j) => Array.isArray(j?.items)],
+      // Previzualizarea repartizării nu scrie nimic — deci poate sta în poartă. Alocarea cu un
+      // utilizator inexistent verifică și validarea: răspunsul trebuie să aibă tot forma lui.
+      [
+        "POST",
+        "/api/crm/distribution/preview",
+        (j) => typeof j?.available === "number" && Array.isArray(j?.allocations),
+        { body: { allocations: [{ userId: "00000000-0000-0000-0000-000000000000", count: 1 }] } },
+      ],
       ["GET", "/api/crm/saved-views", (j) => Array.isArray(j?.items)],
       ["GET", "/api/crm/permissions", (j) => Array.isArray(j?.permissions)],
       // Echipa: ecranele CRM cereau ruta asta de luni de zile, dar nu era montată — hook-ul
