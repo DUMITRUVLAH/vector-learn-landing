@@ -13,17 +13,15 @@
  * din nou plafonul. ORDINEA de mai jos contează și nu e arbitrară — vezi comentariile per pas.
  */
 import { execSync } from "node:child_process";
+import { STATIC_GUARDS } from "./lib/prebuild-guards.mjs";
 
 /** Pașii de build, în ordine. Fiecare oprește deploy-ul dacă iese cu cod diferit de 0. */
 const STEPS = [
   // ── Porți STATICE: rulează primele, sunt ieftine și prind clasele de bug-uri care au dat
   //    outage-uri reale. Nu ating baza de date, deci pot pica rapid fără efecte secundare.
-  ["schema vercel.json", "node scripts/check-vercel-config.mjs"],
-  ["referințe nedefinite (TS2304)", "node scripts/check-undefined-refs.mjs"],
-  ["rute Hono nemontate", "node scripts/check-route-mounts.mjs"],
-  ["linkuri moarte în meniu", "node scripts/check-nav-links.mjs"],
-  ["moneda cererii pe ecrane și în PDF", "node scripts/check-par-currency.mjs"],
-  ["statement-breakpoints în migrări", "node scripts/check-migration-breakpoints.mjs"],
+  //    Lista stă în `scripts/lib/prebuild-guards.mjs`, ca poarta e2e locală să ruleze EXACT
+  //    aceleași gărzi — altfel „e2e verde" nu înseamnă „build-ul trece" (vezi acolo de ce).
+  ...STATIC_GUARDS.map(([label, script]) => [label, `node ${script}`]),
 
   // ── Migrările pe baza de date reală. DUPĂ porțile statice (n-are rost să atingem prod-ul dacă
   //    un import lipsă urmează oricum să oprească build-ul) și ÎNAINTE de build, ca schema și

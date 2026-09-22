@@ -24,6 +24,7 @@ import { request } from "playwright-core";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
+import { STATIC_GUARDS } from "./lib/prebuild-guards.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PW = process.env.E2E_PASSWORD ?? "demo123456";
@@ -276,14 +277,10 @@ function detectAreas() {
 // ── 2. Gărzi statice ─────────────────────────────────────────────────────────
 function staticGuards() {
   console.log("\n▶ Gărzi statice");
-  const guards = [
-    ["referințe nedefinite", "check-undefined-refs.mjs"],
-    ["rute montate", "check-route-mounts.mjs"],
-    ["breakpoint-uri migrări", "check-migration-breakpoints.mjs"],
-  ];
-  for (const [label, script] of guards) {
+  // Exact gărzile pe care le rulează build-ul de producție — nici mai puține, nici altele.
+  for (const [label, script] of STATIC_GUARDS) {
     try {
-      execFileSync("node", [path.join("scripts", script)], { cwd: ROOT, stdio: "pipe" });
+      execFileSync("node", [script], { cwd: ROOT, stdio: "pipe" });
       check(label, true);
     } catch (e) {
       const out = `${e.stdout ?? ""}${e.stderr ?? ""}`.trim().split("\n").slice(-6).join(" | ");

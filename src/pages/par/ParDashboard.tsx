@@ -53,6 +53,7 @@ import {
   listBudgetCodes,
   formatCurrency,
   formatMDL,
+  formatCurrency,
   type ParRequest,
   type ParStatus,
   type ParPurpose,
@@ -729,7 +730,7 @@ export function ParDashboard() {
             parId={archiveTarget.id}
             requestNo={archiveTarget.requestNo}
             status={archiveTarget.status}
-            summary={[archiveTarget.payeeName, formatMDL(archiveTarget.totalEstimatedCents)]
+            summary={[archiveTarget.payeeName, formatCurrency(archiveTarget.totalEstimatedCents, archiveTarget.currency)]
               .filter(Boolean)
               .join(" · ")}
             onClose={() => setArchiveTarget(null)}
