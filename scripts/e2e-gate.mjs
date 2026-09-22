@@ -61,7 +61,19 @@ const AREAS = {
     match: /(server\/(routes|lib)\/par|server\/db\/schema\/par|src\/(pages|components)\/([Pp]ar\/|business\/[Pp]ar)|src\/lib\/(api\/)?par)/,
     // Fiecare verificare INVOCĂ ruta și îi validează forma răspunsului (CLAUDE.md §3.5.1quater).
     api: [
-      ["GET", "/api/par", (j) => Array.isArray(j?.requests)],
+      // Lista de lucru: rânduri + contorul filei „Arhivate" + niciuna dintre cererile puse
+      // deoparte (cât timp statusul lor n-a plecat mai departe). Verificarea stă AICI, nu într-o a
+      // doua intrare „GET /api/par": măturarea deduplică după metodă+url, deci a doua ar fi sărită.
+      [
+        "GET",
+        "/api/par",
+        (j) =>
+          Array.isArray(j?.requests) &&
+          typeof j?.archived_total === "number" &&
+          j.requests.every(
+            (r) => !r.archivedAt || !["draft", "rejected", "cancelled", "paid"].includes(r.status)
+          ),
+      ],
       ["GET", "/api/par/me", (j) => Array.isArray(j?.roles)],
       ["GET", "/api/par/projects", (j) => Array.isArray(j?.projects)],
       ["GET", "/api/par/vendors", (j) => Array.isArray(j?.vendors)],
@@ -83,6 +95,10 @@ const AREAS = {
       ["GET", "/api/par/vendors/directory", (j) => Array.isArray(j?.vendors) && j.vendors.every((v) => "ratingAvg" in v && typeof v.paidCents === "number")],
       ["GET", "/api/par/vendors/categories", (j) => Array.isArray(j?.categories) && Array.isArray(j?.suggestions)],
       ["GET", "/api/par/vendors/pending-ratings", (j) => Array.isArray(j?.pending)],
+      // PAR-ARH: arhiva e o listă separată, iar rândurile din ea sunt chiar arhivate.
+      ["GET", "/api/par?archived=1", (j) => Array.isArray(j?.requests) && j.requests.every((r) => !!r.archivedAt)],
+      // Acțiunea se INVOACĂ, nu doar se presupune: pe o cerere inexistentă trebuie 404, nu 500.
+      ["POST", "/api/par/00000000-0000-0000-0000-000000000000/archive", () => true, { status: 404 }],
     ],
     routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/exchange", "/business/par/admin", "/business/par/vendors"],
     // `e2e-par-mobile.mjs`: ce e ATINGIBIL pe un ecran de telefon, nu doar prezent în DOM. Dialogul
@@ -451,11 +467,22 @@ function distIsStale() {
   return newest(path.join(ROOT, "src")) > built;
 }
 
+/**
+ * Construiește `dist/` dacă e vechi — ÎNAINTE de a porni serverul.
+ *
+ * Ordinea contează: serverul își ia pagina din `dist/` la pornire, deci un server pornit peste un
+ * `dist/` inexistent servește un ecran alb pe FIECARE rută, iar poarta raportează „pagină goală" pe
+ * tot, inclusiv pe ecrane pe care nu le-a atins nimeni. Am pățit-o pe 22.09.2026: 10 rute roșii
+ * într-un worktree proaspăt, toate verzi la a doua rulare, fără nicio schimbare de cod.
+ */
+function ensureDist() {
+  if (!distIsStale()) return;
+  console.log("\n▶ dist/ e vechi față de src/ — rebuild (durează ~30s)");
+  execFileSync("npx", ["vite", "build"], { cwd: ROOT, stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } });
+}
+
 async function browserSweep(base, areas, ctx) {
-  if (distIsStale()) {
-    console.log("\n▶ dist/ e vechi față de src/ — rebuild (durează ~30s)");
-    execFileSync("npx", ["vite", "build"], { cwd: ROOT, stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } });
-  }
+  ensureDist();
   console.log("\n▶ Browser real");
   const { chromium } = await import("playwright-core");
   const CHROME = [
@@ -554,6 +581,9 @@ async function main() {
   console.log(`\n═══ Poarta E2E — zone atinse: ${areas.length ? areas.map((a) => AREAS[a].label).join(", ") : "niciuna detectată (rulez doar nucleul)"} ═══`);
 
   staticGuards();
+
+  // Pagina se construiește înaintea serverului: vezi `ensureDist`.
+  if (WANT_BROWSER) ensureDist();
 
   let base = await findServer();
   if (!base) base = await bootServer();
