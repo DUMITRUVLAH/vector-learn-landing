@@ -13,6 +13,8 @@
  *   PATCH  /api/par/:id                          → update header / end-use / payee (draft|changes_requested only)
  *   DELETE /api/par/:id                          → cancel (requestor own | par_admin)
  *   POST   /api/par/:id/withdraw                 → retrage din aprobare în draft pentru corectură
+ *   POST   /api/par/:id/archive                  → PAR-ARH: scoate cererea din listele de lucru
+ *   POST   /api/par/:id/unarchive                → PAR-ARH: readuce cererea din arhivă
  *   POST   /api/par/:id/line-items               → add line item
  *   PATCH  /api/par/:id/line-items/:lineId       → update line item
  *   DELETE /api/par/:id/line-items/:lineId       → delete line item
@@ -22,7 +24,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { cleanPastedIdentityField } from "../lib/par/fieldSanity";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
-import { and, eq, ne, ilike, desc, asc, inArray, isNull, or, gte, lte, sql } from "drizzle-orm";
+import { and, eq, ne, ilike, desc, asc, inArray, notInArray, isNull, isNotNull, or, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -52,6 +54,14 @@ import { validateIban, normalizeIban } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
 import { MAX_MONEY_CENTS, MAX_LINE_QUANTITY, exceedsMoneyBound, moneyBoundError } from "../lib/par/moneyBounds";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
+import {
+  ARCHIVABLE_STATUSES,
+  PAR_ARCHIVE_EVENT,
+  PAR_UNARCHIVE_EVENT,
+  archiveBlockedReason,
+  isArchivableStatus,
+  normalizeArchiveNote,
+} from "../../src/lib/par/archive";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
 import { computeParBodyHash, verifyParBodyHash } from "../lib/par/integrity";
 import {
@@ -745,6 +755,9 @@ parRoutes.get("/", async (c) => {
   // Query params
   const status = c.req.query("status");
   const purpose = c.req.query("purpose");
+  // PAR-ARH: `?archived=1` = LISTA DE ARHIVĂ. Fără el, lista de lucru nu arată cererile arhivate.
+  const archivedParam = c.req.query("archived");
+  const wantArchived = archivedParam === "1" || archivedParam === "true";
   const projectId = c.req.query("project_id");
   const payerId = c.req.query("payer_id");
   const eventId = c.req.query("event_id"); // VM1-04
@@ -760,6 +773,28 @@ parRoutes.get("/", async (c) => {
   const entitledPayers = await enabledPayerIds(tenantId, "par");
   if (entitledPayers.length === 0) return c.json({ requests: [], total: 0 });
   conditions.push(inArray(parRequests.payerId, entitledPayers));
+
+  /**
+   * PAR-ARH — arhiva.
+   *
+   * Cererile arhivate ies din lista de lucru și se văd doar cu `?archived=1`. Condiția cere ȘI ca
+   * statusul să fie încă unul „în repaus": dacă o cerere arhivată se mișcă pe altă cale (o plată
+   * anulată o întoarce la finanțe), ea reapare SINGURĂ în lista de lucru — o cerere vie n-are voie
+   * să stea ascunsă într-o arhivă pe care n-o deschide nimeni. Același principiu ca la arhiva cozii
+   * de finanțe (`server/lib/par/financeQueue.ts`), exprimat aici direct în SQL.
+   *
+   * Predicatul se aplică la SFÂRȘIT, după toate filtrele, ca să-l putem lăsa deoparte curat când
+   * numărăm arhiva (mai jos).
+   */
+  const inArchive = and(
+    isNotNull(parRequests.archivedAt),
+    inArray(parRequests.status, [...ARCHIVABLE_STATUSES])
+  );
+  const notInArchive = or(
+    isNull(parRequests.archivedAt),
+    notInArray(parRequests.status, [...ARCHIVABLE_STATUSES])
+  );
+  const archivePredicate = wantArchived ? inArchive : notInArchive;
 
   // Requestors see only their own PARs (unless they also have approver/finance/admin role).
   // Everyone, including an elevated role, is constrained to the payer/project assignment;
@@ -832,8 +867,11 @@ parRoutes.get("/", async (c) => {
     }
   }
 
+  // Reținut separat: filtrul de status NU intră în contorul arhivei (fila „Arhivate" îl golește).
+  let statusCondition: ReturnType<typeof eq> | null = null;
   if (status && parStatusValues.includes(status as typeof parStatusValues[number])) {
-    conditions.push(eq(parRequests.status, status as typeof parRequests.status.dataType));
+    statusCondition = eq(parRequests.status, status as typeof parRequests.status.dataType);
+    conditions.push(statusCondition);
   }
   if (purpose && parPurposeValues.includes(purpose as typeof parPurposeValues[number])) {
     conditions.push(eq(parRequests.purpose, purpose as typeof parPurposeValues[number]));
@@ -911,7 +949,19 @@ parRoutes.get("/", async (c) => {
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_LIMIT) : MAX_LIMIT;
   const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
 
-  const [rows, [countRow], [settings]] = await Promise.all([
+  /**
+   * Câte cereri sunt în arhivă, în ACELAȘI perimetru și cu aceleași filtre — ca fila „Arhivate" să-și
+   * poarte numărul fără o a doua cerere la server. (O cerere separată ar fi însemnat încă o rundă
+   * la fiecare literă tastată în căutare.) Filtrul de status rămâne pe dinafară: fila de arhivă îl
+   * golește oricum, deci contorul trebuie să spună exact câte rânduri se vor vedea acolo.
+   */
+  const archiveCountConditions = [
+    ...conditions.filter((cond) => cond !== statusCondition),
+    inArchive,
+  ];
+  if (archivePredicate) conditions.push(archivePredicate);
+
+  const [rows, [countRow], [archivedCountRow], [settings]] = await Promise.all([
     db
       .select()
       .from(parRequests)
@@ -923,6 +973,10 @@ parRoutes.get("/", async (c) => {
       .select({ n: sql<number>`count(*)::int` })
       .from(parRequests)
       .where(and(...conditions)),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(parRequests)
+      .where(and(...archiveCountConditions)),
     // Get micro-purchase threshold for flag
     db
       .select({ threshold: parSettings.microPurchaseThresholdCents })
@@ -988,10 +1042,16 @@ parRoutes.get("/", async (c) => {
         };
       }),
       total: countRow?.n ?? result.length,
+      archived_total: archivedCountRow?.n ?? 0,
     });
   }
 
-  return c.json({ requests: maskPayeeForOthers(result, user.id, hasElevatedRole), total: countRow?.n ?? result.length });
+  return c.json({
+    requests: maskPayeeForOthers(result, user.id, hasElevatedRole),
+    total: countRow?.n ?? result.length,
+    /** PAR-ARH: câte cereri stau în arhivă — contorul filei „Arhivate", indiferent pe ce filă ești. */
+    archived_total: archivedCountRow?.n ?? 0,
+  });
 });
 
 const parStatusValues = [
@@ -1996,6 +2056,28 @@ parRoutes.post("/:id/submit", async (c) => {
     return c.json({ error: result.message ?? "submit_failed" }, 400);
   }
 
+  /**
+   * PAR-ARH: trimiterea SCOATE cererea din arhivă.
+   *
+   * O ciornă arhivată rămâne editabilă (poți relua un lucru abandonat) — dar în clipa în care
+   * pleacă spre aprobare a redevenit o cerere vie. Fără curățarea asta, ea ar reapărea în lista de
+   * lucru cât e în flux (vezi condiția `stillDormant` de la GET /api/par) și ar dispărea din nou,
+   * tăcut, când ajunge „plătită" — adică exact cererea la care ții s-ar ascunde la final.
+   */
+  if (par.archivedAt) {
+    await db
+      .update(parRequests)
+      .set({ archivedAt: null, archivedByUserId: null })
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    await writeAudit({
+      tenantId,
+      parId,
+      actorUserId: user.id,
+      event: PAR_UNARCHIVE_EVENT,
+      detail: "Scoasă din arhivă la trimiterea spre aprobare.",
+    });
+  }
+
   // VF-202: non-blocking over-budget signal. If this PAR's budget code is now over its allocation,
   // tell the client so it can warn (the submit still succeeds — budgets are advisory, not gates).
   const overBudget = await computeOverBudget(tenantId, par.budgetCodeId);
@@ -2015,6 +2097,8 @@ parRoutes.post("/:id/submit", async (c) => {
 
   return c.json({
     ...result.par,
+    // `result.par` e citit înainte de curățarea de mai sus; răspunsul trebuie să arate starea reală.
+    archivedAt: null,
     approval_steps: result.approvalSteps,
     over_budget: overBudget,
     quotes_below_three: quotesBelowThree,
@@ -2232,6 +2316,122 @@ parRoutes.post("/:id/withdraw", async (c) => {
     chain_status: "withdrawn",
     discarded_approvals: decided.length,
   });
+});
+
+// ─── POST /api/par/:id/archive · /unarchive — PAR-ARH: arhiva cererilor ──────
+//
+// Cerut de o utilizatoare (22.09.2026): „acest PAR nefinalizat a rămâne ca «ciornă», care rămâne
+// în toată lista cereri. Se poate de avut opțiunea de a face curat și elimina astea nefinalizate,
+// care nu mai avem nevoie? Ele duc în eroare."
+//
+// „A face curat" NU înseamnă ștergere: numărul cererii e emis, iar jurnalul unei cereri de plată
+// nu se rupe. Cererea iese din listele de lucru și intră în „Arhivă", de unde se restaurează
+// oricând. Statusul NU se schimbă — o ciornă arhivată e tot o ciornă.
+//
+// Cine: autorul cererii sau un par_admin (aceeași autoritate ca la anulare). Un aprobator NU poate
+// arhiva cererea altuia: arhiva e a cererii, nu a listei lui — ar dispărea și din lista autorului.
+
+/** Autoritatea + starea comune celor două acțiuni. */
+async function loadForArchive(
+  user: { id: string; tenantId: string; role: string },
+  parId: string
+): Promise<
+  | { ok: true; par: typeof parRequests.$inferSelect }
+  | { ok: false; status: 403 | 404; error: string }
+> {
+  const tenantId = user.tenantId;
+  const par = await getPAR(parId, tenantId);
+  if (!par) return { ok: false, status: 404, error: "not_found" };
+
+  // Perimetrul de proiect/plătitor se verifică întâi: în afara lui cererea nici nu există.
+  const inScope = par.projectId
+    ? await mayAccessProject(user.id, tenantId, par.projectId, user.role)
+    : await mayAccessPayer(user.id, tenantId, par.payerId, user.role);
+  if (!inScope) return { ok: false, status: 404, error: "not_found" };
+
+  const roles = await getUserPARRoles(user.id, tenantId);
+  if (par.requestedByUserId !== user.id && !roles.includes("par_admin")) {
+    return { ok: false, status: 403, error: "forbidden: only the author or a PAR admin can archive this request" };
+  }
+  return { ok: true, par };
+}
+
+/** Nota e opțională, iar un corp gol e un caz normal — nu o eroare. */
+async function readArchiveNote(c: { req: { json: () => Promise<unknown> } }): Promise<string | null> {
+  try {
+    const body: unknown = await c.req.json();
+    if (!body || typeof body !== "object") return null;
+    return normalizeArchiveNote((body as { note?: unknown }).note);
+  } catch {
+    return null;
+  }
+}
+
+parRoutes.post("/:id/archive", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const loaded = await loadForArchive(user, parId);
+  if (!loaded.ok) return c.json({ error: loaded.error }, loaded.status);
+  const { par } = loaded;
+
+  // O cerere aflată în flux stă în lista altcuiva (aprobator, finanțe). Dacă autorul ar putea-o
+  // ascunde, decizia celuilalt ar dispărea fără urmă — deci întâi se retrage/anulează.
+  if (!isArchivableStatus(par.status)) {
+    return c.json(
+      { error: "conflict", status: par.status, message: archiveBlockedReason(par.status) },
+      409
+    );
+  }
+
+  // Deja arhivată → răspuns idempotent, nu eroare (două click-uri pe același buton, două file).
+  if (par.archivedAt) return c.json({ archived: true, par });
+
+  const note = await readArchiveNote(c);
+  const [updated] = await db
+    .update(parRequests)
+    .set({ archivedAt: new Date(), archivedByUserId: user.id, updatedAt: new Date() })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+    .returning();
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: user.id,
+    event: PAR_ARCHIVE_EVENT,
+    detail: `Arhivată din statusul '${par.status}'.` + (note ? ` Notă: ${note}` : ""),
+  });
+
+  return c.json({ archived: true, par: updated });
+});
+
+parRoutes.post("/:id/unarchive", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const loaded = await loadForArchive(user, parId);
+  if (!loaded.ok) return c.json({ error: loaded.error }, loaded.status);
+  const { par } = loaded;
+
+  if (!par.archivedAt) return c.json({ archived: false, par });
+
+  const [updated] = await db
+    .update(parRequests)
+    .set({ archivedAt: null, archivedByUserId: null, updatedAt: new Date() })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+    .returning();
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: user.id,
+    event: PAR_UNARCHIVE_EVENT,
+    detail: "Restaurată din arhivă.",
+  });
+
+  return c.json({ archived: false, par: updated });
 });
 
 /**

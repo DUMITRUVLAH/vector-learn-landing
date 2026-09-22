@@ -85,6 +85,9 @@ export interface ParRequest {
   approvedAt: string | null;
   paidAt: string | null;
   cancelledAt: string | null;
+  /** PAR-ARH: data arhivării (cererea iese din listele de lucru). Null/absent = activă. */
+  archivedAt?: string | null;
+  archivedByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -546,6 +549,8 @@ export interface ListParFilters {
    * VM5-22: „team" = cererile coechipierilor din echipele mele, în ORICE stare (ciornele incluse).
    */
   scope?: "mine" | "project" | "team";
+  /** PAR-ARH: true = lista de ARHIVĂ (doar cererile arhivate). Implicit lista de lucru. */
+  archived?: boolean;
 }
 
 /**
@@ -577,9 +582,12 @@ export async function listPar(
 ): Promise<{
   requests: ParListRow[];
   total: number;
+  /** PAR-ARH: câte cereri sunt în arhivă (același perimetru + filtre), pe orice filă ai fi. */
+  archived_total?: number;
 }> {
   const params = new URLSearchParams();
   if (filters.include_docs) params.set("include_docs", "1");
+  if (filters.archived) params.set("archived", "1");
   if (filters.status) params.set("status", filters.status);
   if (filters.purpose) params.set("purpose", filters.purpose);
   if (filters.project_id) params.set("project_id", filters.project_id);
@@ -592,6 +600,23 @@ export async function listPar(
   if (filters.scope) params.set("scope", filters.scope);
   const qs = params.toString();
   return api(`/api/par${qs ? `?${qs}` : ""}`, { signal: opts.signal });
+}
+
+/**
+ * PAR-ARH: scoate cererea din listele de lucru (fără ștergere, fără schimbare de status).
+ * Se poate doar din statusurile „în repaus" (ciornă, respinsă, anulată, plătită); altfel serverul
+ * răspunde 409 cu `message` = ce are omul de făcut în schimb.
+ */
+export async function archivePar(id: string, note?: string): Promise<{ archived: boolean; par: ParRequest }> {
+  return api(`/api/par/${id}/archive`, {
+    method: "POST",
+    body: JSON.stringify(note ? { note } : {}),
+  });
+}
+
+/** PAR-ARH: readuce cererea din arhivă în lista de lucru. */
+export async function unarchivePar(id: string): Promise<{ archived: boolean; par: ParRequest }> {
+  return api(`/api/par/${id}/unarchive`, { method: "POST", body: JSON.stringify({}) });
 }
 
 /** Submit a PAR (transition from draft → pending_approval, PAR-107) */

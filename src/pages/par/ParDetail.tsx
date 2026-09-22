@@ -37,7 +37,7 @@ import {
   RotateCcw,
   CornerUpLeft,
   History,
-  Paperclip, BookOpen, Eye} from "lucide-react";
+  Paperclip, BookOpen, Eye, Archive, ArchiveRestore} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import {
@@ -71,6 +71,7 @@ import {
   duplicatePar,
   reopenPar,
   withdrawPar,
+  unarchivePar,
   getPurchaseOrder,
   issuePurchaseOrder,
   getParMe,
@@ -90,6 +91,8 @@ import { openParAttachmentViewer, parDosarViewerTarget, parFormViewerTarget } fr
 import { validateIban } from "@/lib/par/iban";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
+import { isArchivableStatus } from "@/lib/par/archive";
+import { ParArchiveDialog } from "@/components/par/ParArchiveDialog";
 import { parAccessMessage, type ParAccessMessage } from "@/lib/par/accessMessage";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -427,6 +430,8 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const [showUnpayForm, setShowUnpayForm] = useState(false);
   const [showFinanceReturnForm, setShowFinanceReturnForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** PAR-ARH: dialogul de arhivare (confirmarea + nota opțională). */
+  const [archiveOpen, setArchiveOpen] = useState(false);
   /** Motivele câmp-cu-câmp când serverul refuză trimiterea (validation_failed). */
   const [errorReasons, setErrorReasons] = useState<string[]>([]);
   // VF-202: advisory over-budget notice after submit (non-blocking).
@@ -642,6 +647,41 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
     }
   }
 
+  // ─── PAR-ARH: arhivare / restaurare ─────────────────────────────────────────
+  // Stă lângă „Anulează" pentru că răspunde aceleiași întrebări — „nu mai am nevoie de ea" — dar
+  // fără să schimbe nimic în cerere: doar o scoate din liste.
+  if (isRequestor || isAdmin) {
+    if (par.archivedAt) {
+      actions.push(
+        <button
+          key="unarchive"
+          type="button"
+          disabled={!!busy}
+          onClick={() => do_("unarchive", () => unarchivePar(par.id))}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted min-h-[44px] disabled:opacity-60"
+          aria-label="Restaurează cererea din arhivă"
+        >
+          {busy === "unarchive" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ArchiveRestore className="h-4 w-4" aria-hidden />}
+          Restaurează
+        </button>
+      );
+    } else if (isArchivableStatus(status)) {
+      actions.push(
+        <button
+          key="archive"
+          type="button"
+          disabled={!!busy}
+          onClick={() => setArchiveOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted min-h-[44px] disabled:opacity-60"
+          aria-label="Arhivează cererea (o scoate din listele de lucru)"
+        >
+          <Archive className="h-4 w-4" aria-hidden />
+          Arhivează
+        </button>
+      );
+    }
+  }
+
   // ─── Approver actions ───────────────────────────────────────────────────────
   if (canApprove) {
     actions.push(
@@ -792,6 +832,17 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <h2 className="text-sm font-semibold text-foreground">Acțiuni disponibile</h2>
+
+      <ParArchiveDialog
+        open={archiveOpen}
+        mode="archive"
+        parId={par.id}
+        requestNo={par.requestNo}
+        status={par.status}
+        summary={[par.payeeName, fmtCurrency(par.totalEstimatedCents, par.currency)].filter(Boolean).join(" · ")}
+        onClose={() => setArchiveOpen(false)}
+        onDone={() => onRefresh()}
+      />
 
       {pendingNotice && (
         <p role="status" className="flex items-start gap-2 rounded border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
@@ -1262,6 +1313,17 @@ export function ParDetailPage() {
               <FileText className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
               <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{par.requestNo}</h1>
               <ParStatusChip status={par.status} />
+              {/* PAR-ARH: altfel cererea pur și simplu „nu mai e în listă" și omul o caută degeaba.
+                  Statusul rămâne ce era; arhiva e o etichetă peste el. */}
+              {par.archivedAt && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                  title={`Arhivată la ${fmtDate(par.archivedAt)} — nu apare în lista de cereri`}
+                >
+                  <Archive className="h-3 w-3" aria-hidden />
+                  Arhivată
+                </span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {PURPOSE_LABEL[par.purpose] ?? par.purpose}

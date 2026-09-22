@@ -645,11 +645,30 @@ export const parRequests = pgTable(
      * Null until first submit. Regenerated on re-submit after changes_requested.
      */
     bodyHash: varchar("body_hash", { length: 64 }),
+    /**
+     * PAR-ARH (2026-09-22) — arhivarea cererii.
+     *
+     * Cerere de la un om care folosește aplicația zilnic: ciornele abandonate („am renunțat la ea
+     * și am făcut alta de pe foaie curată") rămân în lista de lucru și induc în eroare. Ștergerea
+     * nu e o opțiune — jurnalul unei cereri de plată nu se rupe, iar numărul ei e deja emis. Deci
+     * cererea IESE din listele de lucru și intră într-o listă separată („Arhivă"), de unde se poate
+     * restaura oricând.
+     *
+     * De ce coloană și nu eveniment de audit (cum e arhiva cozii de finanțe, `financeQueue.ts`):
+     * acolo arhiva e o stare a UNEI cozi, pe câteva zeci de rânduri; aici e o stare a cererii, pe
+     * lista principală (până la 1000 de rânduri) — filtrarea și COUNT-ul trebuie să stea în SQL,
+     * pe un index, nu într-o recalculare per rând.
+     *
+     * Null = activă.
+     */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedByUserId: uuid("archived_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("par_requests_tenant_idx").on(t.tenantId),
+    archivedIdx: index("par_requests_archived_idx").on(t.tenantId, t.archivedAt),
     payerIdx: index("par_requests_payer_idx").on(t.payerId),
     statusIdx: index("par_requests_status_idx").on(t.status),
     requestedByIdx: index("par_requests_requested_by_idx").on(t.requestedByUserId),

@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useKeepAliveState, hasKeepAlive } from "@/hooks/useKeepAliveState";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X, Clock, Copy } from "lucide-react";
+import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X, Clock, Copy, Archive, ArchiveRestore } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
   Alert,
@@ -36,6 +36,8 @@ import {
 } from "@/components/ds";
 import { useRouter } from "@/router/HashRouter";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
+import { ParArchiveDialog } from "@/components/par/ParArchiveDialog";
+import { isArchivableStatus } from "@/lib/par/archive";
 import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import {
   listPar,
@@ -181,7 +183,14 @@ export function ParDashboard() {
   // folder cu alt filtru, ai vedea o clipă rândurile filtrului anterior.
   // `scope` face parte din cheie ȘI din dependențele efectului de încărcare: fără el, comutarea
   // ariei schimba doar eticheta filei, iar lista rămânea cea veche până se atingea alt filtru.
-  const listKey = `par.list:${JSON.stringify({ statusFilter, purposeFilter, searchQ: debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, scope })}`;
+  /**
+   * PAR-ARH: fila „Arhivate" — aceeași listă, altă sursă. Stă în `listKey` ca lista de lucru și
+   * arhiva să fie două memorii separate: comutarea filei nu are voie să arate o clipă rândurile
+   * celeilalte.
+   */
+  const [archivedView, setArchivedView] = useState(false);
+  const [archivedCount, setArchivedCount] = useKeepAliveState("par.archivedCount", 0);
+  const listKey = `par.list:${JSON.stringify({ statusFilter, purposeFilter, searchQ: debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, scope, archivedView })}`;
   const [requests, setRequests] = useKeepAliveState<(ParRequest & { above_micro_threshold: boolean })[]>(listKey, []);
   // Dacă avem deja lista în memorie, nu mai pornim de la „se încarcă": ecranul e gata desenat.
   const [loading, setLoading] = useState(() => !hasKeepAlive(listKey));
@@ -306,11 +315,14 @@ export function ParDashboard() {
             min_total: Number.isFinite(minN) ? Math.round(minN * 100) : undefined,
             max_total: Number.isFinite(maxN) ? Math.round(maxN * 100) : undefined,
             scope: scope === "mine" ? undefined : scope,
+            archived: archivedView || undefined,
           },
           { signal: controller.signal }
         );
         if (requestSeqRef.current !== seq) return; // o căutare mai nouă a pornit între timp
         setRequests(res.requests);
+        // Contorul de pe filă vine din COUNT-ul serverului (același răspuns, fără o a doua cerere).
+        if (res.archived_total != null) setArchivedCount(res.archived_total);
       } catch (e: unknown) {
         if (controller.signal.aborted || requestSeqRef.current !== seq) return;
         setError(e instanceof Error ? e.message : "Eroare la încărcare");
@@ -324,7 +336,8 @@ export function ParDashboard() {
     load();
     return () => controller.abort();
     // `listKey` conține deja toate filtrele; îl adăugăm ca dependență explicită.
-  }, [statusFilter, purposeFilter, debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, scope, listKey, setRequests]);
+  }, [statusFilter, purposeFilter, debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, scope, archivedView, listKey, setRequests, setArchivedCount]);
+
 
   // Derived sections — apply event + project filters client-side (VM1-04 / VM1-10).
   const filteredByEvent = (eventFilter
@@ -340,7 +353,9 @@ export function ParDashboard() {
   for (const team of teams) {
     for (const m of team.members) teamAuthors[m.userId] = m.name ?? m.email ?? "Coleg";
   }
-  const sectionTitle = statusFilter === "draft"
+  const sectionTitle = archivedView
+    ? "Cereri arhivate"
+    : statusFilter === "draft"
     ? (scope === "team" ? "Ciornele echipei" : "Ciornele mele")
     : statusFilter === "changes_requested"
       ? "Cereri întoarse pentru modificări"
@@ -353,6 +368,24 @@ export function ParDashboard() {
   // let the reader ask for the rest. Filters and tabs narrow it first.
   const [showAll, setShowAll] = useState(false);
   const awaitingPayment = filteredByEvent.filter((r) => r.status === "in_finance");
+
+  /**
+   * PAR-ARH: cererea pe care o arhivăm / o restaurăm acum (null = dialogul e închis).
+   */
+  const [archiveTarget, setArchiveTarget] = useState<
+    (ParRequest & { above_micro_threshold: boolean }) | null
+  >(null);
+
+  /**
+   * După confirmare, rândul pleacă din lista curentă pe loc — fără o nouă rundă la server, ca
+   * lista să nu clipească. Contorul filei urmează în aceeași direcție.
+   */
+  const handleArchived = (archived: boolean) => {
+    const id = archiveTarget?.id;
+    if (!id) return;
+    setRequests((rows) => rows.filter((r) => r.id !== id));
+    setArchivedCount((n) => Math.max(0, archived ? n + 1 : n - 1));
+  };
 
   /**
    * „Repetă" din listă: serverul face copia (antet + articole, fără aprobări/plată), iar noi
@@ -398,10 +431,13 @@ export function ParDashboard() {
         {/* Întrebarea „cum a prestat furnizorul?" pentru cererile MELE deja plătite. Apare aici,
             nu la momentul plății: finanțistul apasă „plătit", dar solicitantul e cel care a văzut
             dacă marfa a ajuns la timp. */}
-        <PendingRatingPrompt />
+        {/* PAR-ARH: în fila „Arhivate" rămâne doar arhiva. Cifrele de sus (totaluri, „te
+            așteaptă", bugete) descriu lucrul CURENT; calculate peste cereri puse deoparte ar
+            spune altceva decât arată. */}
+        {!archivedView && <PendingRatingPrompt />}
 
         {/* "Te așteaptă" — one-click deep links to where decisions are needed */}
-        {(inboxCount > 0 || (isFinance && awaitingPayment.length > 0)) && (
+        {!archivedView && (inboxCount > 0 || (isFinance && awaitingPayment.length > 0)) && (
           <div className="space-y-2">
             {inboxCount > 0 && (
               <ActionRow
@@ -429,14 +465,16 @@ export function ParDashboard() {
         {/* Summary cards */}
         {/* MOB-003: pe telefon, KPI-urile stăteau câte unul pe rând — 4 numere ocupau 4 ecrane
             de derulare. Două coloane le aduc pe toate în primul ecran, fără să le înghesuie. */}
+        {!archivedView && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           <KpiTile label={t("par.dashboard.total")} value={requests.length} tone="indigo" icon={<FileText className="h-5 w-5" />} />
           <KpiTile label={t("par.dashboard.active")} value={formatMDL(totalActive)} tone="amber" icon={<Clock className="h-5 w-5" />} />
           <KpiTile label={t("par.dashboard.paid")} value={formatMDL(totalPaid)} tone="emerald" icon={<Landmark className="h-5 w-5" />} />
         </div>
+        )}
 
         {/* VF-202: budget alerts (finance/par_admin only) */}
-        {isFinance && budgetAlerts.length > 0 && (
+        {!archivedView && isFinance && budgetAlerts.length > 0 && (
           <Card tone="dashboard" className="p-5">
             <div className="mb-4 flex items-center gap-3">
               <PastelIcon tone="rose" size={32}>
@@ -626,14 +664,25 @@ export function ParDashboard() {
                 { value: "project", label: "Ale proiectului" },
               ]}
             />
+            {/* PAR-ARH: „Arhivate" e o filă, nu un filtru de status — arhiva e o listă separată,
+                cu alte acțiuni pe rând (restaurare în loc de arhivare). */}
             <Tabs
               aria-label="Cererile mele"
-              value={statusFilter === "draft" || statusFilter === "changes_requested" ? statusFilter : "all"}
-              onChange={(v) => setStatusFilter(v === "all" ? "" : (v as ParStatus))}
+              value={archivedView ? "archived" : statusFilter === "draft" || statusFilter === "changes_requested" ? statusFilter : "all"}
+              onChange={(v) => {
+                if (v === "archived") {
+                  setArchivedView(true);
+                  setStatusFilter("");
+                  return;
+                }
+                setArchivedView(false);
+                setStatusFilter(v === "all" ? "" : (v as ParStatus));
+              }}
               tabs={[
                 { value: "all", label: "Toate cererile" },
                 { value: "draft", label: "Ciorne" },
                 { value: "changes_requested", label: "Întoarse pentru modificări" },
+                { value: "archived", label: "Arhivate", count: archivedCount || undefined },
               ]}
             />
             <Section
@@ -643,7 +692,17 @@ export function ParDashboard() {
               onShowAll={!showAll && myRequests.length > ROW_CAP ? () => setShowAll(true) : undefined}
               onRowClick={(id) => navigate(`/business/par/${id}`)}
               onRepeat={repeatRequest}
-              emptyMessage={scope === "team" ? "Echipa nu are cereri încă." : scope === "project" ? "Nicio cerere pe proiectele tale." : "Nu ai cereri de plată încă."}
+              onArchive={(r) => setArchiveTarget(r)}
+              archivedView={archivedView}
+              emptyMessage={
+                archivedView
+                  ? "Arhiva e goală. Cererile pe care le pui deoparte apar aici și pot fi readuse oricând."
+                  : scope === "team"
+                    ? "Echipa nu are cereri încă."
+                    : scope === "project"
+                      ? "Nicio cerere pe proiectele tale."
+                      : "Nu ai cereri de plată încă."
+              }
               projectsMap={projectsMap}
               authorsMap={scope === "team" ? teamAuthors : undefined}
             />
@@ -661,6 +720,22 @@ export function ParDashboard() {
             */}
           </div>
         )}
+
+        {/* PAR-ARH: arhivare / restaurare, cu aceleași cuvinte ca în pagina cererii. */}
+        {archiveTarget && (
+          <ParArchiveDialog
+            open
+            mode={archivedView ? "restore" : "archive"}
+            parId={archiveTarget.id}
+            requestNo={archiveTarget.requestNo}
+            status={archiveTarget.status}
+            summary={[archiveTarget.payeeName, formatMDL(archiveTarget.totalEstimatedCents)]
+              .filter(Boolean)
+              .join(" · ")}
+            onClose={() => setArchiveTarget(null)}
+            onDone={handleArchived}
+          />
+        )}
       </div>
     </AppShell>
   );
@@ -675,6 +750,10 @@ interface SectionProps {
   onRowClick: (id: string) => void;
   /** „Repetă": copiază cererea într-o ciornă nouă și o deschide, fără a intra în cea veche. */
   onRepeat: (id: string) => Promise<void>;
+  /** PAR-ARH: deschide dialogul de arhivare (sau de restaurare, în fila „Arhivate"). */
+  onArchive: (r: ParRequest & { above_micro_threshold: boolean }) => void;
+  /** PAR-ARH: suntem în fila „Arhivate" — rândurile se restaurează, nu se arhivează. */
+  archivedView?: boolean;
   emptyMessage: string;
   highlight?: boolean;
   /** Set when more rows exist than are rendered. */
@@ -688,7 +767,7 @@ interface SectionProps {
   authorsMap?: Record<string, string>;
 }
 
-function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, highlight, projectsMap, authorsMap, onShowAll }: SectionProps) {
+function Section({ title, count, requests, onRowClick, onRepeat, onArchive, archivedView, emptyMessage, highlight, projectsMap, authorsMap, onShowAll }: SectionProps) {
   return (
     <section aria-labelledby={`section-${title}`}>
       <div className="flex items-center gap-2 mb-3">
@@ -779,7 +858,35 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
                   })}
                 </TableCell>
                 <TableCell className="text-right">
-                  <RepeatButton requestNo={r.requestNo} onRepeat={() => onRepeat(r.id)} />
+                  <div className="flex items-center justify-end gap-1.5">
+                    <RepeatButton requestNo={r.requestNo} onRepeat={() => onRepeat(r.id)} />
+                    {/* PAR-ARH: butonul apare doar acolo unde acțiunea EXISTĂ — o cerere în flux
+                        (la aprobare, la finanțe) nu se arhivează, iar un buton care răspunde cu
+                        „nu se poate" e o promisiune ruptă. */}
+                    {(archivedView || isArchivableStatus(r.status)) && (
+                      <RowIconButton
+                        label={
+                          archivedView
+                            ? `Restaurează cererea ${r.requestNo}`
+                            : `Arhivează cererea ${r.requestNo}`
+                        }
+                        title={
+                          archivedView
+                            ? "Readu cererea în lista de lucru"
+                            : "Scoate cererea din listă (o găsești în „Arhivate”)"
+                        }
+                        onClick={() => onArchive(r)}
+                        icon={
+                          archivedView ? (
+                            <ArchiveRestore className="h-3.5 w-3.5" aria-hidden />
+                          ) : (
+                            <Archive className="h-3.5 w-3.5" aria-hidden />
+                          )
+                        }
+                        text={archivedView ? "Restaurează" : "Arhivează"}
+                      />
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -796,6 +903,42 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
         </button>
       )}
     </section>
+  );
+}
+
+/**
+ * Un buton de acțiune pe rândul tabelului: aceeași formă ca „Repetă" (44×44 zonă de atingere,
+ * oprește propagarea clicului, textul se ascunde pe ecran mic). PAR-ARH îl folosește pentru
+ * arhivare/restaurare.
+ */
+function RowIconButton({
+  label,
+  title,
+  onClick,
+  icon,
+  text,
+}: {
+  label: string;
+  title: string;
+  onClick: () => void;
+  icon: React.ReactNode;
+  text: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      onKeyDown={(e) => e.stopPropagation()}
+      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      {icon}
+      <span className="hidden sm:inline">{text}</span>
+    </button>
   );
 }
 
