@@ -77,6 +77,7 @@ const CrmCadencesPage = lazyWithTimeout(() => import("./pages/business/crm/CrmCa
 const CrmApiPage = lazyWithTimeout(() => import("./pages/business/crm/CrmApiPage").then((m) => ({ default: m.CrmApiPage })));
 // PONTAJ-001: tabelul de pontaj self-service.
 const PontajPage = lazyWithTimeout(() => import("./pages/business/pontaj/PontajPage").then((m) => ({ default: m.PontajPage })));
+const PontajOrgPage = lazyWithTimeout(() => import("./pages/business/pontaj/PontajOrgPage").then((m) => ({ default: m.PontajOrgPage })));
 const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
 const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
 const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
@@ -355,6 +356,7 @@ function Routes() {
   if (path.startsWith("/business/crm")) return <BusinessGuardPage><CrmHomePage /></BusinessGuardPage>;
   // PONTAJ-001: tabelul de pontaj self-service. Gardul de modul e pe server
   // (requireTenantModule) — ruta rămâne montată, iar pagina arată refuzul explicit.
+  if (path.startsWith("/business/pontaj/organizatie")) return <BusinessGuardPage><PontajOrgPage /></BusinessGuardPage>;
   if (path.startsWith("/business/pontaj")) return <BusinessGuardPage><PontajPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;

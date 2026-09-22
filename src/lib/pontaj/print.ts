@@ -31,6 +31,11 @@ export interface PrintInput {
   jurisdiction: PontajJurisdiction;
   unitName: string | null;
   subdivisionName: string | null;
+  /**
+   * Numele de pe cele trei rânduri de semnătură, în ordinea din formular. Un element gol lasă
+   * linia goală, de completat cu pixul — exact ca în formularul tipizat.
+   */
+  signatories?: [string | null, string | null, string | null];
   rows: PrintRow[];
 }
 
@@ -106,7 +111,14 @@ export function buildTimesheetHtml(input: PrintInput): string {
     ? unitLine("denumirea unității", input.unitName) +
       unitLine("denumirea subdiviziunii unității", input.subdivisionName)
     : "";
-  const [sigL, sigC, sigR] = form.signatures.map((s) => esc(s).replace(/\n/g, "<br>"));
+  // Eticheta vine din jurisdicție, numele din setările organizației. Numele stă ÎNAINTEA liniei:
+  // linia rămâne pentru semnătura propriu-zisă, nu pentru numele scris de mână.
+  const names = input.signatories ?? [null, null, null];
+  const signatureCells = form.signatures.map((label, i) => {
+    const name = names[i]?.trim();
+    return `${esc(label).replace(/\n/g, "<br>")}${name ? ` <b>${esc(name)}</b>` : ""} __________________`;
+  });
+  const [sigL, sigC, sigR] = signatureCells;
   const legendHtml = form.legend
     .map((row) => `<tr>${row.map((cell) => `<td>${esc(cell)}</td>`).join("")}</tr>`)
     .join("");
@@ -117,7 +129,7 @@ export function buildTimesheetHtml(input: PrintInput): string {
   return `<!DOCTYPE html>
 <html lang="ro"><head><meta charset="utf-8"><title>Pontaj ${esc(label)} ${year}</title>
 <style>
-@page{size:A4 landscape;margin:6mm 8mm}
+@page{size:A4 landscape;margin:12mm 14mm}
 *{box-sizing:border-box}
 body{font-family:'Noto Sans',Arial,Helvetica,sans-serif;margin:0;padding:0;font-size:9px;color:#000}
 table{border-collapse:collapse;width:100%}
@@ -148,9 +160,9 @@ ${summaryHeaders}
 <tbody>${bodyRows}</tbody>
 </table>
 <div class="footer-row">
-<div>${sigL} __________________</div>
-<div style="text-align:center">${sigC} __________________</div>
-<div style="text-align:right">${sigR} __________________</div>
+<div>${sigL}</div>
+<div style="text-align:center">${sigC}</div>
+<div style="text-align:right">${sigR}</div>
 </div>
 <div style="margin-top:10px;font-size:8px"><b>Note:</b></div>
 <table class="legend-table">${legendHtml}</table>

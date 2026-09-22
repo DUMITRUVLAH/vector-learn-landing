@@ -33,6 +33,7 @@ import {
   pontajOrgSettings,
   pontajProfiles,
 } from "../db/schema/pontaj";
+import { tenants } from "../db/schema/tenants";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import {
   addDaysToKey,
@@ -73,6 +74,9 @@ interface OrgConfig {
   workWeekdays: number[];
   unitName: string | null;
   subdivisionName: string | null;
+  signatoryHead: string | null;
+  signatoryRecorder: string | null;
+  signatoryHr: string | null;
 }
 
 /**
@@ -90,6 +94,9 @@ async function loadOrgConfig(tenantId: string): Promise<OrgConfig> {
     workWeekdays: [1, 2, 3, 4, 5],
     unitName: null,
     subdivisionName: null,
+    signatoryHead: null,
+    signatoryRecorder: null,
+    signatoryHr: null,
   };
   try {
     const [row] = await db
@@ -109,6 +116,9 @@ async function loadOrgConfig(tenantId: string): Promise<OrgConfig> {
       workWeekdays: weekdays.length ? weekdays : fallback.workWeekdays,
       unitName: row.unitName,
       subdivisionName: row.subdivisionName,
+      signatoryHead: row.signatoryHead,
+      signatoryRecorder: row.signatoryRecorder,
+      signatoryHr: row.signatoryHr,
     };
   } catch (e) {
     console.warn("[pontaj] setările organizației indisponibile:", e instanceof Error ? e.message : e);
@@ -147,6 +157,24 @@ async function loadProfile(tenantId: string, userId: string, orgNorm: number): P
   } catch (e) {
     console.warn("[pontaj] profilul indisponibil:", e instanceof Error ? e.message : e);
     return fallback;
+  }
+}
+
+/**
+ * Denumirea care intră în antetul formularului.
+ *
+ * Dacă administratorul n-a scris nimic, folosim numele workspace-ului: compania E deja setată în
+ * FinFlow, iar un act intern tipărit cu o linie goală acolo unde platforma știe răspunsul e o
+ * lipsă pe care o observă abia cel care semnează. Rămâne un IMPLICIT: orice text scris în setări
+ * îl bate, iar numele juridic complet tot de acolo se ia.
+ */
+async function resolveUnitName(tenantId: string, explicit: string | null): Promise<string | null> {
+  if (explicit) return explicit;
+  try {
+    const [row] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    return row?.name ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -281,7 +309,8 @@ pontajRoutes.get("/month", async (c) => {
       dailyHours: minutesToHours(profile.dailyMinutes),
       reducedSchedule: profile.reducedSchedule,
     },
-    org,
+    org: { ...org, unitName: await resolveUnitName(user.tenantId, org.unitName) },
+    canEditOrg: ORG_ADMIN_ROLES.has(user.role),
     jurisdiction: jurisdictionPayload(org.country),
     days: composed.map((d) => ({ ...d, hours: minutesToHours(d.minutes) })),
     totals: { ...totals, workedHours: minutesToHours(totals.workedMinutes) },
@@ -472,7 +501,9 @@ pontajRoutes.get("/settings", async (c) => {
   const profile = await loadProfile(user.tenantId, user.id, org.fullDailyNormMinutes);
   return c.json({
     profile: { ...profile, dailyHours: minutesToHours(profile.dailyMinutes) },
-    org,
+    org: { ...org, unitName: await resolveUnitName(user.tenantId, org.unitName) },
+    /** Ce a scris explicit administratorul — formularul de setări nu trebuie să arate implicitul ca text introdus. */
+    orgExplicitUnitName: org.unitName,
     jurisdiction: jurisdictionPayload(org.country),
     canEditOrg: ORG_ADMIN_ROLES.has(user.role),
   });
@@ -517,6 +548,9 @@ const orgSchema = z.object({
   workWeekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).optional(),
   unitName: z.string().trim().max(300).nullable().optional(),
   subdivisionName: z.string().trim().max(300).nullable().optional(),
+  signatoryHead: z.string().trim().max(200).nullable().optional(),
+  signatoryRecorder: z.string().trim().max(200).nullable().optional(),
+  signatoryHr: z.string().trim().max(200).nullable().optional(),
 });
 
 pontajRoutes.put("/org", zValidator("json", orgSchema), async (c) => {
@@ -531,6 +565,10 @@ pontajRoutes.put("/org", zValidator("json", orgSchema), async (c) => {
     unitName: body.unitName === undefined ? current.unitName : (body.unitName || null),
     subdivisionName:
       body.subdivisionName === undefined ? current.subdivisionName : (body.subdivisionName || null),
+    signatoryHead: body.signatoryHead === undefined ? current.signatoryHead : (body.signatoryHead || null),
+    signatoryRecorder:
+      body.signatoryRecorder === undefined ? current.signatoryRecorder : (body.signatoryRecorder || null),
+    signatoryHr: body.signatoryHr === undefined ? current.signatoryHr : (body.signatoryHr || null),
   };
   try {
     await db

@@ -72,23 +72,45 @@ let tenantId = null;
   check("angajatul primește acum luna", res.status() === 200, String(res.status()));
 }
 
-// ═══ FAZA 2 — administratorul configurează organizația ═══════════════════════
-console.log("\n▶ FAZA 2 — setările organizației");
+// ═══ FAZA 2 — administratorul configurează organizația, DIN INTERFAȚĂ ════════
+console.log("\n▶ FAZA 2 — setările organizației, din interfață");
+const adminBrowser = await chromium.launch();
 {
-  const res = await admin.put("/api/pontaj/org", {
-    data: {
-      country: "MD",
-      unitName: "Asociația pentru Tehnologie și Internet din Moldova",
-      subdivisionName: "Direcția proiecte",
-    },
-  });
-  check("unitatea și subdiviziunea se salvează", res.ok(), String(res.status()));
+  const actx = await adminBrowser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await actx.addCookies((await admin.storageState()).cookies);
+  const ap = await actx.newPage();
+  await ap.goto(`${WEB}/#/business/pontaj/organizatie`, { waitUntil: "networkidle" });
+  await ap.waitForTimeout(1200);
+
+  // Implicitul: dacă administratorul n-a scris nimic, antetul poartă numele workspace-ului.
+  const unitPlaceholder = await ap.locator("#org-unit").getAttribute("placeholder");
+  check("denumirea unității cade implicit pe numele workspace-ului", /ATIC/.test(unitPlaceholder ?? ""), String(unitPlaceholder));
+
+  await ap.locator("#org-unit").fill("Asociația pentru Tehnologie și Internet din Moldova");
+  await ap.locator("#org-subdivision").fill("Direcția proiecte");
+  await ap.locator("#org-sig-head").fill("Irina Oriol");
+  await ap.locator("#org-sig-recorder").fill("Mihai Botnaru");
+  await ap.locator("#org-sig-hr").fill("Ana Chiriță");
+  await ap.getByRole("button", { name: /Salvează setările/ }).click();
+  await ap.waitForTimeout(1200);
+  const saved = await ap.locator("text=/au fost salvate/").count();
+  check("setările organizației se salvează din interfață", saved > 0);
+
+  await ap.locator("#org-holiday-date").fill("2026-03-18");
+  await ap.locator("#org-holiday-name").fill("Hramul orașului Chișinău");
+  await ap.getByRole("button", { name: /^Adaugă$/ }).click();
+  await ap.waitForTimeout(1200);
+  const listed = await ap.locator("text=/Hramul orașului Chișinău/").count();
+  check("ziua de Hram se adaugă din interfață și apare în listă", listed > 0);
+
+  await ap.screenshot({ path: `${OUT}/04-organizatie.png`, fullPage: true });
+  await actx.close();
 }
 {
-  const res = await admin.post("/api/pontaj/holidays", {
-    data: { date: "2026-03-18", name: "Hramul orașului Chișinău" },
-  });
-  check("ziua de Hram se adaugă ca zi nelucrătoare", res.status() === 201, String(res.status()));
+  const org = (await (await admin.get("/api/pontaj/settings")).json()).org;
+  check("semnatarii sunt salvați pe organizație",
+    org.signatoryHead === "Irina Oriol" && org.signatoryRecorder === "Mihai Botnaru" && org.signatoryHr === "Ana Chiriță",
+    JSON.stringify(org));
 }
 
 // ═══ FAZA 3 — angajatul lucrează în tabel, prin INTERFAȚĂ ════════════════════
@@ -140,6 +162,8 @@ check("pagina s-a încărcat fără erori JS", consoleErrors.filter((e) => !/Fai
 {
   const desc = await page.locator("text=/Sirbu Cristina/").first().count();
   check("angajatul își vede numele pe pontaj", desc > 0);
+  const orgBtn = await page.getByRole("button", { name: /Organizație/ }).count();
+  check("angajatul obișnuit NU vede butonul de setări ale organizației", orgBtn === 0, String(orgBtn));
 }
 
 // 3a. Setările proprii: funcția + norma
@@ -225,6 +249,11 @@ await popup.waitForTimeout(800);
 const printHtml = await popup.content();
 writeFileSync(`${OUT}/pontaj-formular.html`, printHtml);
 check("fereastra de tipărire s-a deschis cu formularul", /TABEL DE EVIDEN/.test(printHtml));
+check("antetul poartă denumirea unității și subdiviziunea",
+  /Asociația pentru Tehnologie și Internet din Moldova/.test(printHtml) && /Direcția proiecte/.test(printHtml));
+check("subsolul poartă numele celor trei semnatari",
+  /Irina Oriol/.test(printHtml) && /Mihai Botnaru/.test(printHtml) && /Ana Chiriță/.test(printHtml));
+check("pagina de tipărire cere margini de 12/14 mm", /margin:12mm 14mm/.test(printHtml));
 await popup.screenshot({ path: `${OUT}/02-formular.png`, fullPage: true });
 
 const pdf = await popup.pdf({ printBackground: true, preferCSSPageSize: true });
@@ -233,6 +262,7 @@ check("PDF generat", pdf.length > 5000, `${pdf.length} octeți`);
 summary.pdfBytes = pdf.length;
 
 await browser.close();
+await adminBrowser.close();
 await ctx.dispose?.();
 
 writeFileSync(`${OUT}/rezumat.json`, JSON.stringify({ summary, fails, steps, ok }, null, 2));

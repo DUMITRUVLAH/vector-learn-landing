@@ -17,6 +17,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Building2,
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +29,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { Link } from "@/router/HashRouter";
 import { Alert, Badge, Button, Dialog, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
@@ -162,6 +164,8 @@ export function PontajPage() {
         jurisdiction: data.jurisdiction,
         unitName: data.org.unitName,
         subdivisionName: data.org.subdivisionName,
+        signatories: [data.org.signatoryHead, data.org.signatoryRecorder, data.org.signatoryHr] as
+          [string | null, string | null, string | null],
         rows: [printRow],
       }
     : null;
@@ -195,6 +199,13 @@ export function PontajPage() {
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          {data?.canEditOrg && (
+            <Link to="/business/pontaj/organizatie">
+              <Button variant="ghost" size="sm">
+                <Building2 className="h-4 w-4" /> Organizație
+              </Button>
+            </Link>
+          )}
           <Button variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}>
             <Settings2 className="h-4 w-4" /> Setări
           </Button>

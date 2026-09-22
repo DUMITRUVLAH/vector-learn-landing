@@ -1289,6 +1289,13 @@
       "when": 1789000000007,
       "tag": "0184_pontaj_self_service",
       "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "7",
+      "when": 1789000000008,
+      "tag": "0185_pontaj_signatories",
+      "breakpoints": true
     }
   ]
 }

@@ -69,6 +69,18 @@ export const pontajOrgSettings = pgTable(
     unitName: varchar("unit_name", { length: 300 }),
     /** „Denumirea subdiviziunii unității" din același antet. */
     subdivisionName: varchar("subdivision_name", { length: 300 }),
+    /**
+     * Numele care se tipăresc pe cele trei rânduri de semnătură din subsolul formularului, în
+     * ordinea din Convenția colectivă nr. 17/2020: șeful subdiviziunii, persoana responsabilă de
+     * evidența timpului de muncă, serviciul resurse umane.
+     *
+     * Necompletat = rămâne linia goală din formularul original, de completat cu pixul. NU punem
+     * automat numele administratorului: cine răspunde de evidența timpului de muncă e o
+     * desemnare a angajatorului, nu o deducție din cine a deschis ecranul.
+     */
+    signatoryHead: varchar("signatory_head", { length: 200 }),
+    signatoryRecorder: varchar("signatory_recorder", { length: 200 }),
+    signatoryHr: varchar("signatory_hr", { length: 200 }),
     updatedByUserId: uuid("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

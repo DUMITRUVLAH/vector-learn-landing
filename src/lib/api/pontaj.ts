@@ -71,8 +71,12 @@ export interface PontajOrg {
   country: string;
   fullDailyNormMinutes: number;
   workWeekdays: number[];
+  /** Ce se tipărește în antet. Când administratorul n-a scris nimic, e numele workspace-ului. */
   unitName: string | null;
   subdivisionName: string | null;
+  signatoryHead: string | null;
+  signatoryRecorder: string | null;
+  signatoryHr: string | null;
 }
 
 export interface PontajProfile {
@@ -96,6 +100,8 @@ export interface PontajMonth {
     reducedSchedule: boolean;
   };
   org: PontajOrg;
+  /** Rolul curent poate schimba setările organizației (admin/manager). */
+  canEditOrg: boolean;
   jurisdiction: PontajJurisdiction;
   days: PontajDay[];
   totals: {
@@ -112,6 +118,8 @@ export interface PontajMonth {
 export interface PontajSettings {
   profile: PontajProfile;
   org: PontajOrg;
+  /** Textul scris EXPLICIT de administrator — `null` înseamnă „se folosește numele workspace-ului". */
+  orgExplicitUnitName: string | null;
   jurisdiction: PontajJurisdiction;
   canEditOrg: boolean;
 }
