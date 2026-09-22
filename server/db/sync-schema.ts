@@ -410,6 +410,46 @@ async function main() {
     `CREATE UNIQUE INDEX IF NOT EXISTS "par_einvoices_par_unique" ON "par_einvoices" ("par_id")`,
     `CREATE INDEX IF NOT EXISTS "par_einvoices_tenant_status_idx" ON "par_einvoices" ("tenant_id","status")`,
     `CREATE INDEX IF NOT EXISTS "par_einvoices_par_idx" ON "par_einvoices" ("par_id")`,
+    // PAR-EFP (migrarea 0186): copia locală a facturilor din SFS + cursorul de sincronizare.
+    // Tabul „Toate e-Facturile" le citește la fiecare deschidere; fără heal, pagina ar da 500
+    // „relation par_sfs_invoices does not exist" până când migrarea ajunge pe prod.
+    `CREATE TABLE IF NOT EXISTS "par_sfs_invoices" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "seria" varchar(20) NOT NULL,
+      "number" varchar(50) NOT NULL,
+      "invoice_status" integer NOT NULL DEFAULT 0,
+      "supplier_idno" varchar(50),
+      "supplier_name" varchar(300),
+      "buyer_idno" varchar(50),
+      "invoice_date" timestamp with time zone,
+      "total_cents" integer,
+      "portal_url" text,
+      "details_fetched_at" timestamp with time zone,
+      "detail_attempts" integer NOT NULL DEFAULT 0,
+      "first_seen_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "last_seen_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "par_sfs_invoices_tenant_key_uniq" ON "par_sfs_invoices" ("tenant_id","seria","number")`,
+    `CREATE INDEX IF NOT EXISTS "par_sfs_invoices_tenant_date_idx" ON "par_sfs_invoices" ("tenant_id","invoice_date")`,
+    `CREATE INDEX IF NOT EXISTS "par_sfs_invoices_tenant_supplier_idx" ON "par_sfs_invoices" ("tenant_id","supplier_idno")`,
+    `CREATE INDEX IF NOT EXISTS "par_sfs_invoices_pending_idx" ON "par_sfs_invoices" ("tenant_id","details_fetched_at")`,
+    `CREATE TABLE IF NOT EXISTS "par_sfs_sync_state" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "heads_synced_at" timestamp with time zone,
+      "archive_cursor_to" timestamp with time zone,
+      "archive_done_at" timestamp with time zone,
+      "last_batch_at" timestamp with time zone,
+      "last_message" text,
+      "last_error" text,
+      "running_since" timestamp with time zone,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "par_sfs_sync_state_tenant_uniq" ON "par_sfs_sync_state" ("tenant_id")`,
     // Migrarea 0147: moneda liniei de buget. Healul generic de mai sus ar adăuga coloana FĂRĂ
     // default și FĂRĂ NOT NULL, deci rândurile existente ar rămâne cu currency = NULL, iar
     // inserturile care omit câmpul ar scrie NULL. Aici o punem cu tot cu default.

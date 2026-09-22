@@ -139,7 +139,7 @@ export async function testParSfsConnection(): Promise<{ ok: boolean; message: st
   return api<{ ok: boolean; message: string }>("/api/par/efactura/settings/test", { method: "POST" });
 }
 
-// ─── Lista brută a facturilor primite în SFS ─────────────────────────────────
+// ─── Lista facturilor primite în SFS (copia locală) ──────────────────────────
 
 export interface BuyerInvoiceItem {
   seria: string;
@@ -156,27 +156,114 @@ export interface BuyerInvoiceItem {
    * întoarce 404 (verificat). Rămâne în date pentru diagnostic.
    */
   portalUrl: string | null;
+  /** false = știm doar că factura există; conținutul nu a fost încă citit din SFS. */
+  detailsRead: boolean;
   /** Cererea PAR de care e legată factura (dacă a fost potrivită sau marcată manual). */
   linkedParId: string | null;
   linkedRequestNo: string | null;
 }
 
+/** Un furnizor din copia locală — pentru filtrul „Furnizor". */
+export interface SupplierFacet {
+  idno: string;
+  name: string | null;
+  count: number;
+  totalCents: number;
+}
+
+/** Unde a ajuns citirea din SFS. Alimentează bara de progres și bucla de loturi. */
+export interface InvoiceSyncProgress {
+  total: number;
+  detailed: number;
+  pending: number;
+  archiveDone: boolean;
+  /** Câți ani în urmă acoperă recuperarea istoricului. */
+  historyYears: number;
+  archiveCursorTo: string | null;
+  headsSyncedAt: string | null;
+  lastBatchAt: string | null;
+  lastMessage: string | null;
+  lastError: string | null;
+  /** true = nu mai e nimic de adus; bucla de loturi se poate opri. */
+  done: boolean;
+}
+
 export interface BuyerInvoiceList {
   available: boolean;
   source: "sfs" | "mock";
+  /** true = mai sunt facturi de adus din SFS (sau nu s-a citit încă nimic). */
+  needsSync: boolean;
   message: string;
   invoices: BuyerInvoiceItem[];
+  total: number;
+  totalCents: number;
+  page: number;
+  pageSize: number;
+  suppliers: SupplierFacet[];
+  range: { oldest: string | null; newest: string | null };
+  sync: InvoiceSyncProgress;
   sfs: ParSfsSummary;
 }
 
+export type InvoiceSort = "date_desc" | "date_asc" | "supplier_asc" | "amount_desc" | "amount_asc";
+
+export interface InvoiceQuery {
+  /** Perioada, ca `YYYY-MM-DD`. */
+  from?: string | null;
+  to?: string | null;
+  /** Codul fiscal al furnizorului. */
+  supplier?: string | null;
+  q?: string | null;
+  sort?: InvoiceSort;
+  page?: number;
+  pageSize?: number;
+}
+
 /**
- * Toate facturile în care organizația e cumpărător — nu doar cele legate de o plată PAR.
- * `refresh` forțează citirea din SFS (butonul „Reîncarcă"); implicit se poate servi cache-ul scurt.
+ * O pagină din copia locală a facturilor — citire instantanee din baza proprie, ZERO apeluri SFS.
+ * Aducerea facturilor noi se face separat, cu `syncParEfacturaInvoices`.
  */
-export async function getParEfacturaInvoices(refresh = false): Promise<BuyerInvoiceList> {
-  return api<BuyerInvoiceList>(`/api/par/efactura/invoices${refresh ? "?refresh=1" : ""}`, {
-    cache: refresh ? "reload" : undefined,
+export async function getParEfacturaInvoices(query: InvoiceQuery = {}): Promise<BuyerInvoiceList> {
+  const params = new URLSearchParams();
+  if (query.from) params.set("from", query.from);
+  if (query.to) params.set("to", query.to);
+  if (query.supplier) params.set("supplier", query.supplier);
+  if (query.q) params.set("q", query.q);
+  if (query.sort) params.set("sort", query.sort);
+  if (query.page) params.set("page", String(query.page));
+  if (query.pageSize) params.set("pageSize", String(query.pageSize));
+  const qs = params.toString();
+  return api<BuyerInvoiceList>(`/api/par/efactura/invoices${qs ? `?${qs}` : ""}`);
+}
+
+export interface InvoiceSyncResult {
+  available: boolean;
+  busy: boolean;
+  discovered: number;
+  detailsRead: number;
+  message: string;
+  progress: InvoiceSyncProgress;
+}
+
+/**
+ * UN lot de citire din SFS (câteva secunde), apoi se oprește. Se apelează repetat până când
+ * `progress.done` e true — așa se recuperează un istoric de mii de facturi fără să se blocheze
+ * nimic, iar progresul se păstrează între vizite.
+ */
+export async function syncParEfacturaInvoices(refresh = false): Promise<InvoiceSyncResult> {
+  return api<InvoiceSyncResult>(`/api/par/efactura/invoices/sync${refresh ? "?refresh=1" : ""}`, {
+    method: "POST",
   });
+}
+
+/** Starea sincronizării, fără să atingă SFS. */
+export async function getParEfacturaSyncProgress(): Promise<{ progress: InvoiceSyncProgress }> {
+  return api<{ progress: InvoiceSyncProgress }>("/api/par/efactura/invoices/sync");
+}
+
+/** Șterge copia locală și reia citirea istoricului de la zero (par_admin). */
+export async function resetParEfacturaInvoices(): Promise<{ progress: InvoiceSyncProgress }> {
+  return api<{ progress: InvoiceSyncProgress }>("/api/par/efactura/invoices/reset", { method: "POST" });
 }
 
 // ─── Conținutul unei facturi ─────────────────────────────────────────────────

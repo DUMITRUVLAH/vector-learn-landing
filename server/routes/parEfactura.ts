@@ -52,6 +52,13 @@ import {
   getBuyerInvoiceDetail,
   getBuyerInvoicePdf,
 } from "../services/par/efacturaScan";
+import {
+  syncBuyerInvoices,
+  getSyncProgress,
+  resetInvoiceCache,
+  type InvoiceFilters,
+  type InvoiceSort,
+} from "../services/par/efacturaCache";
 
 export const parEfacturaRoutes = new Hono<{ Variables: AuthVariables }>();
 parEfacturaRoutes.use("*", requireAuth);
@@ -245,20 +252,102 @@ parEfacturaRoutes.post("/scan", async (c) => {
 // ─── GET /api/par/efactura/invoices — toate facturile primite din SFS ────────
 
 /**
- * Lista brută: ce facturi are organizația în SFS ca CUMPĂRĂTOR, indiferent dacă sunt legate de o
- * cerere PAR. Răspunde la „ce mi-a emis lumea", nu la „cererea X are factură" — inclusiv facturile
- * pentru care nu există niciun PAR (abonamente, livrări directe) și cele respinse.
+ * Lista facturilor în care organizația e CUMPĂRĂTOR, indiferent dacă sunt legate de o cerere PAR.
+ * Răspunde la „ce mi-a emis lumea", nu la „cererea X are factură".
+ *
+ * Citește din copia locală (`par_sfs_invoices`), deci e instantanee și se poate filtra pe perioadă
+ * și furnizor sau sorta după dată/sumă. Aducerea facturilor din SFS e o operație separată
+ * (POST /invoices/sync), în loturi — vezi comentariul din services/par/efacturaCache.ts.
  */
+const SORTS: InvoiceSort[] = ["date_desc", "date_asc", "supplier_asc", "amount_desc", "amount_asc"];
+
+/** Data dintr-un parametru de interogare (`2026-01-31`). Ignoră tăcut ce nu e dată validă. */
+function queryDate(raw: string | undefined, endOfDay = false): Date | null {
+  if (!raw) return null;
+  const d = new Date(endOfDay ? `${raw}T23:59:59.999Z` : `${raw}T00:00:00.000Z`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function invoiceFilters(c: { req: { query: (k: string) => string | undefined } }): InvoiceFilters {
+  const sortRaw = c.req.query("sort") as InvoiceSort | undefined;
+  return {
+    from: queryDate(c.req.query("from")),
+    to: queryDate(c.req.query("to"), true),
+    supplier: c.req.query("supplier")?.slice(0, 50) ?? null,
+    q: c.req.query("q")?.slice(0, 100) ?? null,
+    sort: sortRaw && SORTS.includes(sortRaw) ? sortRaw : "date_desc",
+    page: Number(c.req.query("page") ?? 1) || 1,
+    pageSize: Number(c.req.query("pageSize") ?? 50) || 50,
+  };
+}
+
 parEfacturaRoutes.get("/invoices", async (c) => {
   const user = c.get("user");
   if (!(await isElevated(user.id, user.tenantId))) {
     return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
   }
-  // `?refresh=1` = omul a apăsat „Reîncarcă din SFS"; altfel se poate servi cache-ul scurt, ca
-  // deschiderea repetată a tabului să nu consume bugetul de cereri al SFS-ului.
-  const force = c.req.query("refresh") === "1";
-  const result = await listBuyerInvoicesForTenant(user.tenantId, undefined, force);
+  const result = await listBuyerInvoicesForTenant(user.tenantId, invoiceFilters(c));
   return c.json({ ...result, sfs: await sfsSummary(user.tenantId) });
+});
+
+/**
+ * Un LOT de sincronizare cu SFS: aduce facturile noi și citește detaliile care lipsesc, în limita
+ * unui buget de timp, apoi se oprește. Ecranul îl apelează repetat până când `progress.done`
+ * devine true.
+ *
+ * De ce în loturi: un cont cu mii de facturi nu încape într-o singură cerere HTTP (și SFS răspunde
+ * cu 500 la rafale). Cursorul e persistat, deci fiecare lot continuă de unde a rămas cel dinainte —
+ * inclusiv după ce omul închide pagina.
+ */
+parEfacturaRoutes.post("/invoices/sync", async (c) => {
+  const user = c.get("user");
+  if (!(await isElevated(user.id, user.tenantId))) {
+    return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
+  }
+  const sfs = await loadSfsConfig(user.tenantId);
+  if (!sfs || sfs.config.mock) {
+    return c.json({
+      available: false,
+      busy: false,
+      discovered: 0,
+      detailsRead: 0,
+      message: sfs
+        ? "Integrarea e-Factura rulează în mod simulat (fără credențiale SFS) — nu se citește nimic real."
+        : "Integrarea e-Factura (SFS) nu este configurată pentru această organizație.",
+      progress: await getSyncProgress(user.tenantId),
+    });
+  }
+  // `?refresh=1` = omul a apăsat „Reîncarcă din SFS": re-citim listele vii chiar dacă tocmai
+  // au fost citite. Fără el, loturile succesive nu irosesc apeluri pe aceleași liste.
+  const force = c.req.query("refresh") === "1";
+  const result = await syncBuyerInvoices(user.tenantId, {
+    client: new EfacturaMdClient(sfs.config),
+    force,
+  });
+  return c.json(result);
+});
+
+/** Unde a ajuns sincronizarea — pentru bara de progres, fără să declanșeze vreun apel la SFS. */
+parEfacturaRoutes.get("/invoices/sync", async (c) => {
+  const user = c.get("user");
+  if (!(await isElevated(user.id, user.tenantId))) {
+    return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
+  }
+  return c.json({ progress: await getSyncProgress(user.tenantId) });
+});
+
+/**
+ * Șterge copia locală și reia citirea istoricului de la zero (par_admin).
+ * Rar necesar — doar dacă datele locale par greșite; sincronizarea normală e incrementală.
+ */
+parEfacturaRoutes.post("/invoices/reset", async (c) => {
+  const user = c.get("user");
+  const roles = await getUserPARRoles(user.id, user.tenantId);
+  if (!roles.includes("par_admin")) {
+    return c.json({ error: "forbidden", detail: "Necesită rol par_admin." }, 403);
+  }
+  await resetInvoiceCache(user.tenantId);
+  return c.json({ progress: await getSyncProgress(user.tenantId) });
 });
 
 /** Seria/numărul vin din URL — le validăm strict, ca să nu ajungă gunoi în cererea SOAP. */

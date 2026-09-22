@@ -77,11 +77,36 @@ function queue(): ParEfacturaQueue {
   };
 }
 
+const SYNC_DONE: BuyerInvoiceList["sync"] = {
+  total: 2,
+  detailed: 2,
+  pending: 0,
+  archiveDone: true,
+  historyYears: 5,
+  archiveCursorTo: null,
+  headsSyncedAt: "2026-09-22T09:00:00.000Z",
+  lastBatchAt: "2026-09-22T09:00:00.000Z",
+  lastMessage: "Sincronizare completă: 2 facturi în arhiva locală.",
+  lastError: null,
+  done: true,
+};
+
 function invoiceList(overrides: Partial<BuyerInvoiceList> = {}): BuyerInvoiceList {
   return {
     available: true,
     source: "sfs",
-    message: "2 facturi primite găsite în SFS.",
+    needsSync: false,
+    total: 2,
+    totalCents: 150000,
+    page: 1,
+    pageSize: 50,
+    suppliers: [
+      { idno: "1009999999999", name: "Orange Moldova", count: 1, totalCents: 30000 },
+      { idno: "1024600035737", name: "VECTOR ACADEMY SRL", count: 1, totalCents: 120000 },
+    ],
+    range: { oldest: "2026-08-13T00:00:00.000Z", newest: "2026-08-20T00:00:00.000Z" },
+    sync: { ...SYNC_DONE },
+    message: "2 facturi în arhiva locală.",
     invoices: [
       {
         seria: "EFMD",
@@ -93,6 +118,7 @@ function invoiceList(overrides: Partial<BuyerInvoiceList> = {}): BuyerInvoiceLis
         buyerIdno: "1003600009999",
         invoiceDate: "2026-08-20T00:00:00.000Z",
         totalCents: 30000,
+        detailsRead: true,
         portalUrl: "https://efactura.sfs.md:443/EFactura.aspx?id=aaa",
         linkedParId: null,
         linkedRequestNo: null,
@@ -107,6 +133,7 @@ function invoiceList(overrides: Partial<BuyerInvoiceList> = {}): BuyerInvoiceLis
         buyerIdno: "1003600009999",
         invoiceDate: "2026-08-13T00:00:00.000Z",
         totalCents: 120000,
+        detailsRead: true,
         portalUrl: null,
         linkedParId: "11111111-1111-4111-8111-111111111111",
         linkedRequestNo: "PAR-2026-0025",
@@ -117,10 +144,25 @@ function invoiceList(overrides: Partial<BuyerInvoiceList> = {}): BuyerInvoiceLis
   };
 }
 
+/** Un lot de sincronizare care nu mai are nimic de adus — implicit în toate testele. */
+function syncDone(over: Partial<api.InvoiceSyncResult> = {}): api.InvoiceSyncResult {
+  return {
+    available: true,
+    busy: false,
+    discovered: 0,
+    detailsRead: 0,
+    message: "Sincronizare completă.",
+    progress: { ...SYNC_DONE },
+    ...over,
+  };
+}
+
 describe("ParEfacturaQueue — taburi", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     navigateMock.mockClear();
+    // Niciun test nu are voie să iasă în rețea: sincronizarea e mereu simulată.
+    vi.spyOn(api, "syncParEfacturaInvoices").mockResolvedValue(syncDone());
   });
 
   it("pornește pe cererile achitate și nu cere SFS-ul până nu i se cere", async () => {
@@ -155,12 +197,19 @@ describe("ParEfacturaQueue — taburi", () => {
   });
 
   it("când SFS nu poate fi citit, tabul explică — nu arată o listă goală ca adevăr", async () => {
-    vi.spyOn(api, "getParEfacturaQueue").mockResolvedValue(queue());
+    const faraSfs = queue();
+    faraSfs.sfs = { ...SFS_OK, configured: false, hasCredentials: false, environment: "mock" };
+    vi.spyOn(api, "getParEfacturaQueue").mockResolvedValue(faraSfs);
     vi.spyOn(api, "getParEfacturaInvoices").mockResolvedValue(
       invoiceList({
         available: false,
         source: "mock",
+        needsSync: false,
         invoices: [],
+        total: 0,
+        totalCents: 0,
+        suppliers: [],
+        sync: { ...SYNC_DONE, total: 0, detailed: 0, done: false, lastBatchAt: null, headsSyncedAt: null },
         message: "Integrarea e-Factura (SFS) nu este configurată pentru această organizație.",
       })
     );
@@ -169,9 +218,61 @@ describe("ParEfacturaQueue — taburi", () => {
     await waitFor(() => expect(screen.getByText("PAR-2026-0025")).toBeInTheDocument());
     await userEvent.click(screen.getByRole("tab", { name: /Toate e-Facturile/i }));
 
-    expect(await screen.findByText(/Nu putem citi facturile din SFS/i)).toBeInTheDocument();
-    expect(screen.getByText(/nu este configurată pentru această organizație/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Nu putem spune ce facturi există/i)).toBeInTheDocument();
+    // Motivul apare în două locuri (avertismentul de sus și starea goală a tabelului) — important
+    // e că apare, nu de câte ori.
+    expect(screen.getAllByText(/nu este configurată pentru această organizație/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("fără cerere")).not.toBeInTheDocument();
+  });
+
+  it("[blocant] citește în loturi: butonul chiar cheamă sincronizarea și arată progresul", async () => {
+    vi.spyOn(api, "getParEfacturaQueue").mockResolvedValue(queue());
+    // 543 de facturi știute, 200 cu detalii — exact situația din care a pornit schimbarea.
+    vi.spyOn(api, "getParEfacturaInvoices").mockResolvedValue(
+      invoiceList({
+        needsSync: true,
+        sync: { ...SYNC_DONE, total: 543, detailed: 200, pending: 343, done: false },
+      })
+    );
+    const syncSpy = vi
+      .spyOn(api, "syncParEfacturaInvoices")
+      .mockResolvedValue(syncDone({ detailsRead: 20, progress: { ...SYNC_DONE, total: 543, detailed: 220, pending: 323, done: false } }))
+      .mockResolvedValueOnce(syncDone({ detailsRead: 20, progress: { ...SYNC_DONE, total: 543, detailed: 220, pending: 323, done: true } }));
+
+    render(<ParEfacturaQueuePage />);
+    await waitFor(() => expect(screen.getByText("PAR-2026-0025")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("tab", { name: /Toate e-Facturile/i }));
+
+    expect(await screen.findByText(/343 facturi mai așteaptă citirea detaliilor/i)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /Continuă citirea din SFS/i }));
+
+    // Lotul chiar a plecat spre server (nu doar butonul există) și progresul s-a reîncărcat.
+    await waitFor(() => expect(syncSpy).toHaveBeenCalled());
+    // …iar lista s-a reîncărcat după lot: progresul se vede pe loc, nu la următoarea vizită.
+    await waitFor(() => expect(vi.mocked(api.getParEfacturaInvoices).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("[blocant] filtrul de perioadă și sortarea cer ALT răspuns de la server", async () => {
+    vi.spyOn(api, "getParEfacturaQueue").mockResolvedValue(queue());
+    const listSpy = vi.spyOn(api, "getParEfacturaInvoices").mockResolvedValue(invoiceList());
+
+    render(<ParEfacturaQueuePage />);
+    await waitFor(() => expect(screen.getByText("PAR-2026-0025")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("tab", { name: /Toate e-Facturile/i }));
+    await waitFor(() => expect(listSpy).toHaveBeenCalled());
+
+    await userEvent.click(screen.getByRole("button", { name: "Luna trecută" }));
+    await waitFor(() =>
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })
+      )
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText("Sortare"), "amount_desc");
+    await waitFor(() => expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ sort: "amount_desc" })));
+
+    await userEvent.selectOptions(screen.getByLabelText("Furnizor"), "1009999999999");
+    await waitFor(() => expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ supplier: "1009999999999" })));
   });
 
   it("panoul de configurare preia setările venite de la server după montare", async () => {

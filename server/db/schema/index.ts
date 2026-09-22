@@ -46,6 +46,7 @@ export * from "./paymentAccountItems";
 // PAR module
 export * from "./par";
 export * from "./parEinvoices";
+export * from "./parSfsInvoices";
 export * from "./parVendorProfile";
 // PARVERIFY-001 — tokenul din QR-ul tipărit pe formularul PAR
 export * from "./parVerifyTokens";

@@ -307,7 +307,8 @@ describe("lista brută a facturilor primite (tabul Toate e-Facturile)", () => {
     ]);
 
     await scanEfacturasForTenant(tenantId, undefined, client);
-    const list = await listBuyerInvoicesForTenant(tenantId, client);
+    // Lista NU mai interoghează SFS: citește ce a salvat scanarea în copia locală.
+    const list = await listBuyerInvoicesForTenant(tenantId);
 
     expect(list.available).toBe(true);
     expect(list.invoices).toHaveLength(2);
@@ -339,12 +340,15 @@ describe("facturile arhivate — cazul contului real", () => {
 
   it("le include în listă, cu furnizor, sumă și link din codul QR", async () => {
     const { listBuyerInvoicesForTenant } = await import("../services/par/efacturaScan");
-    const list = await listBuyerInvoicesForTenant(
-      tenantId,
-      stubClient([
+    const { syncBuyerInvoices } = await import("../services/par/efacturaCache");
+    await syncBuyerInvoices(tenantId, {
+      client: stubClient([
         { seria: "EAW", number: "000504087", invoiceStatus: 6, bucket: "archived", qrText: QR(SUPPLIER, "1200.00") },
-      ])
-    );
+      ]),
+      pauseMs: 0,
+      ignoreLock: true,
+    });
+    const list = await listBuyerInvoicesForTenant(tenantId);
 
     expect(list.available).toBe(true);
     expect(list.invoices).toHaveLength(1);
@@ -390,7 +394,9 @@ describe("când SFS refuză toate listele", () => {
 
   it("lista brută spune că nu a putut citi, nu că nu există facturi", async () => {
     const { listBuyerInvoicesForTenant } = await import("../services/par/efacturaScan");
-    const list = await listBuyerInvoicesForTenant(tenantId, brokenClient());
+    const { syncBuyerInvoices } = await import("../services/par/efacturaCache");
+    await syncBuyerInvoices(tenantId, { client: brokenClient(), pauseMs: 0, ignoreLock: true });
+    const list = await listBuyerInvoicesForTenant(tenantId);
     expect(list.available).toBe(false);
     expect(list.invoices).toHaveLength(0);
     expect(list.message).toMatch(/nu am putut citi/i);
