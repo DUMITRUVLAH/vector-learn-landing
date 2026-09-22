@@ -59,7 +59,6 @@ export function buildTimesheetHtml(input: PrintInput): string {
   const { jurisdiction: jur, month, rows } = input;
   const form = jur.form;
   const days = rows[0]?.days ?? [];
-  const daysInMonth = days.length;
 
   const dayHeaders = days
     .map(
@@ -68,11 +67,10 @@ export function buildTimesheetHtml(input: PrintInput): string {
     )
     .join("");
 
+  // Orizontale, nu rotite: așa arată formularul în HR 365, iar la 15 coloane de total textul
+  // încape fără să fie nevoie de un antet înalt de 70px.
   const summaryHeaders = jur.summaryCols
-    .map(
-      (col) =>
-        `<th style="${TD};font-size:6px;background:#fff;width:18px;writing-mode:vertical-rl;transform:rotate(180deg);height:70px">${esc(col.short)}</th>`,
-    )
+    .map((col) => `<th style="${TD};font-size:7px;background:#fff;width:20px">${esc(col.short)}</th>`)
     .join("");
 
   const bodyRows = rows
@@ -125,8 +123,8 @@ body{font-family:'Noto Sans',Arial,Helvetica,sans-serif;margin:0;padding:0;font-
 table{border-collapse:collapse;width:100%}
 h2{text-align:center;font-size:12px;margin:3px 0}
 .subtitle{text-align:center;font-size:9px;margin:1px 0}
-.legend-table{margin-top:10px;font-size:8px;width:100%}
-.legend-table td{border:1px solid #000;padding:2px 5px;vertical-align:top}
+.legend-table{margin-top:6px;font-size:8px;width:100%}
+.legend-table td{padding:2px 5px 2px 0;vertical-align:top;width:33.33%}
 .footer-row{margin-top:14px;display:flex;justify-content:space-between;font-size:8px;gap:10px}
 .footer-row>div{flex:1}
 </style></head>
@@ -140,20 +138,19 @@ ${unitFieldsHtml}
 <table>
 <thead>
 <tr>
-<th rowspan="2" style="${TD};font-size:7px;width:20px">Nr.</th>
-<th rowspan="2" style="border:1px solid #000;padding:1px 3px;font-size:7px;width:130px;text-align:left">Numele, prenumele</th>
-<th rowspan="2" style="border:1px solid #000;padding:1px 3px;font-size:7px;width:90px;text-align:left">Funcția</th>
-<th colspan="${daysInMonth}" style="${TD};font-size:8px">Zilele lunii</th>
+<th style="${TD};font-size:7px;width:20px">Nr.</th>
+<th style="border:1px solid #000;padding:1px 3px;font-size:7px;width:130px">Numele, prenumele</th>
+<th style="border:1px solid #000;padding:1px 3px;font-size:7px;width:90px">Funcția</th>
+${dayHeaders}
 ${summaryHeaders}
 </tr>
-<tr>${dayHeaders}</tr>
 </thead>
 <tbody>${bodyRows}</tbody>
 </table>
 <div class="footer-row">
-<div>${sigL} __________________<br><span style="font-size:7px">(numele, prenumele, semnătura)</span></div>
-<div style="text-align:center">${sigC} __________________<br><span style="font-size:7px">(numele, prenumele, semnătura)</span></div>
-<div style="text-align:right">${sigR} __________________<br><span style="font-size:7px">(numele, prenumele, semnătura)</span></div>
+<div>${sigL} __________________</div>
+<div style="text-align:center">${sigC} __________________</div>
+<div style="text-align:right">${sigR} __________________</div>
 </div>
 <div style="margin-top:10px;font-size:8px"><b>Note:</b></div>
 <table class="legend-table">${legendHtml}</table>
