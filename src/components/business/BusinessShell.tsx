@@ -183,6 +183,15 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // PONTAJ-001: rândul rămâne vizibil în toată aplicația când modulul e pornit — pontajul e
+    // sarcina lunară a fiecărui angajat, nu o secțiune în care se intră dintr-un flux anume.
+    section: "Pontaj",
+    prefix: "/business/pontaj",
+    items: [
+      { label: "Pontajul meu", href: "/business/pontaj", icon: CalendarClock, tone: "amber" },
+    ],
+  },
+  {
     // DocMerge — secțiune separată, vizibilă doar când ești pe /business/docmerge/*
     section: "Document Merge",
     prefix: "/business/docmerge",
@@ -636,6 +645,7 @@ export function BusinessShell({
         if (g.section === "FinDesk — Finanțe") return isEnabled("findesk");
         // DocMerge apare în sidebar doar când ești pe rutele DocMerge
         if (g.section === "Document Merge") return isEnabled("docmerge") && path.startsWith("/business/docmerge");
+        if (g.section === "Pontaj") return isEnabled("pontaj");
         return true;
       });
 
@@ -812,6 +822,7 @@ export function BusinessShell({
                 // VM1-01: only show PAR tab if user has at least one PAR role
                 ...(hasPar ? [{ label: "PAR", href: "/business/par", icon: ClipboardList }] : []),
                 ...(isEnabled("itpark") ? [{ label: "ITPark", href: "/business/itpark", icon: Building2 }] : []),
+                ...(isEnabled("pontaj") ? [{ label: "Pontaj", href: "/business/pontaj", icon: CalendarClock }] : []),
               ];
           const colsClass =
             mobileItems.length >= 4 ? "grid-cols-4"

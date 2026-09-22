@@ -63,6 +63,17 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     defaultEnabled: true,
   },
   {
+    key: "pontaj",
+    label: "Pontaj — Evidența timpului de muncă",
+    description:
+      "Tabel de pontaj self-service: fiecare angajat își vede luna, își pune orele, își înregistrează concediile pe interval și tipărește formularul.",
+    route: "/business/pontaj",
+    // OPRIT implicit, cerut explicit de owner: modulul se aprinde per organizație din Consola
+    // Platformă. Spre deosebire de CRM (pornit ca să ajungă la clienții existenți fără migrare),
+    // pontajul atinge date de personal — o organizație îl primește doar după ce îl cere.
+    defaultEnabled: false,
+  },
+  {
     key: "docmerge",
     label: "Document Merge",
     description: "Generare de documente în masă din șablon + Excel.",

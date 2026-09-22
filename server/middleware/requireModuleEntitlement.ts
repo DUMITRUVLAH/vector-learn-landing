@@ -34,6 +34,29 @@ export function requireModuleEntitlement(moduleKey: string): MiddlewareHandler<{
   };
 }
 
+/**
+ * Varianta pe WORKSPACE a gardului de mai sus, fără stratul de entitate juridică.
+ *
+ * `requireModuleEntitlement` verifică și `par_payer_modules`, fiindcă PAR se cumpără per entitate
+ * juridică din workspace. Pentru un modul care nu are împărțirea asta — pontajul e al
+ * organizației, nu al plătitorului — regula aia ar fi fost o capcană: modulul pornit din Consola
+ * Platformă ar fi întors totuși 403, fiindcă nu există niciun rând `par_payer_modules` pentru el,
+ * iar ramura de rezervă cade pe implicitul din cod (oprit). Deci: comutatorul de workspace e
+ * singurul care contează, plus scutirea superadminului.
+ */
+export function requireTenantModule(moduleKey: string): MiddlewareHandler<{ Variables: AuthVariables }> {
+  return async (c, next) => {
+    const user = c.get("user");
+    if (!user) { await next(); return; } // requireAuth de pe routerul țintă întoarce 401-ul canonic.
+    const [superadmin] = await db.select({ id: platformAdmins.id }).from(platformAdmins).where(eq(platformAdmins.userId, user.id));
+    if (superadmin) { await next(); return; }
+    if (!(await isModuleEnabledForTenant(user.tenantId, moduleKey))) {
+      return c.json({ error: "module_disabled", module: moduleKey }, 403);
+    }
+    await next();
+  };
+}
+
 export async function hasPayerModuleEntitlement(
   userId: string,
   tenantId: string,

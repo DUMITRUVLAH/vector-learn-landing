@@ -117,7 +117,7 @@ import { errorCapture } from "./middleware/errorCapture";
 import { recordError } from "./lib/errorTelemetry";
 import { alertOwnerOnNewError } from "./lib/errorAlerts";
 import { requireAuth } from "./middleware/requireAuth";
-import { requireModuleEntitlement } from "./middleware/requireModuleEntitlement";
+import { requireModuleEntitlement, requireTenantModule } from "./middleware/requireModuleEntitlement";
 import { securityHeaders } from "./middleware/securityHeaders";
 import { httpCache } from "./middleware/httpCache";
 import { authRateLimit, expensiveRateLimit } from "./middleware/rateLimit";
@@ -130,6 +130,7 @@ import { finCronRoutes } from "./routes/finCron";
 
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
+import { pontajRoutes } from "./routes/pontaj";
 // CRM module (CRM Faza 1) — pipeline de leaduri + catalog de produse
 import { crmHealthRoutes } from "./routes/crmHealth";
 import { crmLeadsRoutes } from "./routes/crmLeads";
@@ -437,6 +438,15 @@ app.route("/api/platform", platformInsightsRoutes);
 app.route("/api/modules", myModulesRoutes);
 // PLATFORM-002: raportarea erorilor din browser (public — vezi routes/telemetry.ts).
 app.route("/api/telemetry", telemetryRoutes);
+
+// PONTAJ-001: tabelul de pontaj, self-service. Gardul e pe WORKSPACE (requireTenantModule),
+// nu pe entitatea juridică: pontajul e al organizației, iar varianta cu plătitori ar fi întors
+// 403 chiar și cu modulul pornit din consolă — vezi middleware/requireModuleEntitlement.ts.
+app.use("/api/pontaj", requireAuth);
+app.use("/api/pontaj/*", requireAuth);
+app.use("/api/pontaj", requireTenantModule("pontaj"));
+app.use("/api/pontaj/*", requireTenantModule("pontaj"));
+app.route("/api/pontaj", pontajRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);

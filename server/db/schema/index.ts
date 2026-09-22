@@ -90,3 +90,5 @@ export * from "./bnmRates";
 export * from "./docs";
 export * from "./docShareLinks";
 export * from "./crmAutomations";
+// Pontaj self-service — evidența timpului de muncă (PONTAJ-001)
+export * from "./pontaj";

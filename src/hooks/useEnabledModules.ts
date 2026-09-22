@@ -14,9 +14,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { cachedOnce, peekResolved } from "@/lib/sessionCache";
 
-export type ModuleKey = "findesk" | "par" | "itpark" | "docmerge" | "crm";
+export type ModuleKey = "findesk" | "par" | "itpark" | "docmerge" | "crm" | "pontaj";
 
-export const ALL_MODULE_KEYS: ModuleKey[] = ["findesk", "par", "itpark", "docmerge", "crm"];
+export const ALL_MODULE_KEYS: ModuleKey[] = ["findesk", "par", "itpark", "docmerge", "crm", "pontaj"];
 
 /** Ce vede o organizație fără nicio setare explicită. Oglindește `defaultEnabled` din server. */
 export const DEFAULT_MODULE_KEYS: ModuleKey[] = ["par", "crm"];
@@ -83,6 +83,7 @@ export function moduleForPath(path: string): ModuleKey | null {
   if (path.startsWith("/business/fin")) return "findesk";
   if (path.startsWith("/business/docmerge")) return "docmerge";
   if (path.startsWith("/business/crm")) return "crm";
+  if (path.startsWith("/business/pontaj")) return "pontaj";
   if (path.startsWith("/business/par")) return "par";
   return null;
 }

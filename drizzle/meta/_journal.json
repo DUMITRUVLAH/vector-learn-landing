@@ -1282,6 +1282,13 @@
       "when": 1789000000006,
       "tag": "0183_par_drive_arhiva",
       "breakpoints": true
+    },
+    {
+      "idx": 184,
+      "version": "7",
+      "when": 1789000000007,
+      "tag": "0184_pontaj_self_service",
+      "breakpoints": true
     }
   ]
 }
