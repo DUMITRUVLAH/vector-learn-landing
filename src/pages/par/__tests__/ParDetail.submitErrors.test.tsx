@@ -50,6 +50,11 @@ vi.mock("@/lib/api/par", () => ({
   requestParChanges: vi.fn().mockResolvedValue({}),
   reapproveOverage: vi.fn().mockResolvedValue({}),
   getPurchaseOrder: vi.fn().mockResolvedValue(null),
+  // Cardul codului de verificare se montează pe fișă și își cere singur datele; fără mock arunca
+  // o eroare necapturată DUPĂ montare, iar pagina rămânea goală — testul de mai jos pica pe ceva
+  // ce n-avea legătură cu el.
+  getParVerifyCode: vi.fn().mockResolvedValue(null),
+  setParVerifyCode: vi.fn().mockResolvedValue(null),
   formatMDL: (c: number) => `${(c / 100).toLocaleString()} MDL`,
   PAR_STATUS_LABELS: { draft: "Ciornă" },
 }));

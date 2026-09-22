@@ -17,7 +17,7 @@
  *   PATCH  /api/par/:id/line-items/:lineId       → update line item
  *   DELETE /api/par/:id/line-items/:lineId       → delete line item
  */
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { cleanPastedIdentityField } from "../lib/par/fieldSanity";
@@ -53,7 +53,15 @@ import { recalcParTotal } from "../lib/par/totals";
 import { MAX_MONEY_CENTS, MAX_LINE_QUANTITY, exceedsMoneyBound, moneyBoundError } from "../lib/par/moneyBounds";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
-import { verifyParBodyHash } from "../lib/par/integrity";
+import { computeParBodyHash, verifyParBodyHash } from "../lib/par/integrity";
+import {
+  AMENDED_COLUMN_TO_FIELD,
+  amendedFieldLabels,
+  blockedFieldsMessage,
+  canFinanceAmend,
+  FINANCE_FIELD_LABELS,
+  splitFinanceAmendment,
+} from "../lib/par/postSignatureEdit";
 import { renderDosarPagesPdf } from "../lib/par/dosarPdf";
 import { buildDosar } from "../lib/par/buildDosar";
 import { buildParFormDefinition, parFormFileName } from "../lib/par/parFormPdf";
@@ -1091,10 +1099,33 @@ parRoutes.get("/:id", async (c) => {
     fileUrl: attachmentPreviewUrl(parId, a.id),
   }));
 
-  const [payment] = await db
-    .select()
-    .from(parPayments)
-    .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
+  // Plata și completările de după semnare nu depind una de alta — un singur dus-întors, nu două
+  // (aceeași disciplină ca la celelalte căutări din ruta asta).
+  //
+  // Completările se văd pe FIȘĂ, nu doar în jurnal: cine a semnat documentul trebuie să afle din
+  // document că linia de buget sau descrierea au fost completate ulterior, cu nume și dată.
+  const [paymentRows, amendmentRows] = await Promise.all([
+    db
+      .select()
+      .from(parPayments)
+      .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId))),
+    db
+      .select({
+        actorUserId: parAudit.actorUserId,
+        diff: parAudit.diff,
+        createdAt: parAudit.createdAt,
+      })
+      .from(parAudit)
+      .where(
+        and(
+          eq(parAudit.parId, parId),
+          eq(parAudit.tenantId, tenantId),
+          eq(parAudit.event, "finance_amended")
+        )
+      )
+      .orderBy(asc(parAudit.createdAt)),
+  ]);
+  const [payment] = paymentRows;
 
   // Get micro-purchase threshold for flag
   const [settings] = await db
@@ -1153,6 +1184,7 @@ parRoutes.get("/:id", async (c) => {
     // `signature_name` e o singură casetă, completată de om (și, pe cererile de dinainte de
     // 2026-09-10, cu funcția în loc de nume). Le rezolvăm din conturi, nu din instantaneu.
     ...approvals.map((a) => a.approverUserId),
+    ...amendmentRows.map((r) => r.actorUserId),
   ])].filter((v): v is string => !!v);
 
   const [userRows, profileRows] = await Promise.all([
@@ -1273,10 +1305,170 @@ parRoutes.get("/:id", async (c) => {
     assignedToName: userName(payment?.assignedToUserId),
     /** PAR-109: null = not applicable (draft/no hash); true = body untampered; false = INTEGRITY VIOLATION */
     body_hash_valid: bodyHashValid,
+    /** Completările făcute de finanțe după semnare (cine, când, ce câmpuri). */
+    finance_amendments: amendmentRows.map((r) => ({
+      at: r.createdAt,
+      byName: userName(r.actorUserId),
+      fields: amendedFieldLabels(r.diff),
+    })),
   });
 });
 
-// ─── PATCH /api/par/:id — update header (draft | changes_requested only) ───
+// ─── Completarea de după semnare (finanțe) ───────────────────────────────────
+
+/**
+ * Cererea semnată nu se redeschide la editare, dar finanțele o pot COMPLETA (cerere manager
+ * financiar, 22.09.2026): linia de buget, descrierea, nota anexelor. Sumele, liniile, moneda și
+ * rechizitele beneficiarului rămân cele semnate — lista albă e în `postSignatureEdit.ts`, iar
+ * orice câmp din afara ei se refuză cu 403 și cu motivul scris în română.
+ */
+async function financeAmendPar(
+  c: Context<{ Variables: AuthVariables }>,
+  args: {
+    par: typeof parRequests.$inferSelect;
+    userId: string;
+    tenantId: string;
+    body: Record<string, unknown>;
+  }
+) {
+  const { par, userId, tenantId, body } = args;
+  // Ce a trimis clientul, din corpul BRUT — vezi `splitFinanceAmendment`. (`c.req.json()` e
+  // memorat de Hono, deci nu re-citește fluxul consumat deja de validator.)
+  const rawBody = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const sentKeys = rawBody && typeof rawBody === "object" ? Object.keys(rawBody) : undefined;
+  const { amendment, blocked } = splitFinanceAmendment(body, sentKeys);
+
+  if (blocked.length) {
+    return c.json(
+      { error: "forbidden_after_signature", fields: blocked, detail: blockedFieldsMessage(blocked) },
+      403
+    );
+  }
+  if (Object.keys(amendment).length === 0) {
+    return c.json(
+      {
+        error: "no_amendable_fields",
+        detail: "După semnare se pot completa doar linia de buget, descrierea și nota anexelor.",
+      },
+      400
+    );
+  }
+
+  // Linia de buget se validează în ARIA cererii, exact ca la depunere: un cod din alt plătitor
+  // sau din alt proiect ar muta cheltuiala într-un buget care n-are treabă cu cererea asta.
+  // Verificăm DOAR codul (nu și proiectul/plătitorul cererii, care pot fi între timp arhivate —
+  // o cerere veche n-are de ce să devină necompletabilă pentru că i s-a închis proiectul).
+  const nextBudgetCodeId = (amendment.budget_code_id as string | null | undefined) ?? null;
+  if (amendment.budget_code_id !== undefined && nextBudgetCodeId) {
+    const [bc] = await db
+      .select({ id: parBudgetCodes.id, payerId: parBudgetCodes.payerId, projectId: parBudgetCodes.projectId })
+      .from(parBudgetCodes)
+      .where(
+        and(
+          eq(parBudgetCodes.id, nextBudgetCodeId),
+          eq(parBudgetCodes.tenantId, tenantId),
+          eq(parBudgetCodes.active, true)
+        )
+      );
+    if (!bc) return c.json({ error: "budget_code_not_found" }, 400);
+    if (bc.payerId && par.payerId && bc.payerId !== par.payerId) {
+      return c.json({ error: "budget_code_not_in_payer" }, 400);
+    }
+    if (bc.projectId && bc.projectId !== par.projectId) {
+      return c.json({ error: "budget_code_not_in_project" }, 400);
+    }
+  }
+
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (amendment.budget_code_id !== undefined) updateData.budgetCodeId = amendment.budget_code_id ?? null;
+  if (amendment.budget_code_note !== undefined) updateData.budgetCodeNote = amendment.budget_code_note ?? null;
+  if (amendment.end_use !== undefined) updateData.endUse = amendment.end_use ?? null;
+  if (amendment.attachments_note !== undefined) {
+    updateData.attachmentsNote = amendment.attachments_note ?? null;
+    // Nota descrie anexele dosarului: dacă tocmai s-a scris în ea, secțiunea 13 nu mai poate
+    // spune „Nu" la întrebarea „are anexe?".
+    if (amendment.attachments_note) updateData.attachmentsPresent = true;
+  }
+
+  const parRec = par as unknown as Record<string, unknown>;
+  const norm = (v: unknown) => (v instanceof Date ? v.toISOString() : v ?? null);
+  const diffObj: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(updateData)) {
+    if (key === "updatedAt") continue;
+    const before = norm(parRec[key]);
+    const after = norm(updateData[key]);
+    if (before === after) continue;
+    diffObj[key] = { from: before, to: after };
+  }
+
+  const [settingsRow] = await db
+    .select({ threshold: parSettings.microPurchaseThresholdCents })
+    .from(parSettings)
+    .where(eq(parSettings.tenantId, tenantId));
+  const microThreshold = settingsRow?.threshold ?? 1000000;
+
+  // Salvare fără schimbare reală: răspundem cu cererea așa cum e, fără să umplem jurnalul cu
+  // „a modificat" pentru un formular retrimis identic.
+  if (Object.keys(diffObj).length === 0) {
+    return c.json({
+      ...par,
+      above_micro_threshold: par.totalEstimatedCents > microThreshold,
+      finance_amended: false,
+    });
+  }
+
+  const [updated] = await db
+    .update(parRequests)
+    .set(updateData)
+    .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, tenantId)))
+    .returning();
+
+  // Linia de buget și descrierea fac parte din corpul SIGILAT la depunere
+  // (server/lib/par/integrity.ts). O completare legitimă ar face verificarea de integritate să
+  // strige „datele diferă de cele semnate" la fiecare deschidere — și, mai rău, ar bloca cu 409
+  // orice semnătură rămasă (reaprobarea unei depășiri). Resigilăm corpul și scriem în jurnal
+  // ambele amprente: ce s-a schimbat rămâne dovedit de `diff`, iar alarma rămâne credibilă
+  // pentru ce contează cu adevărat — sume, linii, beneficiar — câmpuri pe care calea asta nu le
+  // poate atinge.
+  let reseal: { from: string; to: string } | null = null;
+  if (par.bodyHash) {
+    const freshBody = await buildBodyForHash(par.id, tenantId);
+    if (freshBody) {
+      const newHash = computeParBodyHash(freshBody);
+      if (newHash !== par.bodyHash) {
+        await db
+          .update(parRequests)
+          .set({ bodyHash: newHash })
+          .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, tenantId)));
+        reseal = { from: par.bodyHash, to: newHash };
+      }
+    }
+  }
+
+  const changedLabels = Object.keys(diffObj).map(
+    (col) => FINANCE_FIELD_LABELS[AMENDED_COLUMN_TO_FIELD[col] ?? col] ?? col
+  );
+  await writeAudit({
+    tenantId,
+    parId: par.id,
+    actorUserId: userId,
+    event: "finance_amended",
+    detail:
+      `Finanțele au completat cererea după semnare: ${changedLabels.join(", ")}.` +
+      (reseal ? ` Sigiliul corpului a fost recalculat (${reseal.from.slice(0, 8)}… → ${reseal.to.slice(0, 8)}…).` : ""),
+    diff: JSON.stringify(diffObj),
+  });
+
+  return c.json({
+    ...updated,
+    bodyHash: reseal?.to ?? updated.bodyHash,
+    above_micro_threshold: updated.totalEstimatedCents > microThreshold,
+    finance_amended: true,
+  });
+}
+
+// ─── PATCH /api/par/:id — update header (draft | changes_requested) ─────────
+//     …plus completarea de după semnare, doar pentru finanțe (financeAmendPar).
 
 parRoutes.patch(
   "/:id",
@@ -1290,15 +1482,27 @@ parRoutes.patch(
     const par = await getPAR(parId, tenantId);
     if (!par) return c.json({ error: "not_found" }, 404);
 
-    // Only author can edit, only in editable statuses (PAR-101 §AC)
-    if (par.requestedByUserId !== user.id) {
-      return c.json({ error: "forbidden: only the author can edit this PAR" }, 403);
-    }
-    if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
+    // Autorul editează, și doar cât timp cererea e editabilă (PAR-101 §AC).
+    const authorMayEdit =
+      par.requestedByUserId === user.id &&
+      EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
+    // A doua cale, deschisă DUPĂ semnare și numai pentru finanțe: dosarul se completează
+    // (linia de buget, descrierea, nota anexelor), banii semnați rămân neatinși.
+    const viewerParRoles = await getUserPARRoles(user.id, tenantId);
+    const financeMayAmend = canFinanceAmend({ roles: viewerParRoles, status: par.status });
+
+    if (!authorMayEdit && !financeMayAmend) {
+      if (par.requestedByUserId !== user.id) {
+        return c.json({ error: "forbidden: only the author can edit this PAR" }, 403);
+      }
       return c.json(
         { error: `forbidden: PAR status '${par.status}' is not editable` },
         403
       );
+    }
+
+    if (!authorMayEdit) {
+      return financeAmendPar(c, { par, userId: user.id, tenantId, body });
     }
     if (body.project_id !== undefined && !(await mayAccessProject(user.id, tenantId, body.project_id, user.role))) {
       return c.json({ error: "forbidden_project" }, 403);

@@ -32,6 +32,10 @@ vi.mock("@/lib/parPdf", () => ({
 }));
 
 vi.mock("@/lib/api/par", () => ({
+  // Cardul codului de verificare se montează pe fișă și își cere singur datele; fără mock,
+  // aruncă o eroare necapturată după montare (vitest o raportează ca „unhandled").
+  getParVerifyCode: vi.fn().mockResolvedValue(null),
+  setParVerifyCode: vi.fn().mockResolvedValue(null),
   // VM5-16: fișa citește jurnalul pentru banda de traseu (informativ — fără el se deschide la fel).
   getParTimeline: vi.fn().mockResolvedValue({ timeline: [], total: 0 }),
   // VM5-19: fișa întreabă dacă prestatorul a trecut pragul anual (doar pentru finanțe).

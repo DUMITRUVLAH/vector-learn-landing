@@ -88,7 +88,7 @@ const AREAS = {
     // `e2e-par-mobile.mjs`: ce e ATINGIBIL pe un ecran de telefon, nu doar prezent în DOM. Dialogul
     // de plată a fost o vreme mai înalt decât ecranul, fără derulare — „Da, confirmă plata" cădea
     // sub margine, deci plata nu se putea încheia de pe telefon, iar toate testele erau verzi.
-    deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs", "e2e-par-timeline-human.mjs", "e2e-par-patenta.mjs", "e2e-par-mobile.mjs"],
+    deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs", "e2e-par-timeline-human.mjs", "e2e-par-patenta.mjs", "e2e-par-mobile.mjs", "e2e-par-post-signature.mjs"],
   },
   fin: {
     label: "FinDesk",

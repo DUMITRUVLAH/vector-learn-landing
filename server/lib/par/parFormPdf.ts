@@ -540,6 +540,29 @@ export function buildParFormDefinition(
       layout: FRAME,
     },
 
+    // Completările de după semnare — sub semnături, unde le caută un auditor. Hârtia arată
+    // valorile de ACUM (linia de buget corectată, descrierea completată); fără rândul ăsta,
+    // diferența față de ce s-a semnat ar fi invizibilă pe hârtie.
+    ...(d.financeAmendments?.length
+      ? [{
+          table: {
+            widths: ["*"],
+            body: [[{
+              stack: [
+                { text: "Amended by finance after signature (amounts, payee and line items unchanged):", bold: true, fontSize: 7.5 },
+                ...d.financeAmendments.map((a) => ({
+                  text: `${formDate(a.at)} — ${a.fields.join(", ") || "record updated"}${a.byName ? ` (${a.byName})` : ""}`,
+                  fontSize: 7,
+                  color: FAINT,
+                  margin: [8, 1, 0, 0] as [number, number, number, number],
+                })),
+              ],
+            }]],
+          },
+          layout: FRAME,
+        }]
+      : []),
+
     // 16
     {
       table: {

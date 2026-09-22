@@ -37,6 +37,7 @@ import { fillPaymentRefFromProof } from "../lib/par/paymentRefFromProof";
 import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
+import { FINANCE_STAGE_STATUSES, hasFinanceRole } from "../lib/par/postSignatureEdit";
 import { contentDisposition } from "../lib/http/contentDisposition";
 import {
   PAR_ATTACHMENT_BUCKET,
@@ -236,12 +237,11 @@ async function guardAttachmentWrite(
   // finanțele/par_admin pot pune dovada plății la etapa de finanțe — dovada trebuie să stea cu
   // cererea, nu separat.
   const roles = await getUserPARRoles(user.id, tenantId);
-  const isFinance = roles.includes("finance") || roles.includes("par_admin");
-  const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
+  const isFinance = hasFinanceRole(roles);
   const authorCanEdit =
     par.requestedByUserId === user.id &&
     EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
-  const financeCanAttach = isFinance && FINANCE_STAGE_STATUSES.includes(par.status);
+  const financeCanAttach = isFinance && FINANCE_STAGE_STATUSES.includes(par.status as (typeof FINANCE_STAGE_STATUSES)[number]);
   if (!authorCanEdit && !financeCanAttach) {
     return {
       ok: false,
@@ -266,6 +266,23 @@ async function guardAttachmentWrite(
   }
 
   return { ok: true, par };
+}
+
+/**
+ * Secțiunea 13 a formularului răspunde la „Are anexe?". Câtă vreme flag-ul se scria doar din
+ * formularul solicitantului, un act adițional urcat de finanțe după semnare ajungea la dosar, dar
+ * cererea tipărită continua să spună „Nu" — exact contradicția pe care o vede un auditor.
+ * Formularul PAR generat (`par_pdf`) nu e o anexă, ci cererea însăși, deci nu aprinde flag-ul.
+ */
+async function markAttachmentsPresent(
+  par: { id: string; tenantId: string; attachmentsPresent: boolean },
+  kind: string
+): Promise<void> {
+  if (par.attachmentsPresent || kind === "par_pdf") return;
+  await db
+    .update(parRequests)
+    .set({ attachmentsPresent: true, updatedAt: new Date() })
+    .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, par.tenantId)));
 }
 
 async function hasScopedDossierAccess(
@@ -632,6 +649,8 @@ parAttachmentsRoutes.post(
       })
       .returning();
 
+    await markAttachmentsPresent(par, body.kind);
+
     // Reconciliation is best-effort: an unavailable AI provider must never make a valid
     // document upload fail. When it succeeds, the response already carries the comparison.
     try {
@@ -785,6 +804,8 @@ parAttachmentsRoutes.post(
       })
       .returning();
 
+    await markAttachmentsPresent(par, body.kind);
+
     // Numărul ordinului de plată, citit pe loc din documentul băncii. NU e analiza AI de mai jos:
     // e un regex peste textul PDF-ului, de ordinul milisecundelor, iar rezultatul trebuie să fie în
     // bază ÎNAINTE ca ecranul să se reîncarce — altfel omul vede tot „—" la „Nr. ordin" și îl scrie
@@ -865,13 +886,12 @@ parAttachmentsRoutes.patch(
     // propriile încărcări din etapa lor. Cine n-are voie să scoată un document n-are voie nici
     // să-i schimbe eticheta — în dosar, eticheta e tot conținut.
     const roles = await getUserPARRoles(user.id, tenantId);
-    const isFinance = roles.includes("finance") || roles.includes("par_admin");
-    const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
+    const isFinance = hasFinanceRole(roles);
     const authorCanEdit =
       par.requestedByUserId === user.id &&
       EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
     const financeCanEdit =
-      isFinance && att.uploadedBy === user.id && FINANCE_STAGE_STATUSES.includes(par.status);
+      isFinance && att.uploadedBy === user.id && FINANCE_STAGE_STATUSES.includes(par.status as (typeof FINANCE_STAGE_STATUSES)[number]);
     if (!authorCanEdit && !financeCanEdit) {
       return c.json({ error: "forbidden: not allowed to edit this attachment" }, 403);
     }
@@ -929,8 +949,7 @@ parAttachmentsRoutes.delete("/:parId/attachments/:attId", async (c) => {
   if (!att) return c.json({ error: "not_found" }, 404);
 
   const roles = await getUserPARRoles(user.id, tenantId);
-  const isFinance = roles.includes("finance") || roles.includes("par_admin");
-  const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
+  const isFinance = hasFinanceRole(roles);
 
   // The author may delete their own attachments while the PAR is editable.
   const authorCanDelete =
@@ -939,7 +958,7 @@ parAttachmentsRoutes.delete("/:parId/attachments/:attId", async (c) => {
   // PARQA-021: finance/par_admin may delete an attachment THEY uploaded at the finance stage (e.g. a
   // wrong payment proof). Before, an uploader had no way to remove their own mistaken upload.
   const financeCanDelete =
-    isFinance && att.uploadedBy === user.id && FINANCE_STAGE_STATUSES.includes(par.status);
+    isFinance && att.uploadedBy === user.id && FINANCE_STAGE_STATUSES.includes(par.status as (typeof FINANCE_STAGE_STATUSES)[number]);
 
   if (!authorCanDelete && !financeCanDelete) {
     return c.json({ error: "forbidden: not allowed to delete this attachment" }, 403);

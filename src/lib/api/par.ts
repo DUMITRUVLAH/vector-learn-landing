@@ -157,6 +157,19 @@ export interface ParDetail extends ParRequest {
   budgetCodeLabel?: string | null;
   receivedByName?: string | null;
   assignedToName?: string | null;
+  /**
+   * Completările făcute de finanțe DUPĂ semnare (linia de buget, descrierea, nota anexelor).
+   * Se afișează pe fișă: cine a semnat trebuie să vadă din document că a fost completat ulterior.
+   */
+  finance_amendments?: ParFinanceAmendment[];
+}
+
+export interface ParFinanceAmendment {
+  /** ISO */
+  at: string;
+  byName: string | null;
+  /** Etichetele câmpurilor completate („linia de buget", „descrierea utilizării finale"). */
+  fields: string[];
 }
 
 export interface ParApproval {

@@ -40,6 +40,13 @@ import {
   Paperclip, BookOpen, Eye} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
+import {
+  canAmendAfterSignature,
+  FinanceAddendum,
+  FinanceAmendBudgetLine,
+  FinanceAmendEndUse,
+  FinanceAmendNotice,
+} from "@/components/par/ParFinanceAmend";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { ParApprovalChain } from "@/components/par/ParApprovalChain";
 import { ParTimeline } from "@/components/par/ParTimeline";
@@ -1225,6 +1232,10 @@ export function ParDetailPage() {
   }
 
   const approvals = [...(par.approvals ?? [])].sort((a, b) => a.step - b.step);
+  // Completarea de după semnare: doar finanțele, doar pe cererea deja semnată. Regula e impusă
+  // pe server (server/lib/par/postSignatureEdit.ts); aici doar nu arătăm ce oricum s-ar refuza.
+  const canAmend = canAmendAfterSignature(currentRoles, par.status);
+  const financeAmendments = par.finance_amendments ?? [];
   const requestorIdentity = par.requestorCode && par.requestorTitle?.includes(par.requestorCode)
     ? par.requestorTitle
     : [par.requestorTitle, par.requestorCode].filter(Boolean).join(" · ");
@@ -1363,10 +1374,15 @@ export function ParDetailPage() {
             {(par as ParDetailType & { eventName?: string | null }).eventName && (
               <Field label="6b. Eveniment" value={(par as ParDetailType & { eventName?: string | null }).eventName} />
             )}
-            <Field
-              label="7. Cod bugetar"
-              value={[par.budgetCodeLabel, par.budgetCodeNote].filter(Boolean).join(" — ") || "—"}
-            />
+            <div>
+              <Field
+                label="7. Cod bugetar"
+                value={[par.budgetCodeLabel, par.budgetCodeNote].filter(Boolean).join(" — ") || "—"}
+              />
+              {/* Finanțele corectează linia de buget aici, pe cererea semnată: cheltuiala se pune
+                  pe linia potrivită fără să se anuleze și să se refacă cererea. */}
+              {canAmend && <FinanceAmendBudgetLine par={par} onSaved={load} />}
+            </div>
           </dl>
         </Section>
 
@@ -1485,6 +1501,7 @@ export function ParDetailPage() {
           <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
             {par.endUse || <span className="text-muted-foreground">—</span>}
           </p>
+          {canAmend && <FinanceAmendEndUse par={par} onSaved={load} />}
         </Section>
 
         {/* SECTION 12: Payee
@@ -1612,6 +1629,8 @@ export function ParDetailPage() {
               })}
             </ul>
           )}
+          {/* Acte adiționale după semnare: dosarul se completează, cererea semnată nu se rescrie. */}
+          {canAmend && <FinanceAddendum par={par} onSaved={load} />}
           {/* VM1-12 → VM4-05: încărcarea ordinului de plată s-a mutat SUS, în „Confirmarea plății"
               (card cu tragere de fișier, Ctrl+V pentru captură și previzualizare pe loc). Aici
               rămâne doar indicatorul, ca secțiunea să nu pară că a pierdut o funcție. */}
@@ -1626,6 +1645,9 @@ export function ParDetailPage() {
         {/* SECTIONS 14–15: Approval chain */}
         <Section num="14–15" title="Semnături și aprobări">
           <ParApprovalChain approvals={approvals} parStatus={par.status} />
+          {/* Urma completărilor de după semnare stă lângă semnături: cine a semnat află din
+              document, nu din jurnal, că linia de buget sau descrierea au fost completate apoi. */}
+          <FinanceAmendNotice amendments={financeAmendments} />
         </Section>
 
         {/* PARVERIFY-001: codul de pe hârtie stă lângă aprobările pe care le dovedește — cine sună

@@ -47,6 +47,7 @@ export const PAR_EVENT_TITLES: Record<string, string> = {
   paid: "Plătită",
   payment_reverted: "Plata a fost anulată",
   finance_returned: "Plată refuzată de finanțe",
+  finance_amended: "Completată de finanțe după semnare",
   finance_archived: "Scoasă din coada de finanțe",
   finance_unarchived: "Readusă în coada de finanțe",
   vendor_autosaved: "Beneficiar salvat în registru",
@@ -83,6 +84,7 @@ const EVENT_ICONS: Record<string, string> = {
   paid: "💰",
   payment_reverted: "↩️",
   finance_returned: "↩️",
+  finance_amended: "🏦",
   finance_archived: "🗄️",
   finance_unarchived: "📂",
   vendor_autosaved: "📇",
@@ -414,6 +416,15 @@ export function humanizeDetail(
     } catch {
       return [];
     }
+  }
+
+  // Completarea de la finanțe își enumeră câmpurile în `detail`, dar `diff` le arată oricum, cu
+  // valoarea de dinainte și de după. Când diff-ul se afișează, păstrăm doar nota despre sigiliu.
+  const amended = trimmed.match(/^Finanțele au completat cererea după semnare:\s*([^.]*)\.\s*(.*)$/i);
+  if (amended) {
+    const seal = amended[2].trim();
+    if (opts.hasDiff) return seal ? [cleanup(seal)] : [];
+    return [cleanup(`Finanțele au completat după semnare: ${amended[1].trim()}.${seal ? ` ${seal}` : ""}`)];
   }
 
   const updated = trimmed.match(/^Updated fields:\s*(.*)$/i);

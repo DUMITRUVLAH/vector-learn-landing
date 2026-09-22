@@ -23,7 +23,9 @@ import {
   parEvents,
   parBudgetCodes,
   parMemberProfiles,
+  parAudit,
 } from "../../db/schema/par";
+import { amendedFieldLabels } from "./postSignatureEdit";
 import { users } from "../../db/schema/users";
 
 export interface ParFormLineItem {
@@ -85,6 +87,11 @@ export interface ParFormData {
   attachmentsNote: string | null;
   lineItems: ParFormLineItem[];
   signatures: ParFormSignature[];
+  /**
+   * Completările făcute de finanțe DUPĂ semnare. Hârtia arată valorile de ACUM; fără nota asta,
+   * cine o citește peste un an nu are cum să știe că linia de buget s-a schimbat după semnături.
+   */
+  financeAmendments?: Array<{ at: Date | string | null; byName: string | null; fields: string[] }>;
   payment: {
     parBl: string | null;
     receivedAt: Date | string | null;
@@ -107,7 +114,7 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return null;
 
-  const [items, approvals, paymentRows] = await Promise.all([
+  const [items, approvals, paymentRows, amendmentRows] = await Promise.all([
     db.select().from(parLineItems)
       .where(and(eq(parLineItems.parId, parId), eq(parLineItems.tenantId, tenantId)))
       .orderBy(asc(parLineItems.position)),
@@ -116,6 +123,18 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
       .orderBy(asc(parApprovals.step)),
     db.select().from(parPayments)
       .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId))),
+    db.select({
+      actorUserId: parAudit.actorUserId,
+      diff: parAudit.diff,
+      createdAt: parAudit.createdAt,
+    })
+      .from(parAudit)
+      .where(and(
+        eq(parAudit.parId, parId),
+        eq(parAudit.tenantId, tenantId),
+        eq(parAudit.event, "finance_amended"),
+      ))
+      .orderBy(asc(parAudit.createdAt)),
   ]);
   const payment = paymentRows[0] ?? null;
 
@@ -126,6 +145,7 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
         payment?.receivedByUserId ?? null,
         payment?.assignedToUserId ?? null,
         ...approvals.map((a) => a.approverUserId),
+        ...amendmentRows.map((r) => r.actorUserId),
       ].filter((v): v is string => !!v)
     ),
   ];
@@ -216,6 +236,11 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
         : a.signatureTitle ?? jobTitle(a.approverUserId) ?? a.approverRoleLabel ?? null,
       decision: a.decision,
       decidedAt: a.decidedAt,
+    })),
+    financeAmendments: amendmentRows.map((r) => ({
+      at: r.createdAt,
+      byName: userName(r.actorUserId),
+      fields: amendedFieldLabels(r.diff, "en"),
     })),
     payment: payment
       ? {
