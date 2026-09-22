@@ -51,7 +51,7 @@ import {
   type ParDepartment, type ParPayer, type ParProject, type ParEvent, type ParBudgetCode, type ParVendor,
   type ParPurpose, type ParChargeTo, type ParAttachmentKind,
   type RegistryCompany, type BudgetCodeBalance, type ParTemplate, type ParListRow,
-  type ParPrefillResult, type ParLineItemSuggestion, type ParAttachmentAnalysis,
+  type ParPrefillResult, type ParPrefillField, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
 import { VendorSignal } from "@/components/par/VendorSignal";
 import { cn } from "@/lib/utils";
@@ -252,6 +252,55 @@ function AttachmentAnalysisSummary({ analysis, currency }: { analysis: ParAttach
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * O valoare propusă de AI, editabilă CHIAR ACOLO.
+ *
+ * Panoul „Câmpuri propuse de AI" afișa valorile ca text static și trunchiat
+ * (`truncate max-w-xs`). Pentru „Utilizare finală" asta însemna că nu o puteai corecta:
+ * inputul ei stă la secțiunea 11, cu un ecran mai sus, deci locul unde vedeai greșeala
+ * era exact locul unde nu puteai interveni. Raportat de owner așa: „nu poți edita dacă
+ * AI greșește, trebuie să lași" (2026-09-22).
+ *
+ * Aici propunerea E inputul: scrie în aceeași stare ca secțiunea 11, deci o corectură
+ * făcută în panou e corectura din cerere. Eticheta din dreapta trece din „de verificat"
+ * în „corectat" de îndată ce valoarea diferă de ce a propus AI.
+ */
+function AiProposedField({ id, label, value, proposed, multiline, onChange }: {
+  id: string;
+  label: string;
+  value: string;
+  proposed: ParPrefillField;
+  multiline?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const corrected = String(proposed.value ?? "") !== value;
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
+      <label htmlFor={id} className="text-xs text-muted-foreground sm:w-20 sm:flex-shrink-0 sm:pt-3">
+        {label}
+      </label>
+      <div className="min-w-0 flex-1">
+        {multiline ? (
+          <textarea
+            id={id}
+            rows={3}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/45"
+          />
+        ) : (
+          <input id={id} type="text" value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} />
+        )}
+      </div>
+      {corrected ? (
+        <span className="text-[10px] text-success sm:flex-shrink-0 sm:pt-3.5">corectat</span>
+      ) : proposed.low_confidence ? (
+        <span className="text-[10px] text-warning sm:flex-shrink-0 sm:pt-3.5">⚠ de verificat</span>
+      ) : null}
+    </div>
   );
 }
 
@@ -2458,28 +2507,52 @@ export function ParCreateForm() {
                 </div>
               )}
 
-              {/* Per-field confidence indicators (only when a single payee was resolved) */}
+              {/*
+                Rezumatul a ce a extras AI. Valorile beneficiarului rămân text — inputurile lor
+                editabile sunt la câteva rânduri mai jos, în ACEEAȘI secțiune, iar dublarea lor aici
+                ar pune două câmpuri cu aceeași etichetă pe un singur ecran. Nu mai sunt însă
+                trunchiate: o valoare pe care n-o poți citi întreagă nu poate fi verificată.
+              */}
               {!aiPrefillResult.needsClarification && [
                 { label: "Beneficiar", field: aiPrefillResult.payeeName },
                 { label: "IDNO/IDNP", field: aiPrefillResult.payeeIdno },
                 { label: "IBAN", field: aiPrefillResult.payeeIban },
                 { label: "Bancă", field: aiPrefillResult.payeeBank },
                 { label: "Adresă", field: aiPrefillResult.payeeLegalAddress },
-                { label: "Scop", field: aiPrefillResult.endUse },
               ].map(({ label, field }) => (
                 field.value !== null && String(field.value) !== "" && (
                   <div key={label} className="flex items-baseline gap-2 text-xs">
                     <span className="text-muted-foreground w-16 flex-shrink-0">{label}:</span>
-                    <span className="text-foreground truncate max-w-xs">{String(field.value)}</span>
+                    <span className="text-foreground break-words min-w-0">{String(field.value)}</span>
                     {field.low_confidence && (
                       <span className="text-warning text-[10px] flex-shrink-0 ml-auto">⚠ de verificat</span>
                     )}
                   </div>
                 )
               ))}
+
+              {/*
+                „Utilizare finală" e singurul câmp propus al cărui input real stă în altă secțiune
+                (11), cu un ecran mai sus — deci practic nu era editabil: îl vedeai greșit aici și
+                nu aveai unde interveni („nu poți edita dacă AI greșește", owner, 2026-09-22).
+                Aici propunerea E inputul, legat de aceeași stare ca secțiunea 11.
+              */}
+              {!aiPrefillResult.needsClarification
+                && aiPrefillResult.endUse.value !== null
+                && String(aiPrefillResult.endUse.value) !== "" && (
+                <AiProposedField
+                  id="ai-end-use"
+                  label="Utilizare finală"
+                  value={endUse}
+                  multiline
+                  proposed={aiPrefillResult.endUse}
+                  onChange={(v) => { setEndUse(v); setFieldErrors((p) => ({ ...p, end_use: "" })); }}
+                />
+              )}
+
               {!aiPrefillResult.needsClarification && (
                 <p className="text-xs text-muted-foreground pt-1">
-                  Câmpurile de mai jos au fost completate. Verifică și corectează înainte de trimitere.
+                  Câmpurile s-au completat în formular. <strong className="font-medium text-foreground">Dacă AI a greșit ceva, corectează</strong> — utilizarea finală chiar aici, restul în câmpurile beneficiarului de mai jos.
                 </p>
               )}
             </div>

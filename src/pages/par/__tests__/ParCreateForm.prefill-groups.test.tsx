@@ -5,6 +5,9 @@
  *      alege cine primește plata (nu mai e nevoie să reîncarce documentul).
  *   3. Când partea aleasă are mai multe conturi, întrebăm în care cont se face plata.
  *   4. Dacă AI-ul nu a putut fi contactat, scrie DE CE — nu mai apare doar eticheta „(demo)".
+ *   5. Valoarea propusă pentru „Utilizare finală" se poate CORECTA chiar în panou (owner
+ *      2026-09-22: „nu poți edita dacă AI greșește, trebuie să lași") — înainte era text
+ *      static și trunchiat, iar inputul real stătea la secțiunea 11, cu un ecran mai sus.
  *
  * @vitest-environment jsdom
  */
@@ -155,6 +158,25 @@ describe("ParCreateForm — după încărcarea unui act", () => {
     const accounts = within(screen.getByRole("radiogroup", { name: /În ce cont se face plata/i }));
     fireEvent.click(accounts.getByRole("radio", { name: /MD35EX00000000123456789Z/i }));
     await waitFor(() => expect(ibanInput()).toHaveValue("MD35EX00000000123456789Z"));
+  });
+
+  it("[blocant] valoarea propusă pentru „Utilizare finală” se poate corecta în panou", async () => {
+    vi.spyOn(parApi, "prefillParFromDocument").mockResolvedValue(
+      prefillResult({ endUse: field("Furnizare placaj 4mm în cantitate totală de 33 000 foi") }),
+    );
+    await uploadDocument();
+
+    await screen.findByText(/Câmpuri propuse de AI/i);
+    // Propunerea e un INPUT, nu text: se vede întreagă și se poate scrie în ea.
+    const proposed = screen.getByLabelText(/Utilizare finală/i) as HTMLTextAreaElement;
+    expect(proposed).toHaveValue("Furnizare placaj 4mm în cantitate totală de 33 000 foi");
+
+    // Corectura din panou ajunge în câmpul cererii (secțiunea 11), nu doar pe ecran.
+    fireEvent.change(proposed, { target: { value: "Furnizare placaj 4mm — 20 foi" } });
+    await waitFor(() =>
+      expect(document.getElementById("endUse")).toHaveValue("Furnizare placaj 4mm — 20 foi"),
+    );
+    expect(screen.getByText(/^corectat$/i)).toBeInTheDocument();
   });
 
   it("[blocant] spune DE CE nu a mers AI-ul, în loc de eticheta „(demo)”", async () => {
