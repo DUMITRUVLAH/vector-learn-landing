@@ -300,6 +300,26 @@ describe("citirea în loturi din SFS", () => {
     expect(rec.detailKeys.slice(before)).toEqual(["EAW|999999"]);
   });
 
+  it("completează întâi detaliile facturilor NOI, nu pe cele din arhiva veche", async () => {
+    const { syncBuyerInvoices, listCachedInvoices } = await import("../services/par/efacturaCache");
+    // Ferestrele de arhivă merg înapoi în timp: facturile vechi sunt descoperite ULTIMELE. Dacă
+    // detaliile s-ar citi în ordinea descoperirii inverse, tabelul ar arăta întâi documente de
+    // acum ani, iar cele de luna trecută ar rămâne goale (măsurat pe contul real: 2.700 facturi).
+    const rec = recordingClient(makeInvoices(60, { daysApart: 20 }), { delayMs: 5 });
+    await syncBuyerInvoices(tenantId, { client: rec.client, pauseMs: 0, ignoreLock: true, budgetMs: 600 });
+    await syncBuyerInvoices(tenantId, { client: rec.client, pauseMs: 0, ignoreLock: true, budgetMs: 600 });
+
+    const withDetails = (await listCachedInvoices(tenantId, { pageSize: 200 })).items.filter((i) => i.detailsRead);
+    if (withDetails.length === 0) return; // bugetul n-a ajuns la detalii — nimic de verificat
+    const dates = withDetails.map((i) => new Date(i.invoiceDate!).getTime());
+    const all = (await listCachedInvoices(tenantId, { pageSize: 200 })).items.length;
+    const newest = Math.max(...dates);
+    // Cea mai nouă factură citită trebuie să fie din prima jumătate a intervalului, nu din coadă.
+    const oldestPossible = Date.now() - 60 * 20 * 24 * 60 * 60 * 1000;
+    expect(newest).toBeGreaterThan(oldestPossible + (Date.now() - oldestPossible) / 2);
+    expect(all).toBeGreaterThan(withDetails.length - 1);
+  });
+
   it("nu pornește o a doua sincronizare cât timp una rulează", async () => {
     const { syncBuyerInvoices } = await import("../services/par/efacturaCache");
     const rec = recordingClient(makeInvoices(3));

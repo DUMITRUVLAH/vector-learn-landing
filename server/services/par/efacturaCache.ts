@@ -559,15 +559,23 @@ export async function syncBuyerInvoices(
 
     // 2. Arhiva. Cât timp istoricul nu e recuperat, mergem înapoi fereastră cu fereastră; după
     //    aceea cerem doar ultimele săptămâni — acolo apar facturile noi.
+    //
+    // Bugetul se împarte: dacă există deja facturi fără detalii, săpatul în trecut primește doar
+    // jumătate din lot. Altfel, pe un cont mare (2.700+ facturi, măsurat pe prod) recuperarea
+    // istoricului ar consuma fiecare lot, iar tabelul ar rămâne minute în șir cu rânduri fără
+    // furnizor, dată și sumă — adică inutil exact cât timp omul se uită la el.
+    const { total: knownBefore, detailed: detailedBefore } = await countInvoices(tenantId);
+    const archiveDeadline =
+      knownBefore - detailedBefore > 0 ? Math.min(deadline, Date.now() + (options.budgetMs ?? SYNC_BUDGET_MS) / 2) : deadline;
     const floor = new Date(now.getTime() - ARCHIVE_HISTORY_YEARS * 365 * DAY_MS);
     if (!state.archiveDoneAt) {
       let cursor = state.archiveCursorTo ?? now;
       const maxWindows = options.maxArchiveWindows ?? Number.POSITIVE_INFINITY;
       let windows = 0;
-      while (Date.now() < deadline && cursor > floor && windows < maxWindows) {
+      while (Date.now() < archiveDeadline && cursor > floor && windows < maxWindows) {
         windows++;
         const from = new Date(Math.max(cursor.getTime() - ARCHIVE_WINDOW_DAYS * DAY_MS, floor.getTime()));
-        const win = await fetchArchiveWindow(client, requestId, from, cursor, deadline, pauseMs);
+        const win = await fetchArchiveWindow(client, requestId, from, cursor, archiveDeadline, pauseMs);
         errors.push(...win.errors);
         if (!win.ok) break; // SFS a refuzat: nu mutăm cursorul, reluăm fereastra data viitoare.
         anyCallOk = true;
@@ -578,9 +586,9 @@ export async function syncBuyerInvoices(
       if (cursor <= floor) {
         await patchState(tenantId, { archiveDoneAt: now, archiveCursorTo: cursor });
       }
-    } else if (headsStale && Date.now() < deadline) {
+    } else if (headsStale && Date.now() < archiveDeadline) {
       const from = new Date(now.getTime() - RECENT_WINDOW_DAYS * DAY_MS);
-      const win = await fetchArchiveWindow(client, requestId, from, now, deadline, pauseMs);
+      const win = await fetchArchiveWindow(client, requestId, from, now, archiveDeadline, pauseMs);
       errors.push(...win.errors);
       if (win.ok) {
         anyCallOk = true;
@@ -613,7 +621,10 @@ export async function syncBuyerInvoices(
         })
         .from(parSfsInvoices)
         .where(and(eq(parSfsInvoices.tenantId, tenantId), isNull(parSfsInvoices.detailsFetchedAt)))
-        .orderBy(desc(parSfsInvoices.firstSeenAt), desc(parSfsInvoices.number))
+        // Recuperarea arhivei merge înapoi în timp, deci rândurile descoperite PRIMELE sunt
+        // facturile cele mai noi — exact cele de care are nevoie omul întâi. Ordinea inversă ar
+        // completa mai întâi documentele de acum cinci ani.
+        .orderBy(asc(parSfsInvoices.firstSeenAt), desc(parSfsInvoices.number))
         .limit(DETAIL_CHUNK);
       if (pending.length === 0) break;
 
