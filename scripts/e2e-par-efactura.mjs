@@ -8,7 +8,9 @@
  *   3. scanarea fără credențiale SFS spune „nu am putut verifica", nu „lipsește";
  *   4. reminderul chiar pleacă spre SOLICITANTUL cererii, iar al doilea e refuzat (429);
  *   5. marcarea manuală scoate cererea din coadă;
- *   6. pagina /business/par/efactura și cardul din pagina cererii chiar se randează în browser.
+ *   6. rutele de citire în loturi (progres, un lot, filtre) ajung la handlerele lor — nu la garda
+ *      de UUID a routerului /api/par, care ar da 404 „unknown_id" abia în producție;
+ *   7. pagina /business/par/efactura și cardul din pagina cererii chiar se randează în browser.
  *
  * Rulare (seed proaspăt + dist construit):
  *   npm run db:reset && npm run db:seed && npx vite build
@@ -175,7 +177,41 @@ await T("tabul cu toate e-Facturile răspunde și explică lipsa credențialelor
   must(r.status === 200, `lista de facturi a răspuns ${r.status}`);
   must(r.json.available === false, "lista se declară disponibilă deși SFS nu e configurat");
   must(Array.isArray(r.json.invoices) && r.json.invoices.length === 0, "lista ar trebui să fie goală");
+  must(r.json.sync && typeof r.json.sync.total === "number", "lipsește starea sincronizării");
   return r.json.message;
+});
+
+// ── Citirea în loturi: rutele noi trebuie să ajungă la handlerele LOR ────────
+// De ce pe aplicația întreagă: routerul `/api/par` are o gardă de UUID pe `/:id/:action/*`, iar o
+// rută nouă cu trei segmente care nu e înregistrată corect NU dă 404 evident în testele pe router
+// izolat — dă 404 „unknown_id" abia în producție, autentificat. Verificarea de aici prinde exact
+// acest caz.
+await T("starea sincronizării e servită de ruta ei, nu de garda de UUID", async () => {
+  const r = await GET("finance", "/api/par/efactura/invoices/sync");
+  must(r.status === 200, `progresul a răspuns ${r.status} (${r.json?.reason ?? ""})`);
+  must(r.json?.reason !== "unknown_id", "ruta a fost interceptată de garda de UUID a /api/par");
+  must(r.json.progress && typeof r.json.progress.pending === "number", "progresul nu are forma așteptată");
+  return `total ${r.json.progress.total}, de citit ${r.json.progress.pending}`;
+});
+
+await T("un lot de sincronizare chiar se execută (fără SFS: spune că nu poate citi)", async () => {
+  const r = await POST("finance", "/api/par/efactura/invoices/sync");
+  must(r.status === 200, `sincronizarea a răspuns ${r.status} (${r.json?.reason ?? ""})`);
+  must(r.json?.reason !== "unknown_id", "ruta a fost interceptată de garda de UUID a /api/par");
+  must(r.json.available === false, "fără credențiale SFS lotul nu are ce citi, dar s-a declarat disponibil");
+  must(r.json.progress && r.json.progress.total === 0, "nu trebuie să apară facturi din neant");
+  return r.json.message;
+});
+
+await T("filtrele de perioadă, furnizor și sortare sunt acceptate de listă", async () => {
+  const r = await GET(
+    "finance",
+    "/api/par/efactura/invoices?from=2026-01-01&to=2026-12-31&supplier=1002600001234&sort=amount_desc&page=1&pageSize=10"
+  );
+  must(r.status === 200, `lista filtrată a răspuns ${r.status}`);
+  must(r.json.page === 1 && r.json.pageSize === 10, "paginarea nu s-a aplicat");
+  must(Array.isArray(r.json.suppliers), "lipsește lista de furnizori pentru filtru");
+  return `total ${r.json.total}`;
 });
 
 // ── Partea de browser: paginile chiar se randează ────────────────────────────
@@ -206,7 +242,10 @@ await T("tabul „Toate e-Facturile” se deschide în browser", async () => {
   await page.click('[role="tab"]:has-text("Toate e-Facturile")');
   await page.waitForTimeout(1500);
   const body = await page.textContent("body");
-  must(/Nu putem citi facturile din SFS|facturi primite/i.test(body ?? ""), "tabul nu a afișat nici listă, nici explicație");
+  must(
+    /Nu putem spune ce facturi există|Nicio factură citită încă|facturi salvate local|facturi primite/i.test(body ?? ""),
+    "tabul nu a afișat nici listă, nici explicație"
+  );
   must(consoleErrors.length === 0, `erori JS: ${consoleErrors.join(" | ")}`);
 });
 
