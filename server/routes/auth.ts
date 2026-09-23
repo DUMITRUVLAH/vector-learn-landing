@@ -1173,6 +1173,13 @@ authRoutes.get("/google/callback", async (c) => {
     userId: user.id, tenantId: user.tenantId,
   });
 
+  // An invite for THIS workspace is a PAR invite: land in PAR, not FinDesk. An invitee who holds
+  // only a PAR role has no FinDesk access, so /business/fin/ left them on a dead end right after a
+  // successful accept — they went back to the email link, which by then was consumed and read as
+  // "Invitație invalidă" (ATIC, 2026-09-23).
+  if (resolvedInvite && user.tenantId === resolvedInvite.tenantId) {
+    return c.redirect(`${appUrl()}/#/business/par`);
+  }
   return c.redirect(`${appUrl()}/#/business/fin/`);
 });
 

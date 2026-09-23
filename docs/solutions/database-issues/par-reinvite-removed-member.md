@@ -9,3 +9,13 @@
 **Regula:** când o verificare de tip „există deja" se uită la o tabelă de conturi, întreabă-te dacă ștergerea din UI chiar șterge din tabela aceea. Dacă e ștergere logică sau parțială, verificarea trebuie să urmeze aceeași definiție de „membru" ca ecranul.
 
 **Test:** `server/__tests__/invite-redemption-integration.test.ts` → „re-invite a member removed from PAR".
+
+## Continuare: după acceptarea cu Google apare „Invitație invalidă"
+
+**Simptom:** invitatul acceptă cu Google (rolul se acordă, logarea reușește), dar apoi vede „Invitație invalidă".
+
+**Cauza:** callback-ul Google trimitea un cont existent din același workspace la `/business/fin/`. Doar ramura de cont nou mergea în PAR. Un solicitant PAR nu are acces în FinDesk, așa că ajungea într-un punct mort, se întorcea la linkul din email, deja folosit, și primea eroarea.
+
+**Fix:** callback-ul duce în `/business/par` orice logare care a venit cu o invitație validă pentru același workspace. Pagina de invitație, când linkul e deja folosit, verifică sesiunea: cine e conectat vede „Invitație acceptată" și butonul „Intră în PAR", iar cine nu e conectat are butonul „Intră în cont".
+
+**Regula:** un link de o singură folosință va fi deschis din nou (emailul rămâne în inbox, iar butonul Back duce înapoi la el). Starea „deja folosit" trebuie să ducă omul mai departe, nu să arate doar o eroare.

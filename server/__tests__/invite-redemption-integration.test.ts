@@ -75,6 +75,15 @@ vi.mock("../auth/password", () => ({
   }),
 }));
 
+// Google OAuth: keep the real module, stub only the network calls so the callback can be driven.
+const googleProfile = { sub: "g-sub-default", email: "nobody@example.com", emailVerified: true, name: "G", picture: null as string | null };
+vi.mock("../auth/google", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../auth/google")>()),
+  getGoogleConfig: () => ({ clientId: "cid", clientSecret: "secret", redirectUri: "http://localhost/api/auth/google/callback" }),
+  exchangeCode: vi.fn(async () => ({ access_token: "at" })),
+  fetchUserInfo: vi.fn(async () => ({ ...googleProfile })),
+}));
+
 // Import authRoutes AFTER the mocks above are registered.
 import { authRoutes, rehomeGoogleUserToInvite } from "../routes/auth";
 import { parInvitesRoutes } from "../routes/parInvites";
@@ -610,5 +619,33 @@ describe("re-invite a member removed from PAR", () => {
     const res = await postInvite("member@ong-vector-test.io", payer.id);
     expect(res.status).toBe(409);
     expect(((await res.json()) as { error: string }).error).toBe("already_member");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google accept by an account that already exists in the inviting workspace must land in PAR.
+// It used to fall through to /business/fin/ — a dead end for a PAR-only invitee, who then went
+// back to the (now consumed) email link and saw "Invitație invalidă" (ATIC, 2026-09-23).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("Google accept by an existing same-tenant account", () => {
+  it("consumes the invite, grants the role and redirects to /business/par", async () => {
+    const [existing] = await testDb.insert(users).values({
+      tenantId, email: "gexisting@ong-vector-test.io", passwordHash: null, name: "G Existing",
+      role: "teacher", googleId: "g-sub-existing", authProvider: "google",
+    }).returning();
+    const { token, id } = await createInvite({ email: "gexisting@ong-vector-test.io", parRole: "requestor" });
+    Object.assign(googleProfile, { sub: "g-sub-existing", email: "gexisting@ong-vector-test.io" });
+
+    const res = await app.request("/api/auth/google/callback?code=c&state=s", {
+      headers: { Cookie: `vl_g_state=s; vl_g_verifier=v; vl_g_invite=${token}` },
+    });
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toMatch(/#\/business\/par$/);
+    const invite = await testDb.query.parInvites.findFirst({ where: eq(parInvites.id, id) });
+    expect(invite?.acceptedAt).not.toBeNull();
+    const roles = await testDb.select().from(parMembers)
+      .where(and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, existing.id)));
+    expect(roles.map((r) => r.role)).toEqual(["requestor"]);
   });
 });

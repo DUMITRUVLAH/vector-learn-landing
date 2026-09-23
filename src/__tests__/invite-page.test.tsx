@@ -262,3 +262,29 @@ describe("InvitePage", () => {
     });
   });
 });
+
+// A consumed link is re-opened all the time (email stays in the inbox, Back button). If the visitor
+// is signed in, the invite worked — don't greet them with an error and no way forward.
+describe("InvitePage — link already used", () => {
+  it("signed-in visitor sees 'Invitație acceptată' with a way into PAR", async () => {
+    mockGetInviteInfo.mockRejectedValueOnce(new ApiError(404, "invite_not_found", "Invite not found"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ user: { id: "u" }, tenant: { id: "t" } }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    })));
+    render(<InvitePage />);
+    await waitFor(() => expect(screen.getByText("Invitație acceptată")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Intră în PAR/ })).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("signed-out visitor still sees the invalid message plus a login button", async () => {
+    mockGetInviteInfo.mockRejectedValueOnce(new ApiError(404, "invite_not_found", "Invite not found"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "unauthenticated" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    })));
+    render(<InvitePage />);
+    await waitFor(() => expect(screen.getByText("Invitație invalidă")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Intră în cont/ })).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+});

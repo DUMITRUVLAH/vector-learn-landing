@@ -14,7 +14,7 @@ import { Loader2, Mail, KeyRound, LogIn } from "lucide-react";
 import { AuthLayout } from "@/components/app/AuthLayout";
 import { useRouter } from "@/router/HashRouter";
 import { getInviteInfo, acceptInvite, type InviteInfo } from "@/lib/api/par";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
 /** Human-readable labels for PAR roles (Romanian) */
 const PAR_ROLE_LABELS: Record<string, string> = {
@@ -43,6 +43,14 @@ export function InvitePage() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  // A used invite link is normal: the email stays in the inbox and the browser keeps it in history.
+  // If the visitor is already signed in, the invite most likely worked — say so and let them in.
+  const [signedIn, setSignedIn] = useState(false);
+
+  useEffect(() => {
+    if (pageState !== "invalid") return;
+    api("/api/business/auth/me").then(() => setSignedIn(true), () => setSignedIn(false));
+  }, [pageState]);
 
   useEffect(() => {
     if (!token) {
@@ -119,6 +127,24 @@ export function InvitePage() {
   }
 
   // ── Invalid / not found ───────────────────────────────────────────────────────
+  if (pageState === "invalid" && signedIn) {
+    return (
+      <AuthLayout title="Invitație acceptată" subtitle="Ești deja conectat(ă) în organizație.">
+        <p className="mb-4 text-sm text-muted-foreground">
+          Linkul a fost deja folosit, deci invitația a funcționat. Poți intra direct.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate("/business/par")}
+          className="touch-target flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <LogIn className="h-4 w-4" aria-hidden="true" />
+          Intră în PAR
+        </button>
+      </AuthLayout>
+    );
+  }
+
   if (pageState === "invalid") {
     return (
       <AuthLayout title="Invitație invalidă" subtitle="Linkul de invitație nu este recunoscut.">
@@ -126,9 +152,17 @@ export function InvitePage() {
           role="alert"
           className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive"
         >
-          Invitația nu a fost găsită sau a fost deja folosită. Dacă credeți că este o eroare,
-          contactați administratorul organizației.
+          Invitația nu a fost găsită sau a fost deja folosită. Dacă ai acceptat-o deja, intră în
+          cont. Altfel, cere o invitație nouă administratorului organizației.
         </div>
+        <button
+          type="button"
+          onClick={() => navigate("/business/login")}
+          className="touch-target mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+        >
+          <LogIn className="h-4 w-4" aria-hidden="true" />
+          Intră în cont
+        </button>
       </AuthLayout>
     );
   }
