@@ -12,7 +12,7 @@ import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
   Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
   ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe, AlertTriangle,
-  IdCard, Landmark, ScrollText, CalendarClock, Copy, FilePlus2, Eye,
+  IdCard, Landmark, ScrollText, CalendarClock, CalendarCheck, Copy, FilePlus2, Eye,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -31,7 +31,8 @@ import type { ParPayeeCandidate, ParPayeeOption } from "@/lib/par/parCandidateTy
 import { openParAttachmentViewer, parFormViewerTarget } from "@/lib/par/attachmentViewerBus";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
-import { PAR_FIELD_MESSAGES } from "@/lib/par/submitErrors";
+import { PAR_FIELD_MESSAGES, describeParWriteError } from "@/lib/par/submitErrors";
+import { reportClientError } from "@/lib/telemetry";
 import {
   createPar, getPar, updatePar, submitPar,
   addLineItem, deleteLineItem, updateAttachmentKind,
@@ -55,7 +56,7 @@ import {
   type ParPrefillResult, type ParPrefillField, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
 import { VendorSignal } from "@/components/par/VendorSignal";
-import { PatentFileRow, PatentFileUploading } from "@/components/par/PatentFileRow";
+import { PatentFileFailed, PatentFileRow, PatentFileUploading } from "@/components/par/PatentFileRow";
 import { cn } from "@/lib/utils";
 import { Card, Combobox, DateField, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
 import {
@@ -605,6 +606,16 @@ export function ParCreateForm() {
   /** Ce s-a citit din patentă / de ce nu s-a salvat copia — lângă câmpurile patentei, nu mai sus. */
   const [patentNote, setPatentNote] = useState<string | null>(null);
   const [patentError, setPatentError] = useState<string | null>(null);
+  /** Ultimul fișier de patentă care NU s-a salvat — „Reîncearcă" îl urcă din nou. */
+  const lastPatentFile = useRef<File | null>(null);
+  /**
+   * Rândul despre TERMEN. Când e valabilă scrie „Termenul patentei: …" (nu „Patentă valabilă"),
+   * ca să nu fie citit drept confirmarea că fișierul s-a salvat — confuzia din 23.09.2026.
+   */
+  const patentTermMessage =
+    patentCheck.status === "valid" && payeePatentValidUntil
+      ? `Termenul patentei: valabilă până la ${formatPatentDate(payeePatentValidUntil)}.`
+      : patentCheck.message;
   /** Încărcarea actelor personale ale beneficiarului (buletin / rechizite / patentă). */
   const [payeeDocBusy, setPayeeDocBusy] = useState<"buletin" | "rechizite" | "patenta" | null>(null);
   const [payeeDocNote, setPayeeDocNote] = useState<string | null>(null);
@@ -887,26 +898,76 @@ export function ParCreateForm() {
       payeePatentValidUntil, payeePatentFile, attachmentsPresent, attachmentsNote, currency,
       isUrgent, urgentReason, urgentReasonNote, urgentDueDate]);
 
+  /**
+   * Ciorna pe server, creată la prima acțiune care are nevoie de ea (un fișier, un articol, o
+   * salvare).
+   *
+   * Un antet pe care serverul îl refuză NU are voie să blocheze un fișier. Incidentul din
+   * 23.09.2026: omul a încărcat patenta, crearea ciornei a primit 400 pentru antet, iar patenta a
+   * ieșit „NU s-a salvat" — fără legătură cu fișierul ales. Acum, dacă antetul complet e refuzat,
+   * ciorna se creează cu antetul minim (plătitorul implicit, departamentul din profil), iar
+   * problemele antetului apar la salvare/trimitere, cu mesajul lângă câmpul lor — acolo unde
+   * `saveDraft`/`submit` rescriu oricum antetul.
+   *
+   * Refuzul se raportează în telemetrie: altfel un 400 al ciornei rămânea invizibil.
+   */
+  const draftCreation = useRef<Promise<string> | null>(null);
+  const createdDraftId = useRef<string | null>(null);
   const ensureDraft = useCallback(async (): Promise<string> => {
-    if (parId) return parId;
-    const created = await createPar({
-      date_of_request: new Date(dateOfRequest).toISOString(),
-      requestor_title: requestorTitle || null,
-      requestor_code: requestorCode || null,
-      department_id: departmentId || null,
-      payer_id: payerId || null,
-      date_needed: dateNeeded ? new Date(dateNeeded).toISOString() : null,
-      project_id: projectId || null,
-      event_id: eventId || null,
-      budget_code_id: budgetCodeId || null,
-      budget_code_note: budgetCodeNote || null,
-      purpose,
-      charge_to: chargeTo,
-    });
-    setParId(created.id);
-    setPar(created);
-    await patchHeader(created.id);
-    return created.id;
+    const known = parId ?? createdDraftId.current;
+    if (known) return known;
+    // Două acțiuni în același moment (patenta + un document) aștept aceeași ciornă, nu fac două.
+    if (draftCreation.current) return draftCreation.current;
+    const reportRejected = (err: unknown, step: string) => {
+      reportClientError({
+        kind: "client_api_error",
+        message: `Ciorna PAR: ${step} refuzat — ${err instanceof ApiError ? `${err.code}${err.details.length ? ` (${err.details.map((d) => d.field).join(", ")})` : ""}` : err instanceof Error ? err.message : String(err)}`,
+        statusCode: err instanceof ApiError ? err.status : undefined,
+        method: "POST",
+      });
+    };
+    const creation = (async () => {
+      let created: ParRequest;
+      try {
+        created = await createPar({
+          date_of_request: new Date(dateOfRequest).toISOString(),
+          requestor_title: requestorTitle || null,
+          requestor_code: requestorCode || null,
+          department_id: departmentId || null,
+          payer_id: payerId || null,
+          date_needed: dateNeeded ? new Date(dateNeeded).toISOString() : null,
+          project_id: projectId || null,
+          event_id: eventId || null,
+          budget_code_id: budgetCodeId || null,
+          budget_code_note: budgetCodeNote || null,
+          purpose,
+          charge_to: chargeTo,
+        });
+      } catch (err) {
+        // Rețea căzută / server picat: antetul minim ar pica la fel — spunem adevărul.
+        const headerRejected =
+          err instanceof RangeError || (err instanceof ApiError && err.status >= 400 && err.status < 500);
+        if (!headerRejected) throw err;
+        reportRejected(err, "antetul");
+        created = await createPar({ purpose, charge_to: chargeTo });
+      }
+      createdDraftId.current = created.id;
+      setParId(created.id);
+      setPar(created);
+      try {
+        await patchHeader(created.id);
+      } catch (err) {
+        // Ciorna există; antetul se reîncearcă la salvare, unde eroarea are câmpul ei.
+        reportRejected(err, "antetul (PATCH)");
+      }
+      return created.id;
+    })();
+    draftCreation.current = creation;
+    try {
+      return await creation;
+    } finally {
+      draftCreation.current = null;
+    }
   }, [parId, dateOfRequest, requestorTitle, requestorCode, departmentId, payerId, dateNeeded,
     projectId, eventId, budgetCodeId, budgetCodeNote, purpose, chargeTo, patchHeader]);
 
@@ -1023,6 +1084,9 @@ export function ParCreateForm() {
       setPatentError("Copia patentei se păstrează doar ca PDF sau imagine (JPG, PNG, HEIC) — fișierul ăsta nu a fost salvat.");
       return;
     }
+    // Ținut pentru „Reîncearcă": omul nu trebuie să caute din nou fișierul pe disc.
+    lastPatentFile.current = file;
+    setPatentError(null);
     setPatentUploadStep("reading");
     try {
       const id = await ensureDraft();
@@ -1033,9 +1097,16 @@ export function ParCreateForm() {
         uploadedAt: info.payeePatentFileUploadedAt,
         source: "request",
       });
+      lastPatentFile.current = null;
     } catch (err) {
-      const detail = err instanceof ApiError && typeof err.body.detail === "string" ? err.body.detail : null;
-      setPatentError(`Patenta NU s-a salvat${detail ? `: ${detail}` : ""} — încearcă din nou.`);
+      // Motivul real, nu un „încearcă din nou" orb: dacă problema nu e fișierul, a doua încercare
+      // ar pica la fel, iar omul n-ar ști ce să schimbe.
+      setPatentError(describeParWriteError(err) ?? (err instanceof Error ? err.message : "Eroare necunoscută."));
+      reportClientError({
+        kind: "client_api_error",
+        message: `Copia patentei nu s-a salvat — ${err instanceof ApiError ? err.code : err instanceof Error ? err.message : String(err)}`,
+        statusCode: err instanceof ApiError ? err.status : undefined,
+      });
     } finally {
       setPatentUploadStep(null);
     }
@@ -1105,6 +1176,12 @@ export function ParCreateForm() {
       setPayeeDocBusy(null);
     }
     await storing;
+  };
+
+  /** „Reîncearcă" din rândul roșu: același fișier, fără să-l mai caute omul pe disc. */
+  const retryPatentCopy = async () => {
+    const file = lastPatentFile.current;
+    if (file) await storePatentCopy(file);
   };
 
   /** Deschide copia patentei în vizualizatorul din aplicație — cea de pe cerere sau cea din registru. */
@@ -1794,7 +1871,7 @@ export function ParCreateForm() {
       setError(fieldsMessage);
       return;
     }
-    setError(e instanceof Error ? e.message : fallback);
+    setError(describeParWriteError(e) ?? (e instanceof Error ? e.message : fallback));
   };
 
   /**
@@ -3092,36 +3169,9 @@ export function ParCreateForm() {
                           </button>
                         </div>
                       </div>
-                      {/* Confirmarea încărcării — ca la documentele atașate: rândul există doar
-                          după ce serverul a păstrat fișierul, și se deschide de aici. */}
-                      {patentUploadStep ? (
-                        <PatentFileUploading step={patentUploadStep} />
-                      ) : payeePatentFile ? (
-                        <PatentFileRow
-                          fileName={payeePatentFile.fileName}
-                          sizeBytes={payeePatentFile.sizeBytes}
-                          uploadedAt={payeePatentFile.uploadedAt}
-                          origin={payeePatentFile.source}
-                          expired={patentCheck.status === "expired"}
-                          onOpen={openPatentCopy}
-                          onRemove={() => { setPayeePatentFile(null); setPatentNote(null); }}
-                        />
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Nicio copie a patentei încărcată.</p>
-                      )}
-                      {patentNote && (
-                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground" role="status">
-                          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                          <span>{patentNote}</span>
-                        </p>
-                      )}
-                      {patentError && (
-                        <p className="flex items-start gap-1.5 text-xs text-destructive" role="alert">
-                          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                          <span>{patentError}</span>
-                        </p>
-                      )}
-                      {patentCheck.message && (
+                      {/* Termenul întâi, lângă câmpul lui: e despre DATĂ, nu despre fișier. Scris
+                          „Termenul patentei: …", ca să nu se citească drept „patenta s-a salvat". */}
+                      {patentTermMessage && (
                         <p
                           role={patentCheck.status === "expired" ? "alert" : "status"}
                           className={cn(
@@ -3136,11 +3186,46 @@ export function ParCreateForm() {
                           {patentCheck.status === "expired" ? (
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
                           ) : patentCheck.status === "valid" ? (
-                            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+                            <CalendarCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
                           ) : (
                             <CalendarClock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
                           )}
-                          <span>{patentCheck.message}</span>
+                          <span>{patentTermMessage}</span>
+                        </p>
+                      )}
+                      {/* Starea COPIEI, într-un singur loc: se încarcă / e salvată / NU s-a salvat /
+                          lipsește. Bifa există doar după ce serverul a păstrat fișierul. */}
+                      {patentUploadStep ? (
+                        <PatentFileUploading step={patentUploadStep} />
+                      ) : (
+                        <>
+                          {payeePatentFile && (
+                            <PatentFileRow
+                              fileName={payeePatentFile.fileName}
+                              sizeBytes={payeePatentFile.sizeBytes}
+                              uploadedAt={payeePatentFile.uploadedAt}
+                              origin={payeePatentFile.source}
+                              expired={patentCheck.status === "expired"}
+                              onOpen={openPatentCopy}
+                              onRemove={() => { setPayeePatentFile(null); setPatentNote(null); setPatentError(null); }}
+                            />
+                          )}
+                          {patentError && (
+                            <PatentFileFailed
+                              reason={patentError}
+                              keptPrevious={!!payeePatentFile}
+                              onRetry={lastPatentFile.current ? () => { void retryPatentCopy(); } : undefined}
+                            />
+                          )}
+                          {!payeePatentFile && !patentError && (
+                            <p className="text-xs text-muted-foreground">Nicio copie a patentei încărcată.</p>
+                          )}
+                        </>
+                      )}
+                      {patentNote && (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground" role="status">
+                          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                          <span>{patentNote}</span>
                         </p>
                       )}
                     </>

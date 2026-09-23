@@ -46,3 +46,40 @@ export function describeParSubmitError(e: unknown): ParSubmitErrorSummary | null
     reasons: e.details.map((d) => parFieldMessage(d.field, d.message)),
   };
 }
+
+/**
+ * Codurile cu care serverul refuză antetul unei cereri (plătitor/proiect/cod bugetar/date), în
+ * română. Fără ele, ecranul arăta „payer_not_found" sau — mai rău — un generic „NU s-a salvat",
+ * iar omul nu avea de unde ști că problema e la plătitor, nu la fișierul pe care tocmai l-a ales
+ * (patenta, 23.09.2026).
+ */
+export const PAR_SCOPE_ERROR_MESSAGES: Record<string, string> = {
+  payer_not_found: "Plătitorul ales nu mai e activ — alege altul la „Plătitor / Organizație”.",
+  project_not_found: "Proiectul ales nu mai e activ — alege altul la „Proiect / Program”.",
+  project_not_in_payer: "Proiectul ales nu aparține plătitorului — verifică „Plătitor” și „Proiect”.",
+  event_not_found: "Evenimentul ales nu mai e activ — alege altul.",
+  event_not_in_project: "Evenimentul ales nu aparține proiectului.",
+  budget_code_not_found: "Codul bugetar ales nu mai e activ — alege altul.",
+  budget_code_not_in_payer: "Codul bugetar nu aparține plătitorului ales.",
+  budget_code_not_in_project: "Codul bugetar nu aparține proiectului ales.",
+  department_not_found: "Departamentul ales nu mai există — alege altul.",
+  forbidden_payer: "Nu ai acces la plătitorul ales.",
+  forbidden_project: "Nu ai acces la proiectul ales.",
+  module_disabled: "Modulul PAR nu e activ pentru plătitorul ales.",
+  "date_needed must be >= date_of_request": "„Data necesară” e înaintea datei cererii.",
+};
+
+/**
+ * O eroare de scriere a cererii, spusă omenește: detaliul serverului, câmpurile refuzate sau codul
+ * tradus. Întoarce null când nu e o eroare a API-ului (apelantul își pune textul lui).
+ */
+export function describeParWriteError(e: unknown): string | null {
+  if (!(e instanceof ApiError)) return null;
+  if (typeof e.body.detail === "string" && e.body.detail.trim()) return e.body.detail;
+  if (e.details.length) return e.details.map((d) => parFieldMessage(d.field, d.message)).join(" ");
+  if (PAR_SCOPE_ERROR_MESSAGES[e.code]) return PAR_SCOPE_ERROR_MESSAGES[e.code];
+  // `network_error` / `request_timeout` vin cu mesajul lor deja în română.
+  if (e.message && e.message !== e.code) return e.message;
+  return null;
+}
+

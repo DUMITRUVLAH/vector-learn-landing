@@ -6,7 +6,7 @@
  * există doar când fișierul chiar e salvat pe server, iar cât timp urcă, locul lui îl ține rândul
  * „Se încarcă…" — omul nu rămâne niciodată fără un semn că s-a întâmplat ceva.
  */
-import { AlertTriangle, CheckCircle2, Eye, Loader2, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Eye, Loader2, RotateCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface PatentFileRowProps {
@@ -118,3 +118,42 @@ export function PatentFileUploading({ step }: PatentFileUploadingProps) {
     </div>
   );
 }
+
+export interface PatentFileFailedProps {
+  /** Motivul, spus omenește — de la server sau tradus din cod. */
+  reason: string;
+  /** Există o copie salvată mai devreme, care rămâne (a eșuat doar înlocuirea). */
+  keptPrevious?: boolean;
+  /** Urcă din nou ACELAȘI fișier, fără să-l mai caute omul pe disc. */
+  onRetry?: () => void;
+}
+
+/**
+ * Copia NU s-a salvat — în același loc în care ar fi stat bifa, ca să nu apară două stări care
+ * se contrazic pe ecran („NU s-a salvat" undeva jos, în timp ce restul blocului arăta verde;
+ * owner, 23.09.2026).
+ */
+export function PatentFileFailed({ reason, keptPrevious = false, onRetry }: PatentFileFailedProps) {
+  return (
+    <div role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2">
+      <AlertCircle className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-foreground">
+          {keptPrevious ? "Patenta nouă NU s-a salvat — rămâne copia de mai sus" : "Copia patentei NU s-a salvat"}
+        </span>
+        <span className="block text-xs text-muted-foreground">{reason}</span>
+      </span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
+        >
+          <RotateCw className="h-4 w-4" aria-hidden />
+          Reîncearcă
+        </button>
+      )}
+    </div>
+  );
+}
+

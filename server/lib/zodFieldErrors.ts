@@ -20,5 +20,8 @@ export function zodFieldErrorsHook(
     field: issue.path.join(".") || "form",
     message: issue.message,
   }));
+  // Doar NUMELE câmpurilor, niciodată valorile (pot fi IBAN/IDNP). Fără linia asta, un 400 apărea
+  // în jurnalul Vercel ca „POST /api/par 400" și atât — motivul nu se mai putea afla (23.09.2026).
+  console.warn(`[validation] ${c.req.method} ${c.req.path} 400: ${errors.map((e) => e.field).join(", ")}`);
   return c.json({ error: "validation_failed", errors }, 400);
 }

@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ParCreateForm } from "../ParCreateForm";
 import * as parApi from "@/lib/api/par";
+import { ApiError } from "@/lib/api";
 import type { ParRequest, ParVendor } from "@/lib/api/par";
 
 const navigate = vi.fn();
@@ -103,7 +104,7 @@ describe("ParCreateForm — patenta de întreprinzător", () => {
     await openManualPayee();
     fireEvent.click(screen.getByLabelText(/baza patentei de întreprinzător/i));
     fireEvent.change(screen.getByLabelText(/Valabilă până la/i), { target: { value: "2099-12-31" } });
-    expect(screen.getByText(/Patentă valabilă până la 31\.12\.2099/)).toBeInTheDocument();
+    expect(screen.getByText(/Termenul patentei: valabilă până la 31\.12\.2099/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -212,12 +213,64 @@ describe("ParCreateForm — copia patentei (bifă de încărcare)", () => {
     expect(open).toHaveBeenCalledWith("/api/par/par-1/payee-patent", "_blank", "noopener,noreferrer");
   });
 
-  it("[blocant] dacă salvarea pică, NU apare bifa — apare motivul", async () => {
-    vi.spyOn(parApi, "uploadPayeePatent").mockRejectedValue(new Error("network"));
+  it("[blocant] dacă salvarea pică, NU apare bifa — apare motivul și „Reîncearcă” urcă același fișier", async () => {
+    const upload = vi.spyOn(parApi, "uploadPayeePatent")
+      .mockRejectedValueOnce(new ApiError(0, "network_error", "Conexiunea nu a putut fi făcută — cererea nu a ajuns la server."))
+      .mockResolvedValueOnce({
+        payeePatentFileName: "patenta Boghean.pdf", payeePatentFileMime: "application/pdf",
+        payeePatentFileSize: 1000, payeePatentFileUploadedAt: "2026-09-23T10:00:00.000Z",
+      });
     await pickPatentFile();
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Patenta NU s-a salvat/);
+    expect(alert.textContent).toMatch(/Copia patentei NU s-a salvat/);
+    expect(alert.textContent).toMatch(/Conexiunea nu a putut fi făcută/);
     expect(screen.queryByText("Patenta e încărcată")).not.toBeInTheDocument();
+    // Nicio altă stare verde care să contrazică roșul: termenul e scris ca TERMEN.
+    expect(screen.queryByText(/^Patentă valabilă/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reîncearcă/i }));
+    expect(await screen.findByText("Patenta e încărcată")).toBeInTheDocument();
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload.mock.calls[1][1]).toBe(PATENT_FILE);
+    expect(screen.queryByText(/Copia patentei NU s-a salvat/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * Incidentul din 23.09.2026 (prod, PAR din workspace-ul owner-ului): la alegerea patentei,
+   * crearea ciornei a primit 400 pentru ANTET, iar patenta a ieșit „NU s-a salvat" — fără nicio
+   * legătură cu fișierul. Un antet refuzat nu mai blochează fișierul: ciorna se face cu antetul
+   * minim, patenta urcă, iar antetul se corectează la salvare.
+   */
+  it("[blocant] un antet refuzat (400) nu mai blochează salvarea patentei", async () => {
+    const createPar = vi.mocked(parApi.createPar);
+    createPar.mockReset();
+    createPar
+      .mockRejectedValueOnce(new ApiError(400, "payer_not_found"))
+      .mockResolvedValueOnce({ ...draftPar(), id: "par-min" } as ParRequest);
+    const upload = vi.spyOn(parApi, "uploadPayeePatent").mockResolvedValue({
+      payeePatentFileName: "patenta.pdf", payeePatentFileMime: "application/pdf",
+      payeePatentFileSize: 1000, payeePatentFileUploadedAt: "2026-09-23T10:00:00.000Z",
+    });
+
+    await pickPatentFile();
+    expect(await screen.findByText("Patenta e încărcată")).toBeInTheDocument();
+    expect(createPar).toHaveBeenCalledTimes(2);
+    // A doua încercare poartă doar antetul minim — nimic din ce a refuzat serverul.
+    expect(Object.keys(createPar.mock.calls[1][0]).sort()).toEqual(["charge_to", "purpose"]);
+    expect(upload.mock.calls[0][0]).toBe("par-min");
+  });
+
+  it("dacă nici ciorna minimă nu se poate crea, motivul e spus omenește, nu ca un cod", async () => {
+    const createPar = vi.mocked(parApi.createPar);
+    createPar.mockReset();
+    createPar.mockRejectedValue(new ApiError(400, "payer_not_found"));
+    const upload = vi.spyOn(parApi, "uploadPayeePatent");
+
+    await pickPatentFile();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Plătitorul ales nu mai e activ/);
+    expect(alert.textContent).not.toMatch(/payer_not_found/);
+    expect(upload).not.toHaveBeenCalled();
   });
 
   it("un Word nu se păstrează ca patentă — spune asta, nu tace", async () => {

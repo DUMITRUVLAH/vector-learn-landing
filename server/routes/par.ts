@@ -379,7 +379,12 @@ parRoutes.post(
       budgetCodeId: body.budget_code_id ?? null,
       departmentId: body.department_id ?? profile?.departmentId ?? null,
     });
-    if (selectionError) return c.json({ error: selectionError }, 400);
+    if (selectionError) {
+      // Motivul în jurnal: fără el, „POST /api/par 400" din Vercel nu spunea DE CE ciorna a fost
+      // refuzată (patenta care „nu s-a salvat", 23.09.2026).
+      console.warn(`[par] create 400: ${selectionError}`);
+      return c.json({ error: selectionError }, 400);
+    }
     if (!(await hasPayerModuleEntitlement(user.id, tenantId, payerId, "par"))) {
       return c.json({ error: "module_disabled", module: "par" }, 403);
     }
@@ -391,6 +396,7 @@ parRoutes.post(
     if (body.date_needed) {
       const dateNeeded = new Date(body.date_needed);
       if (dateNeeded < dateOfRequest) {
+        console.warn("[par] create 400: date_needed < date_of_request");
         return c.json(
           { error: "date_needed must be >= date_of_request" },
           400
@@ -399,7 +405,10 @@ parRoutes.post(
     }
 
     const urgentError = validateUrgentFields(body, null);
-    if (urgentError) return c.json(urgentError, 400);
+    if (urgentError) {
+      console.warn(`[par] create 400: ${urgentError.error}`);
+      return c.json(urgentError, 400);
+    }
 
     // Generate collision-free request number (max+1 within tenant+year)
     const requestNo = await generateRequestNo(tenantId);

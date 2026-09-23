@@ -51,3 +51,27 @@ registrul completează ce lipsește, nu suprascrie ce se vede pe ecran.
 
 Testele: `server/__tests__/par-payee-patent.routes.test.ts` (urcare, deschidere, GDPR, registru,
 regresia termenului rescris) și secțiunea 2b din `scripts/e2e-par-patenta.mjs`.
+
+## Urmarea (23.09.2026, aceeași seară): „NU s-a salvat", deși după pare că este
+
+Pe prod, owner-ul a încărcat o patentă și a primit „Patenta NU s-a salvat — încearcă din nou",
+cu „✓ Patentă valabilă până la 31.12.2026" imediat dedesubt. Jurnalul Vercel: la 22:29:50
+`POST /api/par` → **400** (crearea ciornei, refuzată pentru ANTET), iar citirea AI a mers separat
+(de aici termenul completat). Patenta nu avea încă unde să urce. Fără corpul erorii în jurnal,
+motivul exact al 400-ului nu s-a mai putut afla.
+
+Reparat:
+- `ensureDraft` (ParCreateForm): dacă antetul complet e refuzat (4xx sau o dată invalidă),
+  ciorna se creează cu antetul minim, iar fișierul (patentă, document, articol) merge mai departe;
+  antetul se corectează la salvare, unde eroarea are câmpul ei. Creările concurente împart aceeași
+  ciornă. Refuzul intră în telemetrie.
+- Mesajul spune motivul (`describeParWriteError`: detaliul serverului, câmpurile, codurile de
+  plătitor/proiect/cod bugetar traduse), iar rândul roșu are „Reîncearcă" cu același fișier.
+- Termenul se scrie „Termenul patentei: …", cu iconiță de calendar, nu cu bifa verde. Bifa verde
+  există doar pentru copia salvată.
+- Serverul loghează codul fiecărui 400 de validare (`zodFieldErrorsHook`, `POST /api/par`), doar
+  numele câmpurilor, niciodată valorile.
+
+**Regula:** o acțiune pe un fișier nu are voie să depindă de o validare fără legătură cu el. Dacă
+are nevoie de un container (ciorna), containerul trebuie să se poată crea și cu minimul.
+
