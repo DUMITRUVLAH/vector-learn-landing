@@ -1086,6 +1086,19 @@ function AmendModal({
   );
 }
 
+/**
+ * Acțiunile unui rând, ca o bară de unelte: doar pictograme.
+ *
+ * Owner, 23.09.2026: „per general cred că fără cuvinte, doar butoanele să fie cel mai bine" —
+ * plus „fără «înregistrează plata», doar plata" și „arhivează să fie ultima acțiune". Pe un tabel
+ * de 13 coloane, cinci butoane cu text împingeau restul rândului afară din ecran; aceleași cinci
+ * acțiuni, ca pictograme, intră pe o treime din lățime.
+ *
+ * Ce NU se pierde odată cu textul: fiecare buton păstrează `aria-label`-ul complet (cu numărul
+ * cererii), deci cititorul de ecran aude „Înregistrează plata pentru PAR-2026-0042", iar `title`
+ * dă cuvântul scurt la survolare. Ordinea e cea a fluxului — primire, corectură, plată, dosar —
+ * iar arhivarea stă ultima, separată de o linie: e singura care scoate cererea din listă.
+ */
 function QueueActions({
   par,
   dosarJob,
@@ -1098,91 +1111,94 @@ function QueueActions({
   archivedView = false,
   wrap = false,
 }: QueueActionsProps) {
+  const dosarLoading = dosarJob?.status === "loading" && dosarJob.par.id === par.id;
   return (
-    <div className={cn("flex items-center justify-start gap-2", wrap ? "flex-wrap" : "flex-nowrap")}>
+    <div className={cn("flex items-center justify-start gap-1", wrap ? "flex-wrap" : "flex-nowrap")}>
       {/* Secțiunea 16 — pe cererile aprobate / ajunse la finanțe */}
       {!archivedView && ["approved", "in_finance"].includes(par.status) && (
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon"
           onClick={() => onSection16(par)}
           aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
+          title="Secțiunea 16 — PAR BL, primit de, alocat la"
         >
-          Secț. 16
+          <ClipboardList className="h-4 w-4" aria-hidden="true" />
         </Button>
       )}
-      {/* Plata — pe cererile ajunse la finanțe */}
+      {/* Completarea de după semnare (doar în lista de lucru: în arhivă nu se mai corectează). */}
+      {!archivedView && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onAmend(par)}
+          aria-label={`Completează cererea ${par.requestNo} — linia de buget, descrierea, anexele`}
+          title="Completează — linia de buget, descrierea, actele adiționale"
+        >
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
+      {/* Plata — pe cererile ajunse la finanțe. Singura acțiune colorată: e capătul drumului. */}
       {!archivedView && par.status === "in_finance" && (
-        <Button size="sm" onClick={() => onPay(par)} aria-label={`Înregistrează plata pentru ${par.requestNo}`}>
+        <Button
+          size="icon"
+          onClick={() => onPay(par)}
+          aria-label={`Înregistrează plata pentru ${par.requestNo}`}
+          title="Plata"
+        >
           <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
-          Înregistrează plata
         </Button>
       )}
       {/* După re-aprobarea depășirii, plata se poate relua */}
       {!archivedView && par.status === "reapproval_required" && par.payment?.overageReapproved && (
         <Button
-          size="sm"
+          size="icon"
           onClick={() => onPay(par)}
           aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
+          title="Plata (depășire re-aprobată)"
         >
           <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
-          Plătește (re-aprobat)
         </Button>
       )}
-      {!archivedView && par.status === "reapproval_required" && !par.payment?.overageReapproved && (
-        <span className="whitespace-nowrap text-sm text-warning">Așteptare re-aprobare…</span>
-      )}
-      {/* Completarea de după semnare (doar în lista de lucru: în arhivă nu se mai corectează). */}
-      {!archivedView && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onAmend(par)}
-          aria-label={`Completează cererea ${par.requestNo} — linia de buget, descrierea, anexele`}
-          title="Corectează linia de buget, completează descrierea sau adaugă un act adițional"
-        >
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-          Completează
-        </Button>
-      )}
+      {/* „De ce nu pot plăti?" NU se repetă aici: rândul spune deja, pe coloana de status,
+          „Re-aprobare necesară (>10% depășire)". Două etichete pentru același lucru ocupau
+          lățime fără să adauge informație — butonul de plată lipsește, iar motivul e la vedere. */}
       {/* VM1-12: dosarul complet PDF — pe orice status */}
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        size="icon"
         onClick={() => onDosar(par)}
-        disabled={dosarJob?.status === "loading" && dosarJob.par.id === par.id}
+        disabled={dosarLoading}
         aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
-        title="Descarcă dosarul complet (PDF)"
+        title="Dosarul complet (PDF)"
       >
-        {dosarJob?.status === "loading" && dosarJob.par.id === par.id ? (
+        {dosarLoading ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         ) : (
-          <Paperclip className="h-4 w-4" aria-hidden="true" />
+          <FolderDown className="h-4 w-4" aria-hidden="true" />
         )}
-        Dosar PDF
       </Button>
-      {/* VM4-05: scoate din listă / readu în listă */}
+      {/* VM4-05: scoate din listă / readu în listă — ultima, după o linie: schimbă ce vezi în coadă. */}
+      <span className="mx-0.5 h-5 w-px bg-border" aria-hidden="true" />
       {archivedView ? (
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon"
           onClick={() => onRestore(par)}
           aria-label={`Readu ${par.requestNo} în coada de finanțe`}
           title="Readu cererea în coada de lucru"
         >
           <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
-          Restaurează
         </Button>
       ) : (
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon"
           onClick={() => onArchive(par)}
           aria-label={`Arhivează cererea ${par.requestNo}`}
           title="Scoate cererea din lista de lucru (reversibil)"
         >
           <Archive className="h-4 w-4" aria-hidden="true" />
-          Arhivează
         </Button>
       )}
     </div>
@@ -1306,7 +1322,7 @@ function QueueCard({
             aria-label={`Vezi ${par.attachmentsMeta.length} documente pentru ${par.requestNo}`}
           >
             <FileText className="h-4 w-4" aria-hidden="true" />
-            {par.attachmentsMeta.length} doc.
+            {par.attachmentsMeta.length}
           </Button>
         )}
       </div>

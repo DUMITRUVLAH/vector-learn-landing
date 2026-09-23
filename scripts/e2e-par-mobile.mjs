@@ -212,9 +212,16 @@ async function seedPendingForApprover(count = 2) {
   if (!project?.id) throw new Error("aprobatorul nu e pe niciun proiect — fixtura n-are unde depune");
   const payerId = project.payerId ?? project.payer_id ?? null;
   const dept = (await J(await api.admin.get("/api/par/departments")))?.departments?.[0]?.id;
-  // Codul bugetar trebuie să fie al aceluiași plătitor ca proiectul (`budget_code_not_in_payer`).
+  // Codul bugetar trebuie să fie al aceluiași plătitor (`budget_code_not_in_payer`) ȘI, dacă e legat
+  // de un proiect, chiar de proiectul cererii (`budget_code_not_in_project`). Fixtura filtra doar
+  // după plătitor, deci pe un seed cu mai multe proiecte alegea un cod al altui proiect și murea
+  // la 400 — suita se oprea înainte să testeze ceva.
   const budgetCodeId = ((await J(await api.admin.get("/api/par/budget-codes")))?.budgetCodes ?? [])
-    .find((x) => (x.payerId ?? x.payer_id) === payerId)?.id ?? null;
+    .find((x) => {
+      const codePayer = x.payerId ?? x.payer_id ?? null;
+      const codeProject = x.projectId ?? x.project_id ?? null;
+      return (!codePayer || codePayer === payerId) && (!codeProject || codeProject === project.id);
+    })?.id ?? null;
   const made = [];
   for (let i = 0; i < count; i++) {
     const id = (await J(await api.admin.post("/api/par", { data: {} })))?.id;

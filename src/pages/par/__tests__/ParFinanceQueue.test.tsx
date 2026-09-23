@@ -175,8 +175,12 @@ describe("ParFinanceQueue", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/re-aprobare necesară/i)).toBeInTheDocument();
-      expect(screen.getByText(/așteptare re-aprobare/i)).toBeInTheDocument();
     });
+    // Motivul se citește pe rând (coloana de status), iar consecința se vede în acțiuni: cât timp
+    // depășirea nu e re-aprobată, plata nu se poate înregistra. Verificăm fapta, nu o a doua
+    // etichetă care spunea același lucru.
+    expect(screen.queryByRole("button", { name: /Înregistrează plata pentru/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reîncearcă plata pentru/i })).not.toBeInTheDocument();
   });
 
   it("T-PAR-112-4 [normal] empty queue renders gracefully (obtain_quotations filtered server-side)", async () => {
