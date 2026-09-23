@@ -538,7 +538,9 @@ async function browserSweep(base, areas, ctx) {
 
 // ── 6. Suitele grele ale zonei ───────────────────────────────────────────────
 async function deepSuites(base, areas) {
-  const scripts = [...new Set(areas.flatMap((a) => AREAS[a].deep))];
+  // `?? []`: o zonă fără suite grele (CRM) dădea altfel `undefined` în listă → `node scripts/undefined`
+  // → un „❌ ieșire necunoscută" care nu spune nimic despre cod.
+  const scripts = [...new Set(areas.flatMap((a) => AREAS[a].deep ?? []))];
   if (!scripts.length) return;
   console.log("\n▶ Suite dedicate");
   for (const s of scripts) {
