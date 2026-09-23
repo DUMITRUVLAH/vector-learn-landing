@@ -455,6 +455,11 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   CSP-ul; politica de pe DOCUMENT vine de la CDN (`scripts/build-vercel.mjs`). Politica trăiește
   o singură dată, în `shared/csp.mjs`, și `check-vercel-headers.mjs` o verifică în
   `.vercel/output/config.json`. Vezi [docs/solutions/security-issues/csp-connect-src-blocks-direct-upload.md].
+- **PATCH schemas: a `.transform()` on an optional field must keep `undefined` as `undefined`.**
+  zod runs the transform on an ABSENT field too, so `cleanX(undefined) → null` turns every partial
+  PATCH into "clear this field" (2026-09-23: every "Salvează ciornă" wiped the payee name + bank).
+  Test every PATCH route with a `PATCH {}` followed by a read. See
+  [docs/solutions/architecture-patterns/zod-transform-turns-absent-into-clear.md].
 - **Webhook/callback handlers that mutate financial state** must REJECT anything they cannot
   cryptographically verify — "no secret configured" means "don't trust" (400), never "skip the check".
   Secrets at rest use AES-256-GCM (`server/lib/crypto.ts`), never base64.

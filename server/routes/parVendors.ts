@@ -18,10 +18,12 @@ import { parUuidGuard } from "../middleware/parUuidGuard";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 import { splitBankRequisites } from "../lib/par/bankRequisites";
 import { normalizePatentDate, normalizePatentSeries } from "../../src/lib/par/patent";
+import { patentFileResponse } from "../lib/par/payeePatentFile";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
 parVendorsRoutes.use("*", requireAuth);
 parVendorsRoutes.use("/:id", parUuidGuard("id"));
+parVendorsRoutes.use("/:id/patent", parUuidGuard("id"));
 
 const vendorSchema = z.object({
   name: z.string().min(1).max(300),
@@ -127,6 +129,24 @@ parVendorsRoutes.get("/", requirePARRole("requestor", "approver", "finance", "pa
     .where(and(...conditions))
     .orderBy(asc(parVendors.name));
   return c.json({ vendors: rows });
+});
+
+/**
+ * GET /:id/patent — copia patentei salvată pe beneficiar.
+ *
+ * Formularul o deschide în clipa în care omul alege beneficiarul din registru, înainte ca cererea
+ * s-o fi preluat: „dacă e încărcată pentru o persoană, să poți s-o deschizi direct când faci PAR"
+ * (owner, 23.09.2026). Aceleași roluri ca lista — cine vede IDNP-ul și IBAN-ul din registru vede și
+ * actul din care au fost citite.
+ */
+parVendorsRoutes.get("/:id/patent", requirePARRole("requestor", "approver", "finance", "par_admin"), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const [vendor] = await db
+    .select({ path: parVendors.patentFilePath, name: parVendors.patentFileName, mime: parVendors.patentFileMime })
+    .from(parVendors)
+    .where(and(eq(parVendors.id, c.req.param("id")), eq(parVendors.tenantId, tenantId)));
+  if (!vendor) return c.json({ error: "not_found" }, 404);
+  return patentFileResponse(c, vendor);
 });
 
 /** POST */

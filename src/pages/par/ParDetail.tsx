@@ -78,6 +78,7 @@ import {
   downloadParForm,
   formatMDL,
   downloadDosar,
+  payeePatentFileUrl,
   type ParDetail as ParDetailType,
   type ParRequest,
   type ParLineItem,
@@ -90,6 +91,7 @@ import { viewParAttachment } from "@/lib/parFiles";
 import { openParAttachmentViewer, parDosarViewerTarget, parFormViewerTarget } from "@/lib/par/attachmentViewerBus";
 import { validateIban } from "@/lib/par/iban";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
+import { PatentFileRow } from "@/components/par/PatentFileRow";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { isArchivableStatus } from "@/lib/par/archive";
 import { ParArchiveDialog } from "@/components/par/ParArchiveDialog";
@@ -1607,11 +1609,33 @@ export function ParDetailPage() {
                         ? `valabilă până la ${formatPatentDate(par.payeePatentValidUntil)}`
                         : "fără termen completat"}
                     </span>
+                    {!par.payeePatentFileName && (
+                      <span className="text-xs text-muted-foreground">fără copia patentei</span>
+                    )}
                   </span>
                 }
               />
             )}
           </dl>
+          {/* Copia patentei se deschide aici, peste fișă — aprobatorul verifică actul, nu doar
+              seria și termenul scrise de solicitant. */}
+          {payeePatent.status !== "none" && par.payeePatentFileName && (
+            <div className="mt-3">
+              <PatentFileRow
+                fileName={par.payeePatentFileName}
+                sizeBytes={par.payeePatentFileSize}
+                uploadedAt={par.payeePatentFileUploadedAt}
+                origin="request"
+                expired={payeePatent.status === "expired"}
+                onOpen={() => openParPdf({
+                  parId: par.id,
+                  attachmentId: "payee-patent",
+                  fileName: par.payeePatentFileName ?? "patenta",
+                  url: payeePatentFileUrl(par.id),
+                })}
+              />
+            </div>
+          )}
           {/* Patenta expirată e o problemă a PLĂTITORULUI, nu a beneficiarului — de aceea
               avertismentul stă aici, la aprobatori și la finanțe, nu doar în formular. */}
           {payeePatent.message && payeePatent.status !== "valid" && (

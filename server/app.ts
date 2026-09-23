@@ -87,6 +87,7 @@ import { apiKeysRoutes } from "./routes/apiKeys";
 import { parRoutes } from "./routes/par";
 import { parFxRoutes } from "./routes/parFx";
 import { parAttachmentsRoutes } from "./routes/parAttachments";
+import { parPayeePatentRoutes } from "./routes/parPayeePatent";
 import { parApprovalsRoutes } from "./routes/parApprovals";
 import { parTimelineRoutes } from "./routes/parTimeline";
 import { parPaymentsRoutes } from "./routes/parPayments";
@@ -427,6 +428,8 @@ app.route("/api/par", parPurchaseOrderRoutes);
 app.route("/api/par", parReceiptsRoutes);
 app.route("/api/par", parRoutes);
 app.route("/api/par", parAttachmentsRoutes);
+// Copia patentei beneficiarului pe cerere (upload direct în Storage + deschidere).
+app.route("/api/par", parPayeePatentRoutes);
 
 // Platform operations (global superadmin only)
 app.route("/api/platform", platformAdminRoutes);

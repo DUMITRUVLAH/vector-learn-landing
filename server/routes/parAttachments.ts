@@ -285,7 +285,7 @@ async function markAttachmentsPresent(
     .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, par.tenantId)));
 }
 
-async function hasScopedDossierAccess(
+export async function hasScopedDossierAccess(
   user: { id: string; tenantId: string; role: string },
   par: { requestedByUserId: string; projectId: string | null; payerId: string | null; status?: string | null },
 ): Promise<boolean> {

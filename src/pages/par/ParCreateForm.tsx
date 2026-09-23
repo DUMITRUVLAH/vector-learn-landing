@@ -45,6 +45,7 @@ import {
   listPar, duplicatePar,
   prefillParFromDocument,
   readPayeeDocument,
+  uploadPayeePatent, payeePatentFileUrl, vendorPatentFileUrl,
   getLineItemSuggestions,
   formatMDL,
   type ParRequest, type ParLineItem, type ParAttachment,
@@ -54,6 +55,7 @@ import {
   type ParPrefillResult, type ParPrefillField, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
 import { VendorSignal } from "@/components/par/VendorSignal";
+import { PatentFileRow, PatentFileUploading } from "@/components/par/PatentFileRow";
 import { cn } from "@/lib/utils";
 import { Card, Combobox, DateField, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
 import {
@@ -189,6 +191,50 @@ function fmtMoney(cents: number, currency: string): string {
   if (currency === "MDL") return formatMDL(cents);
   const v = (cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${v} ${currency}`;
+}
+
+/** Copia patentei, așa cum o ține formularul: confirmată de server, plus de unde vine. */
+interface PatentFileState {
+  fileName: string;
+  sizeBytes: number | null;
+  uploadedAt: string | null;
+  /** `request` = încărcată pe cererea asta; `registry` = preluată de la beneficiarul salvat. */
+  source: "request" | "registry";
+  /** Beneficiarul salvat de la care vine copia (doar pentru `registry`). */
+  vendorId?: string;
+}
+
+/**
+ * Ce spune salvarea despre copia patentei: preia-o din registru, scoate-o, sau las-o cum e.
+ * Copia încărcată pe cerere e deja pe server (finalize a scris-o), deci n-are nimic de trimis.
+ */
+function patentFilePayload(file: PatentFileState | null): "none" | { from_vendor: string } | undefined {
+  if (!file) return "none";
+  if (file.source === "registry" && file.vendorId) return { from_vendor: file.vendorId };
+  return undefined;
+}
+
+/** Tipurile în care se păstrează copia patentei — aceleași ca pe server (payeePatentFile.ts). */
+const PATENT_COPY_MIME_BY_EXT: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+};
+
+/**
+ * Tipul copiei patentei, sau null dacă nu se păstrează (Word, text). Unele browsere lasă `type`
+ * gol la HEIC — fotografia de pe iPhone — deci extensia decide acolo.
+ */
+function patentCopyMime(file: File): string | null {
+  const allowed = new Set(Object.values(PATENT_COPY_MIME_BY_EXT));
+  if (file.type && allowed.has(file.type)) return file.type;
+  if (file.type && file.type !== "application/octet-stream") return null;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return PATENT_COPY_MIME_BY_EXT[ext] ?? null;
 }
 
 function attachmentAnalysis(raw: string | null | undefined): ParAttachmentAnalysis | null {
@@ -550,6 +596,15 @@ export function ParCreateForm() {
     }),
     [payeeIsPatentHolder, payeePatentSeries, payeePatentValidUntil],
   );
+  /**
+   * Copia patentei — ce e SALVAT pe server, nu ce a ales omul: rândul cu bifă apare abia după ce
+   * serverul a confirmat fișierul (owner, 23.09.2026: „acum pui, dar nu e clar dacă s-a pus").
+   */
+  const [payeePatentFile, setPayeePatentFile] = useState<PatentFileState | null>(null);
+  const [patentUploadStep, setPatentUploadStep] = useState<"reading" | "upload" | "finalize" | null>(null);
+  /** Ce s-a citit din patentă / de ce nu s-a salvat copia — lângă câmpurile patentei, nu mai sus. */
+  const [patentNote, setPatentNote] = useState<string | null>(null);
+  const [patentError, setPatentError] = useState<string | null>(null);
   /** Încărcarea actelor personale ale beneficiarului (buletin / rechizite / patentă). */
   const [payeeDocBusy, setPayeeDocBusy] = useState<"buletin" | "rechizite" | "patenta" | null>(null);
   const [payeeDocNote, setPayeeDocNote] = useState<string | null>(null);
@@ -772,6 +827,14 @@ export function ParCreateForm() {
           setPayeeIsPatentHolder(!!existing.payeeIsPatentHolder);
           setPayeePatentSeries(existing.payeePatentSeries ?? "");
           setPayeePatentValidUntil(existing.payeePatentValidUntil ?? "");
+          setPayeePatentFile(existing.payeePatentFileName
+            ? {
+                fileName: existing.payeePatentFileName,
+                sizeBytes: existing.payeePatentFileSize ?? null,
+                uploadedAt: existing.payeePatentFileUploadedAt ?? null,
+                source: "request",
+              }
+            : null);
           // Reveal the payee fields on edit when the draft already has a beneficiary.
           if (existing.vendorId || existing.payeeName || existing.payeeIban) setPayeeMethod("manual");
           setAttachmentsPresent(!!existing.attachmentsPresent);
@@ -810,6 +873,7 @@ export function ParCreateForm() {
       payee_is_patent_holder: payeeIsPatentHolder,
       payee_patent_series: payeePatentSeries || null,
       payee_patent_valid_until: payeePatentValidUntil || null,
+      payee_patent_file: patentFilePayload(payeePatentFile),
       attachments_present: attachmentsPresent, attachments_note: attachmentsNote || null,
       currency,
       is_urgent: isUrgent,
@@ -820,7 +884,7 @@ export function ParCreateForm() {
   }, [dateOfRequest, requestorTitle, requestorCode, payerId, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
       budgetCodeNote, purpose, chargeTo, endUse, vendorId, payeeName,
       payeeIdnp, payeeIban, payeeBank, payeeType, payeeIsPatentHolder, payeePatentSeries,
-      payeePatentValidUntil, attachmentsPresent, attachmentsNote, currency,
+      payeePatentValidUntil, payeePatentFile, attachmentsPresent, attachmentsNote, currency,
       isUrgent, urgentReason, urgentReasonNote, urgentDueDate]);
 
   const ensureDraft = useCallback(async (): Promise<string> => {
@@ -945,14 +1009,58 @@ export function ParCreateForm() {
    * încărcat îl înlocuiește pe cel vechi (altfel avertismentul de expirare ar rămâne aprins
    * degeaba, după ce patenta chiar a fost prelungită).
    */
+  /**
+   * Păstrează copia patentei pe cerere și o confirmă cu rândul cu bifă.
+   *
+   * Până aici, patenta încărcată trecea doar prin citirea AI și se arunca: seria și termenul
+   * apăreau în câmpuri, dar nimic nu spunea că actul „s-a pus", iar aprobatorul n-avea ce deschide
+   * (owner, 23.09.2026). Rândul cu bifă apare DOAR după ce serverul a confirmat fișierul — un
+   * „încărcat" afișat înainte ar minți exact când conexiunea pică.
+   */
+  const storePatentCopy = async (file: File) => {
+    const mime = patentCopyMime(file);
+    if (!mime) {
+      setPatentError("Copia patentei se păstrează doar ca PDF sau imagine (JPG, PNG, HEIC) — fișierul ăsta nu a fost salvat.");
+      return;
+    }
+    setPatentUploadStep("reading");
+    try {
+      const id = await ensureDraft();
+      const info = await uploadPayeePatent(id, file, { mime, onStep: setPatentUploadStep });
+      setPayeePatentFile({
+        fileName: info.payeePatentFileName,
+        sizeBytes: info.payeePatentFileSize,
+        uploadedAt: info.payeePatentFileUploadedAt,
+        source: "request",
+      });
+    } catch (err) {
+      const detail = err instanceof ApiError && typeof err.body.detail === "string" ? err.body.detail : null;
+      setPatentError(`Patenta NU s-a salvat${detail ? `: ${detail}` : ""} — încearcă din nou.`);
+    } finally {
+      setPatentUploadStep(null);
+    }
+  };
+
   const handlePayeeDocFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
     const kind = payeeDocKindRef.current;
+    // Patenta își arată progresul și rezultatul lângă câmpurile ei, nu în cutia de acte de mai sus
+    // — butonul „Încarcă patenta" stă acolo, iar omul se uită unde a apăsat.
+    const isPatent = kind === "patenta";
+    const setNote = isPatent ? setPatentNote : setPayeeDocNote;
     setPayeeDocError(null);
     setPayeeDocNote(null);
+    if (isPatent) {
+      setPatentNote(null);
+      setPatentError(null);
+      setPayeeType("fizic");
+      setPayeeIsPatentHolder(true);
+    }
     setPayeeDocBusy(kind);
+    // Copia se salvează în paralel cu citirea: un AI lent sau căzut nu ține fișierul pe loc.
+    const storing = isPatent ? storePatentCopy(file) : Promise.resolve();
     try {
       const r = await readPayeeDocument(file, kind);
       const took: string[] = [];
@@ -982,7 +1090,7 @@ export function ParCreateForm() {
       if (kind === "buletin") setPayeeType("fizic");
       // Beneficiarul citit din act e cel introdus acum, nu cel ales anterior din registru.
       if (took.length > 0 && payeeMethod !== "saved") setVendorId("");
-      setPayeeDocNote(
+      setNote(
         took.length > 0
           ? `Am completat: ${took.join(", ")}. Verifică valorile înainte de trimitere.`
           : r.filled.length > 0
@@ -990,10 +1098,27 @@ export function ParCreateForm() {
             : "Nu am putut citi date din acest act. Completează manual câmpurile.",
       );
     } catch (err) {
-      setPayeeDocError(err instanceof Error ? err.message : "Actul nu a putut fi citit.");
+      // La patentă, citirea e doar un ajutor: copia se salvează oricum, deci nu e o eroare roșie.
+      if (isPatent) setPatentNote("Nu am putut citi seria și termenul din act — completează-le manual.");
+      else setPayeeDocError(err instanceof Error ? err.message : "Actul nu a putut fi citit.");
     } finally {
       setPayeeDocBusy(null);
     }
+    await storing;
+  };
+
+  /** Deschide copia patentei în vizualizatorul din aplicație — cea de pe cerere sau cea din registru. */
+  const openPatentCopy = () => {
+    if (!payeePatentFile) return;
+    const url =
+      payeePatentFile.source === "registry" && payeePatentFile.vendorId
+        ? vendorPatentFileUrl(payeePatentFile.vendorId)
+        : parId
+          ? payeePatentFileUrl(parId)
+          : null;
+    if (!url) return;
+    const target = { parId: parId ?? "", attachmentId: "payee-patent", fileName: payeePatentFile.fileName, url };
+    if (!openParAttachmentViewer(target)) window.open(url, "_blank", "noopener,noreferrer");
   };
 
   /** Deschide selectorul de fișier pentru un anumit tip de act. */
@@ -1511,6 +1636,9 @@ export function ParCreateForm() {
     setPayeeIsPatentHolder(false);
     setPayeePatentSeries("");
     setPayeePatentValidUntil("");
+    setPayeePatentFile(null);
+    setPatentNote(null);
+    setPatentError(null);
     setPayeeFilledFrom(null);
   }, []);
 
@@ -1574,6 +1702,19 @@ export function ParCreateForm() {
       setPayeeIsPatentHolder(!!v.isPatentHolder);
       setPayeePatentSeries(v.patentSeries ?? "");
       setPayeePatentValidUntil(v.patentValidUntil ?? "");
+      // Copia patentei salvată pe beneficiar vine și ea — se deschide pe loc, fără s-o mai ceară.
+      // Alt beneficiar = altă patentă: copia celui de dinainte nu are voie să rămână pe cerere.
+      setPayeePatentFile(v.patentFileName
+        ? {
+            fileName: v.patentFileName,
+            sizeBytes: v.patentFileSize ?? null,
+            uploadedAt: v.patentFileUploadedAt ?? null,
+            source: "registry",
+            vendorId: v.id,
+          }
+        : null);
+      setPatentNote(null);
+      setPatentError(null);
       // Feature 1: auto-detect from vendor name
       const detected = detectPayeeType(v.name);
       if (detected) setPayeeType(detected);
@@ -2446,7 +2587,7 @@ export function ParCreateForm() {
                     key={d.kind}
                     type="button"
                     onClick={() => pickPayeeDoc(d.kind)}
-                    disabled={payeeDocBusy !== null}
+                    disabled={payeeDocBusy !== null || patentUploadStep !== null}
                     className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50 min-h-[44px]"
                   >
                     {payeeDocBusy === d.kind
@@ -2791,6 +2932,14 @@ export function ParCreateForm() {
                             <span className="text-xs text-muted-foreground">
                               {v.idnp && <span>{payeeType === "juridic" ? "IDNO" : "IDNP"}: {v.idnp}</span>}
                               {v.iban && <span className="ml-2">{v.iban}</span>}
+                              {/* Patenta salvată se vede din listă: alegi persoana și știi că nu mai ceri actul. */}
+                              {v.patentFileName && (
+                                <span className="ml-2 inline-flex items-center gap-1">
+                                  <ScrollText className="h-3 w-3" aria-hidden />
+                                  patentă salvată
+                                  {v.patentValidUntil ? ` până la ${formatPatentDate(v.patentValidUntil)}` : ""}
+                                </span>
+                              )}
                             </span>
                           </span>
                           {v.id === vendorId && <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 ml-auto mt-0.5" aria-hidden />}
@@ -2933,16 +3082,45 @@ export function ParCreateForm() {
                           <button
                             type="button"
                             onClick={() => pickPayeeDoc("patenta")}
-                            disabled={payeeDocBusy !== null}
+                            disabled={payeeDocBusy !== null || patentUploadStep !== null}
                             className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted disabled:opacity-50 min-h-[44px]"
                           >
-                            {payeeDocBusy === "patenta"
+                            {payeeDocBusy === "patenta" || patentUploadStep !== null
                               ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                               : <Upload className="h-4 w-4" aria-hidden />}
-                            Încarcă patenta
+                            {payeePatentFile ? "Înlocuiește patenta" : "Încarcă patenta"}
                           </button>
                         </div>
                       </div>
+                      {/* Confirmarea încărcării — ca la documentele atașate: rândul există doar
+                          după ce serverul a păstrat fișierul, și se deschide de aici. */}
+                      {patentUploadStep ? (
+                        <PatentFileUploading step={patentUploadStep} />
+                      ) : payeePatentFile ? (
+                        <PatentFileRow
+                          fileName={payeePatentFile.fileName}
+                          sizeBytes={payeePatentFile.sizeBytes}
+                          uploadedAt={payeePatentFile.uploadedAt}
+                          origin={payeePatentFile.source}
+                          expired={patentCheck.status === "expired"}
+                          onOpen={openPatentCopy}
+                          onRemove={() => { setPayeePatentFile(null); setPatentNote(null); }}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Nicio copie a patentei încărcată.</p>
+                      )}
+                      {patentNote && (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground" role="status">
+                          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                          <span>{patentNote}</span>
+                        </p>
+                      )}
+                      {patentError && (
+                        <p className="flex items-start gap-1.5 text-xs text-destructive" role="alert">
+                          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                          <span>{patentError}</span>
+                        </p>
+                      )}
                       {patentCheck.message && (
                         <p
                           role={patentCheck.status === "expired" ? "alert" : "status"}

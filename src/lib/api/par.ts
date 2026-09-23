@@ -63,6 +63,11 @@ export interface ParRequest {
   payeePatentSeries?: string | null;
   /** Ultima zi de valabilitate, ISO "YYYY-MM-DD". */
   payeePatentValidUntil?: string | null;
+  /** Copia patentei pe cerere — se deschide prin `payeePatentFileUrl`. Null = fără copie. */
+  payeePatentFileName?: string | null;
+  payeePatentFileMime?: string | null;
+  payeePatentFileSize?: number | null;
+  payeePatentFileUploadedAt?: string | null;
   attachmentsPresent: boolean;
   attachmentsNote: string | null;
   currency: string;
@@ -328,6 +333,11 @@ export interface ParVendor {
   patentSeries?: string | null;
   /** Ultima zi de valabilitate, ISO "YYYY-MM-DD". */
   patentValidUntil?: string | null;
+  /** Copia patentei salvată pe beneficiar — se deschide prin `vendorPatentFileUrl`. */
+  patentFileName?: string | null;
+  patentFileMime?: string | null;
+  patentFileSize?: number | null;
+  patentFileUploadedAt?: string | null;
 }
 
 // ─── PAR CRUD ─────────────────────────────────────────────────────────────────
@@ -368,6 +378,11 @@ export interface UpdateParPayload extends CreateParPayload {
   payee_patent_series?: string | null;
   /** ISO "YYYY-MM-DD". */
   payee_patent_valid_until?: string | null;
+  /**
+   * Copia patentei la salvare: `{ from_vendor }` = preia copia beneficiarului salvat, "none" = fără
+   * copie, lipsă = rămâne ce e pe cerere. Fișierul însuși se urcă prin `uploadPayeePatent`.
+   */
+  payee_patent_file?: "none" | { from_vendor: string };
   attachments_present?: boolean;
   attachments_note?: string | null;
   // VM1-03: RON removed from supported currencies.
@@ -939,6 +954,63 @@ export async function uploadAttachmentDirect(
       ...(opts.kind === "other" && opts.kind_other ? { kind_other: opts.kind_other } : {}),
     }),
   });
+}
+
+/** Copia patentei: ce arată formularul și fișa cererii despre fișierul urcat. */
+export interface ParPatentFileInfo {
+  payeePatentFileName: string;
+  payeePatentFileMime: string;
+  payeePatentFileSize: number;
+  payeePatentFileUploadedAt: string;
+}
+
+/**
+ * Urcă copia patentei beneficiarului pe cerere — același drum ca `uploadAttachmentDirect`
+ * (semnare → PUT direct în Storage → finalizare cu verificarea octeților), fără plafonul de
+ * ~4,5 MB al funcției serverless. Răspunsul e confirmarea pe care o arată formularul: numele,
+ * mărimea și momentul, nu doar un „ok".
+ */
+export async function uploadPayeePatent(
+  parId: string,
+  file: File,
+  opts: {
+    /** Tipul real, când browserul l-a lăsat gol (HEIC). Implicit `file.type`. */
+    mime?: string;
+    onStep?: (step: "upload" | "finalize") => void;
+  } = {}
+): Promise<ParPatentFileInfo> {
+  const mime = opts.mime ?? file.type;
+  const { path, signed_url } = await api<{ path: string; signed_url: string }>(
+    `/api/par/${parId}/payee-patent/sign`,
+    { method: "POST", body: JSON.stringify({ file_name: file.name, mime, size_bytes: file.size }) }
+  );
+  opts.onStep?.("upload");
+  let put: Response;
+  try {
+    put = await fetch(signed_url, {
+      method: "PUT",
+      headers: { "content-type": mime || "application/octet-stream" },
+      body: file,
+    });
+  } catch {
+    throw new Error("Patenta nu a ajuns la server (conexiune întreruptă) — reîncearcă.");
+  }
+  if (!put.ok) throw new Error("Încărcarea patentei nu a reușit. Verifică conexiunea și reîncearcă.");
+  opts.onStep?.("finalize");
+  return api<ParPatentFileInfo>(`/api/par/${parId}/payee-patent/finalize`, {
+    method: "POST",
+    body: JSON.stringify({ path, file_name: file.name, mime }),
+  });
+}
+
+/** Copia patentei de pe cerere (autorizată pe server ca blocul beneficiarului). */
+export function payeePatentFileUrl(parId: string): string {
+  return `/api/par/${parId}/payee-patent`;
+}
+
+/** Copia patentei salvată pe beneficiarul din registru. */
+export function vendorPatentFileUrl(vendorId: string): string {
+  return `/api/par/vendors/${vendorId}/patent`;
 }
 
 /**

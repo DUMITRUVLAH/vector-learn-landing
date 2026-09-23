@@ -44,7 +44,7 @@ import {
   FileSpreadsheet,
   Calendar,
   BarChart2,
-  Wand2, Wallet,} from "lucide-react";
+  Wand2, Wallet, Eye,} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParImportMappingDialog } from "@/components/par/ParImportMappingDialog";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,7 @@ import { Alert, Badge, Button, Card, Checkbox, DateField, Input, Label, Select, 
 import { validateIban } from "@/lib/par/iban";
 import { PAR_EVENT_TITLES, eventTitle, humanizeDetail } from "@/lib/par/timelineHumanize";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
+import { openParAttachmentViewer } from "@/lib/par/attachmentViewerBus";
 import {
   type RuleDraft, type ApproverPick, type GroupedRule,
   ruleScopeKey, buildDoaRows, groupDoaRows, emptyRuleDraft,
@@ -142,6 +143,7 @@ import {
   type ParVendor,
   type ParEvent,
   type RegistryCompany,
+  vendorPatentFileUrl,
 } from "@/lib/api/par";
 import { ApiError } from "@/lib/api";
 import { useRouter } from "@/router/HashRouter";
@@ -3701,7 +3703,14 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
                     <td className="p-3">{(() => {
                       const st = patentStatus({ isPatentHolder: v.isPatentHolder, patentSeries: v.patentSeries, patentValidUntil: v.patentValidUntil });
                       if (st.status === "none") return <span className="text-muted-foreground">—</span>;
+                      // Copia salvată pe beneficiar se deschide și de aici, nu doar din formularul PAR.
+                      const openCopy = () => {
+                        const url = vendorPatentFileUrl(v.id);
+                        const target = { parId: "", attachmentId: "vendor-patent", fileName: v.patentFileName ?? "patenta", url };
+                        if (!openParAttachmentViewer(target)) window.open(url, "_blank", "noopener,noreferrer");
+                      };
                       return (
+                        <span className="inline-flex items-center gap-1">
                         <span className={cn(
                           "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap",
                           st.status === "expired"
@@ -3717,6 +3726,14 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
                             : st.status === "unknown"
                               ? "Fără termen"
                               : `până la ${formatPatentDate(v.patentValidUntil)}`}
+                        </span>
+                        {v.patentFileName && (
+                          <button type="button" onClick={openCopy}
+                            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground min-h-[44px] min-w-[44px] flex items-center justify-center"
+                            aria-label={`Deschide patenta lui ${v.name}`} title={v.patentFileName}>
+                            <Eye className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        )}
                         </span>
                       );
                     })()}</td>

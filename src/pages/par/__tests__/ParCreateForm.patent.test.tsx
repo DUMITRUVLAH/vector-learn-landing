@@ -151,3 +151,130 @@ describe("ParCreateForm — patenta de întreprinzător", () => {
     expect((screen.getByLabelText(/Seria și nr\. patentei/i) as HTMLInputElement).value).toBe("AA 0123456");
   });
 });
+
+/**
+ * Owner, 23.09.2026: „La atașarea patentei trebuie bifă sau confirmare că s-a încărcat — acum pui,
+ * dar nu e clar dacă s-a pus sau nu." Testăm ACȚIUNEA: fișierul ales pleacă la server, bifa apare
+ * DOAR după confirmare, iar „Deschide" deschide exact copia salvată.
+ */
+describe("ParCreateForm — copia patentei (bifă de încărcare)", () => {
+  const PATENT_FILE = new File(["%PDF-1.7 patenta"], "patenta Boghean.pdf", { type: "application/pdf" });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    navigate.mockReset();
+    mockApis();
+    vi.spyOn(parApi, "readPayeeDocument").mockResolvedValue({
+      kind: "patenta", name: null, idnp: null, address: null, iban: null, bank: null, bic: null,
+      patentSeries: "AP 2022613060671", patentValidUntil: "2099-01-01", payeeType: "fizic",
+      filled: ["patentSeries", "patentValidUntil"], isStub: false,
+    });
+  });
+
+  async function pickPatentFile() {
+    await openManualPayee();
+    fireEvent.click(screen.getByLabelText(/baza patentei de întreprinzător/i));
+    expect(screen.getByText(/Nicio copie a patentei încărcată/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Încarcă patenta/i }));
+    fireEvent.change(screen.getByLabelText(/Alege actul beneficiarului/i), { target: { files: [PATENT_FILE] } });
+  }
+
+  it("[blocant] bifa apare abia după ce serverul confirmă, cu numele fișierului, și se deschide", async () => {
+    let confirm!: (v: parApi.ParPatentFileInfo) => void;
+    const upload = vi.spyOn(parApi, "uploadPayeePatent").mockImplementation(
+      () => new Promise((resolve) => { confirm = resolve; }),
+    );
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+
+    await pickPatentFile();
+    // Cât urcă: rând de progres, NU bifă — un „încărcat" afișat înainte ar minți.
+    expect(await screen.findByText(/Se încarcă patenta|Pregătesc încărcarea|Verific fișierul/i)).toBeInTheDocument();
+    expect(screen.queryByText("Patenta e încărcată")).not.toBeInTheDocument();
+    await waitFor(() => expect(upload).toHaveBeenCalled());
+    expect(upload.mock.calls[0][0]).toBe("par-1");
+    expect(upload.mock.calls[0][1]).toBe(PATENT_FILE);
+
+    confirm({
+      payeePatentFileName: "patenta Boghean.pdf",
+      payeePatentFileMime: "application/pdf",
+      payeePatentFileSize: 245_000,
+      payeePatentFileUploadedAt: "2026-09-23T10:00:00.000Z",
+    });
+    expect(await screen.findByText("Patenta e încărcată")).toBeInTheDocument();
+    expect(screen.getByText(/patenta Boghean\.pdf · 239 KB · încărcată pe 23\.09\.2026/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Înlocuiește patenta/i })).toBeInTheDocument();
+    // Seria și termenul citite din act ajung în câmpuri, iar mesajul stă lângă ele.
+    await waitFor(() =>
+      expect((screen.getByLabelText(/Seria și nr\. patentei/i) as HTMLInputElement).value).toBe("AP 2022613060671"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Deschide patenta/i }));
+    expect(open).toHaveBeenCalledWith("/api/par/par-1/payee-patent", "_blank", "noopener,noreferrer");
+  });
+
+  it("[blocant] dacă salvarea pică, NU apare bifa — apare motivul", async () => {
+    vi.spyOn(parApi, "uploadPayeePatent").mockRejectedValue(new Error("network"));
+    await pickPatentFile();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Patenta NU s-a salvat/);
+    expect(screen.queryByText("Patenta e încărcată")).not.toBeInTheDocument();
+  });
+
+  it("un Word nu se păstrează ca patentă — spune asta, nu tace", async () => {
+    const upload = vi.spyOn(parApi, "uploadPayeePatent");
+    await openManualPayee();
+    fireEvent.click(screen.getByLabelText(/baza patentei de întreprinzător/i));
+    fireEvent.click(screen.getByRole("button", { name: /Încarcă patenta/i }));
+    const docx = new File(["PK"], "patenta.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    fireEvent.change(screen.getByLabelText(/Alege actul beneficiarului/i), { target: { files: [docx] } });
+    expect((await screen.findByRole("alert")).textContent).toMatch(/doar ca PDF sau imagine/);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("[blocant] beneficiarul salvat vine cu patenta lui: se vede, se deschide din registru, se preia la salvare", async () => {
+    vi.restoreAllMocks();
+    mockApis([{
+      id: "v-pat", name: "Boghean Natalia", idnp: "2005036037383", iban: "MD49MO2259ASV55555555555",
+      bank: null, active: true, isPatentHolder: true, patentSeries: "AP 2022613060671",
+      patentValidUntil: "2099-01-01", patentFileName: "patenta Natalia.pdf", patentFileSize: 120_000,
+      patentFileUploadedAt: "2026-09-01T09:00:00.000Z",
+    }]);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    render(<ParCreateForm />);
+    await screen.findByRole("button", { name: /adaugă articol/i });
+    fireEvent.click(screen.getByRole("button", { name: /persoană fizică/i }));
+    fireEvent.click(screen.getByRole("button", { name: /beneficiari salvați/i }));
+
+    const option = await screen.findByRole("option", { name: /Boghean Natalia/i });
+    expect(option.textContent).toMatch(/patentă salvată/);
+    fireEvent.click(option);
+
+    expect(await screen.findByText("Patenta e salvată la beneficiar")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Deschide patenta/i }));
+    expect(open).toHaveBeenCalledWith("/api/par/vendors/v-pat/patent", "_blank", "noopener,noreferrer");
+
+    fireEvent.click(screen.getByRole("button", { name: /salvează ciornă/i }));
+    await waitFor(() => expect(parApi.updatePar).toHaveBeenCalled());
+    const payloads = vi.mocked(parApi.updatePar).mock.calls.map((c) => c[1]);
+    expect(payloads).toContainEqual(expect.objectContaining({ payee_patent_file: { from_vendor: "v-pat" } }));
+  });
+
+  it("„Scoate copia patentei” lasă cererea fără copie la salvare", async () => {
+    vi.spyOn(parApi, "uploadPayeePatent").mockResolvedValue({
+      payeePatentFileName: "patenta.pdf", payeePatentFileMime: "application/pdf",
+      payeePatentFileSize: 1000, payeePatentFileUploadedAt: "2026-09-23T10:00:00.000Z",
+    });
+    await pickPatentFile();
+    await screen.findByText("Patenta e încărcată");
+
+    fireEvent.click(screen.getByRole("button", { name: /Scoate copia patentei/i }));
+    expect(screen.queryByText("Patenta e încărcată")).not.toBeInTheDocument();
+    vi.mocked(parApi.updatePar).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /salvează ciornă/i }));
+    await waitFor(() => expect(parApi.updatePar).toHaveBeenCalled());
+    const payloads = vi.mocked(parApi.updatePar).mock.calls.map((c) => c[1]);
+    expect(payloads).toContainEqual(expect.objectContaining({ payee_patent_file: "none" }));
+  });
+});

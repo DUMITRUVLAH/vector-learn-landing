@@ -48,6 +48,13 @@ describe("normalizePatentSeries", () => {
     expect(normalizePatentSeries("aa nr. 0123456")).toBe("AA 0123456");
   });
 
+  it("[blocant] patenta cu număr de 13 cifre (formatul actual) se normalizează la fel", () => {
+    // Captura owner-ului, 23.09.2026: „AP2022613060671". Plafonul vechi de 12 cifre o lăsa brută.
+    expect(normalizePatentSeries("AP2022613060671")).toBe("AP 2022613060671");
+    expect(normalizePatentSeries("AP nr. 2022613060671")).toBe("AP 2022613060671");
+    expect(normalizePatentSeries("seria AP nr. 2022613060671")).toBe("AP 2022613060671");
+  });
+
   it("acceptă și o patentă doar cu număr", () => {
     expect(normalizePatentSeries("0123456")).toBe("0123456");
   });

@@ -39,8 +39,25 @@ describe("securityHeaders — încadrarea", () => {
     }
   });
 
+  // Copia patentei se deschide în același vizualizator; fără excepție, cadrul arăta
+  // „localhost refused to connect" (23.09.2026).
+  it("copia patentei (cerere + registru) poate fi încadrată de propria noastră origine", async () => {
+    for (const path of ["/api/par/par-1/payee-patent", "/api/par/vendors/v-1/patent"]) {
+      const res = await appWith(path).request(path);
+      expect(res.headers.get("X-Frame-Options"), path).toBe("SAMEORIGIN");
+      expect(res.headers.get("Content-Security-Policy"), path).toContain("frame-ancestors 'self'");
+    }
+  });
+
   it("orice altă rută rămâne de neîncadrat", async () => {
-    for (const path of ["/api/health", "/api/par/par-1", "/api/par/par-1/attachments"]) {
+    for (const path of [
+      "/api/health",
+      "/api/par/par-1",
+      "/api/par/par-1/attachments",
+      "/api/par/vendors",
+      "/api/par/vendors/v-1",
+      "/api/par/par-1/payee-patent/sign",
+    ]) {
       const res = await appWith(path).request(path);
       expect(res.headers.get("X-Frame-Options"), path).toBe("DENY");
       expect(res.headers.get("Content-Security-Policy"), path).toContain("frame-ancestors 'none'");

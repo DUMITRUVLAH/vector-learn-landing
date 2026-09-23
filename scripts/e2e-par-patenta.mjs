@@ -10,6 +10,8 @@
 //     nu mai e avertizat că patenta a expirat
 //   · endpoint-ul de acte personale întoarce 200 gol (prompt greșit, parser deconectat)
 //   · patenta unui beneficiar salvat nu ajunge pe cerere → aprobatorul nu vede semnalul
+//   · copia patentei se aruncă după citire → „nu e clar dacă s-a pus" (owner, 23.09.2026):
+//     fișierul trebuie să URCE, să rămână pe cerere și să se DESCHIDĂ cu octeții trimiși
 //
 //   node scripts/e2e-par-patenta.mjs                       (server pe :3000)
 //   BASE=http://localhost:3133 node scripts/e2e-par-patenta.mjs
@@ -143,6 +145,64 @@ async function main() {
       check("alegerea beneficiarului salvat copiază patenta pe cerere", p2.payeePatentValidUntil === "2026-08-31",
         JSON.stringify(p2.payeePatentValidUntil));
     }
+  }
+
+  // ── 2b. Copia patentei: urcă, rămâne pe cerere, se deschide ────────────────
+  console.log("\n▶ Copia patentei (fișierul)");
+  const copyDraft = await (await ctx.post("/api/par", { data: { purpose: "execute_payment" } })).json();
+  const copyParId = copyDraft.id ?? copyDraft.par?.id;
+  if (copyParId) {
+    await ctx.patch(`/api/par/${copyParId}`, {
+      data: { payee_name: "Boghean Natalia", payee_type: "fizic", payee_is_patent_holder: true },
+    });
+    const pdf = Buffer.from(`%PDF-1.4\n% patenta e2e ${Date.now()}\n%%EOF\n`);
+    const signRes = await ctx.post(`/api/par/${copyParId}/payee-patent/sign`, {
+      data: { file_name: "patenta Boghean.pdf", mime: "application/pdf", size_bytes: pdf.byteLength },
+    });
+    check("POST payee-patent/sign → 200", signRes.status() === 200, `status ${signRes.status()} ${await signRes.text()}`);
+    if (signRes.status() === 200) {
+      const { path: objectPath, signed_url } = await signRes.json();
+      // Pasul browserului: PUT direct în Storage, fără cookie-urile noastre.
+      const put = await fetch(signed_url, { method: "PUT", headers: { "content-type": "application/pdf" }, body: pdf });
+      check("PUT în Storage → 2xx", put.ok, `status ${put.status}`);
+      const fin = await ctx.post(`/api/par/${copyParId}/payee-patent/finalize`, {
+        data: { path: objectPath, file_name: "patenta Boghean.pdf", mime: "application/pdf" },
+      });
+      const finBody = fin.status() === 201 ? await fin.json() : await fin.text();
+      check("POST payee-patent/finalize → 201 cu numele fișierului", fin.status() === 201 && finBody?.payeePatentFileName === "patenta Boghean.pdf",
+        `status ${fin.status()} ${JSON.stringify(finBody).slice(0, 200)}`);
+
+      const detail = await (await ctx.get(`/api/par/${copyParId}`)).json();
+      const pd = detail.par ?? detail;
+      check("cererea redeschisă poartă copia (formularul arată bifa)", pd.payeePatentFileName === "patenta Boghean.pdf",
+        JSON.stringify(pd.payeePatentFileName));
+
+      const opened = await ctx.get(`/api/par/${copyParId}/payee-patent`);
+      const openedBytes = opened.status() === 200 ? Buffer.from(await opened.body()) : Buffer.alloc(0);
+      check("GET payee-patent → 200 PDF, exact octeții urcați", opened.status() === 200 && openedBytes.equals(pdf),
+        `status ${opened.status()} ${opened.headers()["content-type"]} ${openedBytes.byteLength}B`);
+      // Vizualizatorul o pune într-un <iframe>: cu DENY, „Deschide" arăta „refused to connect".
+      check("copia se poate încadra în vizualizatorul aplicației (SAMEORIGIN)",
+        opened.headers()["x-frame-options"] === "SAMEORIGIN", `x-frame-options ${opened.headers()["x-frame-options"]}`);
+
+      // „Scoate copia" → cererea rămâne fără, iar deschiderea spune clar 404.
+      await ctx.patch(`/api/par/${copyParId}`, { data: { payee_patent_file: "none" } });
+      const gone = await ctx.get(`/api/par/${copyParId}/payee-patent`);
+      check("după „scoate copia” → 404", gone.status() === 404, `status ${gone.status()}`);
+    }
+    // Testul negativ: un „PDF" care nu e PDF nu intră pe cerere.
+    const bad = await ctx.post(`/api/par/${copyParId}/payee-patent/sign`, {
+      data: { file_name: "patenta.docx", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", size_bytes: 100 },
+    });
+    check("Word ca patentă → 400", bad.status() === 400, `status ${bad.status()}`);
+
+    // Salvarea parțială (formularul trimite `PATCH {}` după antet) nu are voie să șteargă beneficiarul.
+    await ctx.patch(`/api/par/${copyParId}`, { data: {} });
+    const afterEmpty = await (await ctx.get(`/api/par/${copyParId}`)).json();
+    check("PATCH {} lasă numele beneficiarului neatins", (afterEmpty.par ?? afterEmpty).payeeName === "Boghean Natalia",
+      JSON.stringify((afterEmpty.par ?? afterEmpty).payeeName));
+  } else {
+    check("ciornă pentru copia patentei", false, JSON.stringify(copyDraft).slice(0, 200));
   }
 
   // ── 3. Actele personale — endpoint-ul e CHEMAT, nu doar montat ──────────────

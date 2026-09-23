@@ -442,6 +442,19 @@ export const parVendors = pgTable(
     patentSeries: varchar("patent_series", { length: 50 }),
     /** Ultima zi de valabilitate, ca text ISO "YYYY-MM-DD" — o zi calendaristică, fără fus orar. */
     patentValidUntil: varchar("patent_valid_until", { length: 10 }),
+    /**
+     * Copia patentei (migrare 0188) — fișierul, nu doar seria și termenul citite din el.
+     *
+     * Stă pe beneficiar ca să nu mai fie cerută la fiecare plată: următoarea cerere către aceeași
+     * persoană o preia din registru și o deschide pe loc. Octeții stau în Storage (bucket-ul
+     * atașamentelor), aici doar calea. Se înlocuiește când vine o patentă cu termen mai nou —
+     * regula lui `patentValidUntil` (server/lib/par/vendorAutoSave.ts).
+     */
+    patentFilePath: text("patent_file_path"),
+    patentFileName: varchar("patent_file_name", { length: 500 }),
+    patentFileMime: varchar("patent_file_mime", { length: 100 }),
+    patentFileSize: integer("patent_file_size"),
+    patentFileUploadedAt: timestamp("patent_file_uploaded_at", { withTimezone: true }),
     notes: text("notes"),
     active: boolean("active").notNull().default(true),
     /** Vendor compliance — Feature 1 (contafirm.md registry) */
@@ -601,6 +614,17 @@ export const parRequests = pgTable(
     payeePatentSeries: varchar("payee_patent_series", { length: 50 }),
     /** Ultima zi de valabilitate, text ISO "YYYY-MM-DD". */
     payeePatentValidUntil: varchar("payee_patent_valid_until", { length: 10 }),
+    /**
+     * Copia patentei pe cerere (migrare 0188): încărcată acum sau preluată de la beneficiarul
+     * salvat. Snapshot, ca seria și termenul — cererea arată actul de ATUNCI, chiar dacă registrul
+     * primește între timp patenta prelungită. Calea poate fi aceeași cu cea din `par_vendors`:
+     * obiectul din Storage nu se șterge pe nicio cale, deci împărțirea lui e sigură.
+     */
+    payeePatentFilePath: text("payee_patent_file_path"),
+    payeePatentFileName: varchar("payee_patent_file_name", { length: 500 }),
+    payeePatentFileMime: varchar("payee_patent_file_mime", { length: 100 }),
+    payeePatentFileSize: integer("payee_patent_file_size"),
+    payeePatentFileUploadedAt: timestamp("payee_patent_file_uploaded_at", { withTimezone: true }),
     /** Section 13 */
     attachmentsPresent: boolean("attachments_present").notNull().default(false),
     attachmentsNote: text("attachments_note"),

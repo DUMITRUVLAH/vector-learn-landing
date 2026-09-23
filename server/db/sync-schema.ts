@@ -668,6 +668,19 @@ async function main() {
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_is_patent_holder" boolean DEFAULT false NOT NULL`,
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_series" varchar(50)`,
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_valid_until" varchar(10)`,
+    // Migrarea 0188: copia patentei (fișierul), pe beneficiar și pe cerere. Coloane nullable,
+    // deci healul generic le-ar adăuga oricum — sunt aici explicit fiindcă `GET /api/par/:id` și
+    // lista de beneficiari le citesc pe fiecare cerere: o coloană lipsă = formularul nu se deschide.
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "patent_file_path" text`,
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "patent_file_name" varchar(500)`,
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "patent_file_mime" varchar(100)`,
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "patent_file_size" integer`,
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "patent_file_uploaded_at" timestamp with time zone`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_file_path" text`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_file_name" varchar(500)`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_file_mime" varchar(100)`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_file_size" integer`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_file_uploaded_at" timestamp with time zone`,
     // Migrarea 0151: registrul de acte (DOCGEN). Tabele NOI pe calea unei cereri — fără heal,
     // pagina de acte ar da „relation doc_documents does not exist" până când migrarea ajunge.
     // Migrarea 0165: automatizări + distribuirea lead-urilor. Tabele NOI pe calea

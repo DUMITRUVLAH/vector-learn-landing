@@ -92,6 +92,11 @@ export async function autosaveVendorFromPar(
         payeeIsPatentHolder: parRequests.payeeIsPatentHolder,
         payeePatentSeries: parRequests.payeePatentSeries,
         payeePatentValidUntil: parRequests.payeePatentValidUntil,
+        payeePatentFilePath: parRequests.payeePatentFilePath,
+        payeePatentFileName: parRequests.payeePatentFileName,
+        payeePatentFileMime: parRequests.payeePatentFileMime,
+        payeePatentFileSize: parRequests.payeePatentFileSize,
+        payeePatentFileUploadedAt: parRequests.payeePatentFileUploadedAt,
       })
       .from(parRequests)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
@@ -111,10 +116,21 @@ export async function autosaveVendorFromPar(
     // Patenta merge în registru ca dată vie, nu ca istorie: termenul cel mai NOU e cel corect,
     // fiindcă patenta se prelungește. Vezi `enrichVendor`, unde e singura excepție de la
     // regula „completează doar ce lipsește".
-    const patent = {
+    const patent: IncomingPatent = {
       isPatentHolder: !!par.payeeIsPatentHolder,
       series: (par.payeePatentSeries ?? "").trim(),
       validUntil: (par.payeePatentValidUntil ?? "").trim(),
+      // Copia patentei merge în registru cu seria și termenul ei, ca următoarea cerere către
+      // aceeași persoană s-o preia fără s-o mai ceară (owner, 23.09.2026).
+      file: par.payeePatentFilePath
+        ? {
+            path: par.payeePatentFilePath,
+            name: par.payeePatentFileName,
+            mime: par.payeePatentFileMime,
+            size: par.payeePatentFileSize,
+            uploadedAt: par.payeePatentFileUploadedAt,
+          }
+        : null,
     };
     // A nameless payee is not a registry entry — there'd be nothing to search for later.
     if (!name) return { outcome: "skipped", vendorId: par.vendorId ?? null };
@@ -163,6 +179,7 @@ export async function autosaveVendorFromPar(
         isPatentHolder: patent.isPatentHolder,
         patentSeries: patent.series || null,
         patentValidUntil: patent.validUntil || null,
+        ...(patent.isPatentHolder && patent.file ? patentFileColumns(patent.file) : {}),
         active: true,
       })
       .returning({ id: parVendors.id });
@@ -186,7 +203,7 @@ async function enrichVendor(
     bank: string;
     bicSwift: string;
     vatCode: string;
-    patent?: { isPatentHolder: boolean; series: string; validUntil: string };
+    patent?: IncomingPatent;
   }
 ): Promise<boolean> {
   const [row] = await db
@@ -197,12 +214,13 @@ async function enrichVendor(
       bicSwift: parVendors.bicSwift,
       vatCode: parVendors.vatCode,
       patentValidUntil: parVendors.patentValidUntil,
+      patentFilePath: parVendors.patentFilePath,
     })
     .from(parVendors)
     .where(and(eq(parVendors.id, vendorId), eq(parVendors.tenantId, tenantId)));
   if (!row) return false;
 
-  const patch: Record<string, string | Date | boolean> = {};
+  const patch: Record<string, string | number | Date | boolean | null> = {};
   // Doar câmpurile goale se completează — ce a curat un om rămâne cum l-a lăsat.
   if (!row.iban && incoming.iban) patch.iban = incoming.iban;
   if (!row.idnp && incoming.idnp) patch.idnp = incoming.idnp;
@@ -219,6 +237,13 @@ async function enrichVendor(
     if (inc.validUntil && (!row.patentValidUntil || inc.validUntil > row.patentValidUntil)) {
       patch.patentValidUntil = inc.validUntil;
     }
+    // Copia urmează termenul: intră când registrul n-are niciuna, sau când patenta de pe cerere e
+    // cel puțin la fel de nouă ca a registrului. O cerere veche retrimisă cu o copie expirată nu
+    // are voie să dea afară patenta prelungită încărcată între timp.
+    const newerOrSame = !row.patentValidUntil || (!!inc.validUntil && inc.validUntil >= row.patentValidUntil);
+    if (inc.file && inc.file.path !== row.patentFilePath && (!row.patentFilePath || newerOrSame)) {
+      Object.assign(patch, patentFileColumns(inc.file));
+    }
   }
   if (Object.keys(patch).length === 0) return false;
   patch.updatedAt = new Date();
@@ -227,6 +252,30 @@ async function enrichVendor(
     .set(patch)
     .where(and(eq(parVendors.id, vendorId), eq(parVendors.tenantId, tenantId)));
   return true;
+}
+
+interface IncomingPatent {
+  isPatentHolder: boolean;
+  series: string;
+  validUntil: string;
+  file: {
+    path: string;
+    name: string | null;
+    mime: string | null;
+    size: number | null;
+    uploadedAt: Date | null;
+  } | null;
+}
+
+/** Coloanele copiei patentei din registru, din copia de pe cerere. */
+function patentFileColumns(file: NonNullable<IncomingPatent["file"]>) {
+  return {
+    patentFilePath: file.path,
+    patentFileName: file.name,
+    patentFileMime: file.mime,
+    patentFileSize: file.size,
+    patentFileUploadedAt: file.uploadedAt ?? new Date(),
+  };
 }
 
 /** Point the PAR at the vendor it turned out to be, so later reads resolve one record. */

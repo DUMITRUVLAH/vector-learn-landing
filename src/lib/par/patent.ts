@@ -96,9 +96,11 @@ export function normalizePatentSeries(input: string | null | undefined): string 
     .replace(/^(patent[ae]\s+(de\s+[îi]ntreprinz[ăa]tor\s+)?)/i, "")
     .replace(/^(seri[ai]\s*(și|si)?\s*(nr\.?|№|no\.?)?\s*[:\-]?\s*)/i, "")
     .trim();
-  const m = /^([A-Za-zĂÂÎȘȚăâîșț]{1,3})\s*(?:nr\.?|№|no\.?)?\s*[:\-]?\s*(\d{4,12})$/.exec(withoutLabel);
+  // Până la 15 cifre: patentele eliberate azi au număr de 13 cifre („AP2022613060671"), iar cu
+  // plafonul vechi de 12 seria rămânea nenormalizată („AP nr. 2022613060671") exact pe actele reale.
+  const m = /^([A-Za-zĂÂÎȘȚăâîșț]{1,3})\s*(?:nr\.?|№|no\.?)?\s*[:\-]?\s*(\d{4,15})$/.exec(withoutLabel);
   if (m) return `${m[1].toLocaleUpperCase("ro")} ${m[2]}`;
-  const onlyDigits = /^(\d{4,12})$/.exec(withoutLabel);
+  const onlyDigits = /^(\d{4,15})$/.exec(withoutLabel);
   if (onlyDigits) return onlyDigits[1];
   return withoutLabel || null;
 }

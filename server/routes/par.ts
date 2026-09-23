@@ -94,6 +94,18 @@ import { archiveApprovalsBeforeReset } from "../lib/par/approvalArchive";
 import { isUrgentReasonCode } from "../../src/lib/par/urgentReasons";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
 
+/**
+ * Copia patentei, golită: pe cererile altcuiva (GDPR, ca IDNP-ul și IBAN-ul) și pe o duplicare
+ * făcută de cineva care nu vede beneficiarul. Un singur obiect, ca să nu rămână o coloană uitată.
+ */
+const NO_PATENT_FILE = {
+  payeePatentFilePath: null,
+  payeePatentFileName: null,
+  payeePatentFileMime: null,
+  payeePatentFileSize: null,
+  payeePatentFileUploadedAt: null,
+} as const;
+
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
 // Guard non-UUID path params before they reach a Postgres uuid query (→ 500). Covers both the
@@ -151,14 +163,20 @@ const updateParSchema = z.object({
   // PAR-103: end-use + payee
   end_use: z.string().max(5000).optional().nullable(),
   vendor_id: z.string().uuid().optional().nullable(),
-  payee_name: z.string().max(300).optional().nullable().transform((v) => cleanPastedIdentityField(v, 300)),
+  // `v === undefined` rămâne `undefined`: `.transform()` rulează și pe un câmp LIPSĂ, iar
+  // `cleanPastedIdentityField(undefined)` dă `null` — adică „șterge". Formularul trimite un PATCH
+  // gol după fiecare „Salvează ciornă" / „Vezi cum arată", deci numele și banca beneficiarului
+  // dispăreau la fiecare salvare (bug de la 16.09.2026, găsit 23.09.2026).
+  payee_name: z.string().max(300).optional().nullable()
+    .transform((v) => (v === undefined ? undefined : cleanPastedIdentityField(v, 300))),
   // Cod fiscal: 13 cifre pentru MD, dar un beneficiar străin are alt format (VAT DE…,
   // personal code EE de 11 cifre). Lățimea o dă validateFiscalId, nu zod-ul.
   payee_idnp: z.string().max(50).optional().nullable(),
   payee_iban: z.string().max(34).optional().nullable(),
   // Curățat la intrare: un câmp lipit dintr-un PDF aduce cu el etichetele următoare, iar de acolo
   // ajunge în reconcilierea documentelor ca „neconcordanță". Vezi `cleanPastedIdentityField`.
-  payee_bank: z.string().max(300).optional().nullable().transform((v) => cleanPastedIdentityField(v, 150)),
+  payee_bank: z.string().max(300).optional().nullable()
+    .transform((v) => (v === undefined ? undefined : cleanPastedIdentityField(v, 150))),
   /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică) */
   payee_type: z.enum(["fizic", "juridic"]).optional().nullable(),
   /**
@@ -168,6 +186,18 @@ const updateParSchema = z.object({
   payee_is_patent_holder: z.boolean().optional().nullable(),
   payee_patent_series: z.string().max(50).optional().nullable(),
   payee_patent_valid_until: z.string().max(20).optional().nullable(),
+  /**
+   * Copia patentei (fișierul). Nu se trimite ca fișier aici — se urcă prin
+   * `/:id/payee-patent/sign|finalize`. Aici doar ce se face cu ea la salvare:
+   *   { from_vendor } → cererea preia copia beneficiarului salvat
+   *   "none"          → cererea rămâne fără copie (alt beneficiar, sau omul a scos-o)
+   *   lipsă           → rămâne ce e pe cerere (inclusiv copia tocmai încărcată)
+   * Beneficiarul-sursă e numit explicit, nu dedus din vendor_id: „Introdu manual" desface legătura
+   * cu registrul ca omul să corecteze un câmp, dar patenta rămâne aceeași.
+   */
+  payee_patent_file: z
+    .union([z.literal("none"), z.object({ from_vendor: z.string().uuid() })])
+    .optional(),
   // Section 13
   attachments_present: z.boolean().optional(),
   attachments_note: z.string().max(2000).optional().nullable(),
@@ -458,6 +488,16 @@ parRoutes.post("/:id/duplicate", async (c) => {
       payeeIsPatentHolder: canSeePayee ? source.payeeIsPatentHolder : false,
       payeePatentSeries: canSeePayee ? source.payeePatentSeries : null,
       payeePatentValidUntil: canSeePayee ? source.payeePatentValidUntil : null,
+      // Copia patentei merge cu seria și termenul ei — aceeași cale din Storage, nimic de copiat.
+      ...(canSeePayee
+        ? {
+            payeePatentFilePath: source.payeePatentFilePath,
+            payeePatentFileName: source.payeePatentFileName,
+            payeePatentFileMime: source.payeePatentFileMime,
+            payeePatentFileSize: source.payeePatentFileSize,
+            payeePatentFileUploadedAt: source.payeePatentFileUploadedAt,
+          }
+        : NO_PATENT_FILE),
       attachmentsPresent: false,
       currency: source.currency,
       totalEstimatedCents: 0,
@@ -1212,6 +1252,7 @@ parRoutes.get("/:id", async (c) => {
         payeeIsPatentHolder: false,
         payeePatentSeries: null,
         payeePatentValidUntil: null,
+        ...NO_PATENT_FILE,
       };
 
   // PAR-109: body hash integrity check on display
@@ -1632,6 +1673,8 @@ parRoutes.patch(
       payeePatentSeries?: string | null;
       payeePatentValidUntil?: string | null;
     } = {};
+    /** Beneficiarul salvat, citit o singură dată — sursa snapshotului și, de obicei, a copiei patentei. */
+    let pickedVendor: typeof parVendors.$inferSelect | undefined;
 
     if (body.vendor_id) {
       const [vendor] = await db
@@ -1643,6 +1686,7 @@ parRoutes.patch(
       if (!vendor) {
         return c.json({ error: "vendor_not_found" }, 404);
       }
+      pickedVendor = vendor;
       // Copy snapshot for historical immutability
       vendorSnapshot = {
         vendorId: vendor.id,
@@ -1719,6 +1763,46 @@ parRoutes.patch(
     if (body.payee_patent_valid_until !== undefined)
       updateData.payeePatentValidUntil = normalizePatentDate(body.payee_patent_valid_until);
 
+    // Copia patentei. Un beneficiar salvat fără copie lasă cererea fără — mai bine nicio patentă
+    // decât patenta altcuiva rămasă de la beneficiarul ales înainte.
+    if (body.payee_patent_file === "none") {
+      Object.assign(updateData, NO_PATENT_FILE);
+    } else if (body.payee_patent_file) {
+      const sourceId = body.payee_patent_file.from_vendor;
+      const source =
+        pickedVendor?.id === sourceId
+          ? pickedVendor
+          : (
+              await db
+                .select()
+                .from(parVendors)
+                .where(and(eq(parVendors.id, sourceId), eq(parVendors.tenantId, tenantId)))
+            )[0];
+      if (!source) return c.json({ error: "vendor_not_found" }, 404);
+      Object.assign(
+        updateData,
+        source.patentFilePath
+          ? {
+              payeePatentFilePath: source.patentFilePath,
+              payeePatentFileName: source.patentFileName,
+              payeePatentFileMime: source.patentFileMime,
+              payeePatentFileSize: source.patentFileSize,
+              payeePatentFileUploadedAt: source.patentFileUploadedAt,
+            }
+          : NO_PATENT_FILE
+      );
+    }
+
+    // Seria și termenul trimise EXPLICIT câștigă în fața registrului. Formularul trimite vendor_id
+    // la FIECARE salvare, iar înainte snapshotul rescria de fiecare dată patenta cu cea din
+    // registru: omul încărca patenta prelungită pentru un beneficiar salvat, vedea termenul nou în
+    // formular, iar cererea se salva cu termenul vechi — și aprobatorul primea „patenta a EXPIRAT"
+    // pe o patentă valabilă. La alegerea beneficiarului formularul copiază oricum patenta lui în
+    // câmpuri, deci ce se vede e exact ce se salvează.
+    if (body.payee_is_patent_holder !== undefined) delete vendorSnapshot.payeeIsPatentHolder;
+    if (body.payee_patent_series !== undefined) delete vendorSnapshot.payeePatentSeries;
+    if (body.payee_patent_valid_until !== undefined) delete vendorSnapshot.payeePatentValidUntil;
+
     // Merge vendor snapshot (overrides inline if vendor_id was provided)
     if (Object.keys(vendorSnapshot).length > 0) {
       if (vendorSnapshot.vendorId !== undefined)
@@ -1746,8 +1830,11 @@ parRoutes.patch(
     const parRec = par as unknown as Record<string, unknown>;
     const norm = (v: unknown) => (v instanceof Date ? v.toISOString() : v ?? null);
     const diffObj: Record<string, { from: unknown; to: unknown }> = {};
+    // Copia patentei apare în istoric prin numele fișierului; calea din Storage, tipul și mărimea
+    // ar fi doar zgomot tehnic pe cronologia pe care o citește aprobatorul.
+    const DIFF_SKIP = new Set(["updatedAt", "payeePatentFilePath", "payeePatentFileMime", "payeePatentFileSize", "payeePatentFileUploadedAt"]);
     for (const key of Object.keys(updateData)) {
-      if (key === "updatedAt") continue;
+      if (DIFF_SKIP.has(key)) continue;
       const before = norm(parRec[key]);
       const after = norm(updateData[key]);
       if (before === after) continue;
@@ -2131,6 +2218,7 @@ function maskPayeeForOthers<T extends { requestedByUserId: string | null; payeeN
           payeeIsPatentHolder: false,
           payeePatentSeries: null,
           payeePatentValidUntil: null,
+          ...NO_PATENT_FILE,
         }
   );
 }
