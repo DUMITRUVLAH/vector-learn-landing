@@ -115,6 +115,19 @@ export function extensionOf(fileName: string): string {
   return fileName.match(/\.([A-Za-z0-9]{1,8})$/)?.[1] ?? "";
 }
 
+/**
+ * Numele sub care documentul intră la dosar.
+ *
+ * `requested` e numele ales de apelant, care de multe ori NU e un nume de fișier
+ * („Ordin de plată — PAR-2026-0032 (dovada.pdf)"). Îl lăsăm exact cum e, cu o singură excepție:
+ * dacă micșorarea a schimbat formatul (un PNG devine JPEG), extensia trebuie să spună adevărul.
+ */
+export function uploadDisplayName(requested: string | undefined, original: File, uploaded: File): string {
+  if (!requested) return uploaded.name;
+  if (uploaded.name === original.name) return requested;
+  return withExtension(requested, extensionOf(uploaded.name));
+}
+
 /** „3,1 MB → 412 KB" pentru interfață; `null` când fișierul a rămas neatins. */
 export function describeCompression(result: CompressedUpload): string | null {
   if (result.method === "original") return null;

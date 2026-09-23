@@ -4,7 +4,7 @@
  */
 import { api, apiUpload } from "../api";
 import { fileNameFromDisposition, saveBlob } from "@/lib/par/downloadName";
-import { compressForUpload, extensionOf, withExtension } from "@/lib/upload/compressForUpload";
+import { compressForUpload, uploadDisplayName } from "@/lib/upload/compressForUpload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -926,12 +926,10 @@ export async function uploadAttachmentDirect(
   const { file: upload } = await compressForUpload(file);
 
   // Numele sub care documentul apare la dosar poate diferi de cel de pe disc (dovada de plată e
-  // botezată după cerere, ca să se recunoască în listă). Dacă micșorarea a schimbat formatul
-  // (un PNG devine JPEG), extensia numelui afișat îl urmează — altfel dosarul ar arăta un
-  // „.png" care nu mai e PNG.
-  const displayName = opts.fileName
-    ? withExtension(opts.fileName, extensionOf(upload.name))
-    : upload.name;
+  // botezată după cerere: „Ordin de plată — PAR-2026-0032 (dovada.pdf)"). Îl atingem DOAR dacă
+  // micșorarea chiar a schimbat formatul (un PNG devine JPEG) — altfel dosarul ar arăta un
+  // „.png" care nu mai e PNG. Când formatul rămâne, numele rămâne exact cum l-a cerut apelantul.
+  const displayName = uploadDisplayName(opts.fileName, file, upload);
   const { path, signed_url } = await api<{ path: string; signed_url: string }>(
     `/api/par/${parId}/attachment-upload/sign`,
     {

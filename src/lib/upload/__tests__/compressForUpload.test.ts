@@ -1,6 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { compressForUpload, describeCompression, extensionOf, formatBytes, withExtension } from "../compressForUpload";
+import {
+  compressForUpload,
+  describeCompression,
+  extensionOf,
+  formatBytes,
+  uploadDisplayName,
+  withExtension,
+} from "../compressForUpload";
 import { pdfWithUncompressedStream, withTrailingJunk } from "./fixtures";
 
 function file(bytes: Uint8Array, name: string, type: string): File {
@@ -99,6 +106,23 @@ describe("ajutoarele de nume și mărime", () => {
     expect(formatBytes(900)).toBe("900 B");
     expect(formatBytes(1_500)).toBe("1 KB");
     expect(formatBytes(3_200_000)).toBe("3,1 MB");
+  });
+
+  it("păstrează numele cerut de apelant cât timp formatul nu s-a schimbat", () => {
+    // Dovada de plată e botezată după cerere și NU arată ca un nume de fișier; dacă i-am lipi
+    // o extensie, dosarul ar afișa „Ordin de plată — PAR-2026-0032 (dovada.pdf).pdf".
+    const original = new File([], "dovada.pdf", { type: "application/pdf" });
+    const compressed = new File([], "dovada.pdf", { type: "application/pdf" });
+    expect(uploadDisplayName("Ordin de plată — PAR-2026-0032 (dovada.pdf)", original, compressed)).toBe(
+      "Ordin de plată — PAR-2026-0032 (dovada.pdf)",
+    );
+  });
+
+  it("corectează extensia doar când micșorarea a schimbat formatul", () => {
+    const original = new File([], "scan.png", { type: "image/png" });
+    const compressed = new File([], "scan.jpg", { type: "image/jpeg" });
+    expect(uploadDisplayName("Confirmare plată.png", original, compressed)).toBe("Confirmare plată.jpg");
+    expect(uploadDisplayName(undefined, original, compressed)).toBe("scan.jpg");
   });
 
   it("nu raportează nimic când fișierul a rămas neatins", () => {
