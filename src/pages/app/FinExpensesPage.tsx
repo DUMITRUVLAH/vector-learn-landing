@@ -45,6 +45,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+import { DateField } from "@/components/ds";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
@@ -294,12 +295,10 @@ function ExpenseFormDialog({ open, onClose, onSaved, initial }: ExpenseFormDialo
               <label className="block text-sm font-medium mb-1" htmlFor="exp-date">
                 Data <span className="text-destructive" aria-hidden="true">*</span>
               </label>
-              <input
+              <DateField
                 id="exp-date"
-                type="date"
                 value={expenseDate}
                 onChange={(e) => setExpenseDate(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>
@@ -781,32 +780,28 @@ export function FinExpensesPage() {
                 {/* Date from */}
                 <div>
                   <label className="sr-only" htmlFor="filter-from">De la</label>
-                  <input
+                  <DateField
                     id="filter-from"
-                    type="date"
                     value={dateFrom}
                     onChange={(e) => {
                       setDateFrom(e.target.value);
                       handleFilterChange();
                     }}
                     placeholder="De la"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
 
                 {/* Date to */}
                 <div>
                   <label className="sr-only" htmlFor="filter-to">Până la</label>
-                  <input
+                  <DateField
                     id="filter-to"
-                    type="date"
                     value={dateTo}
                     onChange={(e) => {
                       setDateTo(e.target.value);
                       handleFilterChange();
                     }}
                     placeholder="Până la"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>

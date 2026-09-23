@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, CalendarDays, Loader2, Plus, Trash2 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
-import { Alert, Button, Input, Label, Select } from "@/components/ds";
+import { Alert, Button, DateField, Input, Label, Select } from "@/components/ds";
 import { Link } from "@/router/HashRouter";
 import { ApiError } from "@/lib/api";
 import {
@@ -311,7 +311,7 @@ export function PontajOrgPage() {
                 <div className="mb-4 flex flex-wrap items-end gap-2">
                   <div>
                     <Label htmlFor="org-holiday-date">Data</Label>
-                    <Input id="org-holiday-date" type="date" value={holidayDate} onChange={(e) => setHolidayDate(e.target.value)} />
+                    <DateField id="org-holiday-date" value={holidayDate} onChange={(e) => setHolidayDate(e.target.value)} />
                   </div>
                   <div className="min-w-[220px] flex-1">
                     <Label htmlFor="org-holiday-name">Denumirea</Label>

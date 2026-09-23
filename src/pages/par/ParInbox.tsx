@@ -14,6 +14,7 @@ import {
   Alert,
   Button,
   Checkbox,
+  DateField,
   Dialog,
   Input,
   Label,
@@ -1156,8 +1157,8 @@ export default function ParInbox() {
                   </Select>
                   <Input className="w-36" value={requestorFilter} onChange={(e) => setRequestorFilter(e.target.value)} placeholder="Solicitant…" aria-label="Filtrează după solicitant" />
                   <Input className="w-36" value={beneficiaryFilter} onChange={(e) => setBeneficiaryFilter(e.target.value)} placeholder="Beneficiar…" aria-label="Filtrează după beneficiar" />
-                  <Input className="w-auto" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="Depus de la" />
-                  <Input className="w-auto" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Depus până la" />
+                  <DateField className="w-40" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="Depus de la" />
+                  <DateField className="w-40" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Depus până la" />
                   <Input className="w-28" type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" />
                   <Input className="w-28" type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" />
                 </div>

@@ -55,7 +55,7 @@ import {
 } from "@/lib/api/par";
 import { VendorSignal } from "@/components/par/VendorSignal";
 import { cn } from "@/lib/utils";
-import { Card, Combobox, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
+import { Card, Combobox, DateField, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
 import {
   URGENT_REASON_ORDER, URGENT_REASON_LABELS, URGENT_REASON_NOTE_MAX_LEN, isUrgentReasonCode,
 } from "@/lib/par/urgentReasons";
@@ -98,11 +98,6 @@ const inputCls =
  * it is a convenience default, never authority — the server re-checks that the user
  * may use the project/payer it receives.
  */
-/**
- * Câmpurile de dată: aceeași bază, dar plafonate ca lățime. O dată ocupă ~10 caractere; întinsă
- * pe toată coloana arată ca un câmp de text gol pe care ai uitat să-l completezi (owner, 2026-08-29).
- */
-const dateInputCls = "h-11 w-full sm:max-w-[11.5rem] rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50";
 
 const LAST_CONTEXT_KEY = "par.lastUsedContext";
 
@@ -540,7 +535,7 @@ export function ParCreateForm() {
   const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
   /**
    * Patenta de întreprinzător (doar persoană fizică). Termenul e ținut ca ISO "YYYY-MM-DD",
-   * adică exact formatul lui `<input type="date">` și al coloanei din registru — nicio conversie
+   * adică exact formatul lui `<DateField>` și al coloanei din registru — nicio conversie
    * pe drum, deci nicio dată care se schimbă cu o zi în funcție de fusul orar.
    */
   const [payeeIsPatentHolder, setPayeeIsPatentHolder] = useState(false);
@@ -1848,10 +1843,10 @@ export function ParCreateForm() {
           <FieldGroup label="Când & scop">
             <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Data cererii" htmlFor="dor" required>
-                <input
+                <DateField
                   id="dor"
-                  type="date"
-                  className={dateInputCls}
+                  className="sm:max-w-[11.5rem]"
+                  inputClassName="h-11"
                   value={dateOfRequest}
                   onChange={(e) => {
                     setDateOfRequest(e.target.value);
@@ -1866,10 +1861,10 @@ export function ParCreateForm() {
                 )}
               </Field>
               <Field label="Data necesară" htmlFor="dn" hint="Implicit: data cererii + 10 zile.">
-                <input
+                <DateField
                   id="dn"
-                  type="date"
-                  className={dateInputCls}
+                  className="sm:max-w-[11.5rem]"
+                  inputClassName="h-11"
                   value={dateNeeded}
                   min={dateOfRequest}
                   onChange={(e) => { setDateNeeded(e.target.value); setDateNeededTouched(true); }}
@@ -1921,10 +1916,10 @@ export function ParCreateForm() {
                   </Select>
                 </Field>
                 <Field label="Termen limită plată" htmlFor="urgentDueDate" required error={fieldErrors.urgent_due_date}>
-                  <input
+                  <DateField
                     id="urgentDueDate"
-                    type="date"
-                    className={dateInputCls}
+                    className="sm:max-w-[11.5rem]"
+                    inputClassName="h-11"
                     value={urgentDueDate}
                     onChange={(e) => { setUrgentDueDate(e.target.value); setFieldErrors((p) => ({ ...p, urgent_due_date: "" })); }}
                   />
@@ -2930,7 +2925,7 @@ export function ParCreateForm() {
                             value={payeePatentSeries} onChange={(e) => setPayeePatentSeries(e.target.value)} />
                         </Field>
                         <Field label="Valabilă până la" htmlFor="ppval" hint="ultima zi de valabilitate">
-                          <input id="ppval" type="date" className={inputCls}
+                          <DateField id="ppval" inputClassName="h-11"
                             value={payeePatentValidUntil}
                             onChange={(e) => setPayeePatentValidUntil(normalizePatentDate(e.target.value) ?? e.target.value)} />
                         </Field>

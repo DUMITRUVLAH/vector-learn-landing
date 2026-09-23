@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, Download, FileText, Loader2, Target } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { KpiTargetsDialog } from "@/components/crm/KpiTargetsDialog";
-import { Alert, Button, Card, EmptyState, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
+import { Alert, Button, Card, DateField, EmptyState, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { TimelineChart, ConversionChart, LostReasonsChart } from "@/components/crm/ReportsCharts";
 import { downloadCrmReportPdf } from "@/lib/crmReportPdf";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
@@ -253,11 +253,11 @@ export function CrmReportsPage() {
             <>
               <div className="space-y-1">
                 <Label htmlFor="rap-de-la">De la</Label>
-                <Input id="rap-de-la" type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                <DateField id="rap-de-la" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="rap-pana-la">Până la</Label>
-                <Input id="rap-pana-la" type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                <DateField id="rap-pana-la" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
               </div>
             </>
           )}

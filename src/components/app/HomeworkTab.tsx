@@ -19,6 +19,7 @@ import {
 } from "@/lib/api/homework";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 // ---- Lesson mode (teacher view) ----
 
 interface LessonHomeworkTabProps {
@@ -236,12 +237,11 @@ function LessonHomeworkPanel({
             <label htmlFor="hw-due" className="text-xs font-medium text-muted-foreground">
               Termen limită (opțional)
             </label>
-            <input
+            <DateField
               id="hw-due"
-              type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 mt-1"
+              className="mt-1"
             />
           </div>
           <div className="flex gap-2">

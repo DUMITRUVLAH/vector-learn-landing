@@ -24,6 +24,7 @@ import {
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 /** Ce s-a întâmplat, scris pentru om. Aceleași cuvinte ca în istoricul unei cereri. */
 const EVENT_LABEL: Record<string, string> = {
   created: "a creat cererea",
@@ -139,13 +140,11 @@ export function ParActivity() {
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             De la
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="De la data"
-              className="min-h-[44px] rounded-md border border-input bg-background px-3 text-sm text-foreground" />
+            <DateField value={from} onChange={(e) => setFrom(e.target.value)} aria-label="De la data" className="w-40" />
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Până la
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Până la data"
-              className="min-h-[44px] rounded-md border border-input bg-background px-3 text-sm text-foreground" />
+            <DateField value={to} onChange={(e) => setTo(e.target.value)} aria-label="Până la data" className="w-40" />
           </label>
           <button
             type="button"

@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api";
 import { createStudent, updateStudent, checkStudentDuplicate, type Student, type StudentInput, type DuplicateMatch } from "@/lib/api/students";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 interface StudentFormProps {
   initial?: Student | null;
   onSuccess: (student: Student) => void;
@@ -216,12 +217,10 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field id="sf-bdate" label="Data nașterii">
-          <input
+          <DateField
             id="sf-bdate"
-            type="date"
             value={birthDate ?? ""}
             onChange={(e) => setBirthDate(e.target.value)}
-            className="input-base"
           />
         </Field>
         <Field id="sf-status" label="Status">

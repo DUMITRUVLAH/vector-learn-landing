@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TaxRate {
@@ -378,15 +379,11 @@ function AddRateModal({ onClose, onSuccess }: AddRateModalProps) {
             <label htmlFor="rate-from" className="block text-sm font-medium">
               De la (data efectivă) <span className="text-destructive" aria-hidden="true">*</span>
             </label>
-            <input
+            <DateField
               id="rate-from"
-              type="date"
               value={form.effectiveFrom}
-              onChange={set("effectiveFrom")}
-              className={cn(
-                "w-full rounded-md border px-3 py-2 text-sm bg-background text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                errors.effectiveFrom ? "border-destructive" : "border-input"
-              )}
+              onChange={(e) => setForm((prev) => ({ ...prev, effectiveFrom: e.target.value }))}
+              invalid={Boolean(errors.effectiveFrom)}
               aria-describedby={errors.effectiveFrom ? "from-err" : undefined}
               aria-invalid={!!errors.effectiveFrom}
             />
@@ -402,15 +399,11 @@ function AddRateModal({ onClose, onSuccess }: AddRateModalProps) {
             <label htmlFor="rate-to" className="block text-sm font-medium">
               Până la <span className="text-muted-foreground text-xs">(opțional)</span>
             </label>
-            <input
+            <DateField
               id="rate-to"
-              type="date"
               value={form.effectiveTo}
-              onChange={set("effectiveTo")}
-              className={cn(
-                "w-full rounded-md border px-3 py-2 text-sm bg-background text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                errors.effectiveTo ? "border-destructive" : "border-input"
-              )}
+              onChange={(e) => setForm((prev) => ({ ...prev, effectiveTo: e.target.value }))}
+              invalid={Boolean(errors.effectiveTo)}
               aria-describedby={errors.effectiveTo ? "to-err" : undefined}
               aria-invalid={!!errors.effectiveTo}
             />

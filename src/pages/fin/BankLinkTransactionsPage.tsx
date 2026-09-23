@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/finBankLink";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
@@ -172,22 +173,20 @@ export default function BankLinkTransactionsPage() {
         {/* Date range */}
         <div className="flex items-center gap-1.5">
           <label htmlFor="tx-from" className="sr-only">De la</label>
-          <input
+          <DateField
             id="tx-from"
-            type="date"
             value={filterFrom}
             onChange={(e) => setFilterFrom(e.target.value)}
-            className="h-9 rounded-lg border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-40"
             aria-label="De la dată"
           />
           <span className="text-muted-foreground">—</span>
           <label htmlFor="tx-to" className="sr-only">Până la</label>
-          <input
+          <DateField
             id="tx-to"
-            type="date"
             value={filterTo}
             onChange={(e) => setFilterTo(e.target.value)}
-            className="h-9 rounded-lg border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-40"
             aria-label="Până la dată"
           />
         </div>

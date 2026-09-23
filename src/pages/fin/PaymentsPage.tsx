@@ -33,6 +33,7 @@ import { PaymentsDonut } from "@/components/fin/PaymentsDonut";
 import { AllocationModal } from "@/components/fin/AllocationModal";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
 function fmt(cents: number | null | undefined, currency = "MDL"): string {
@@ -296,22 +297,20 @@ export default function PaymentsPage() {
             <div className="flex flex-wrap gap-3">
               <div className="flex flex-col gap-1">
                 <label htmlFor="filter-from" className="text-xs text-muted-foreground">De la</label>
-                <input
+                <DateField
                   id="filter-from"
-                  type="date"
                   value={filterFrom}
                   onChange={(e) => setFilterFrom(e.target.value)}
-                  className="min-h-[44px] rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-40"
                 />
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="filter-to" className="text-xs text-muted-foreground">Până la</label>
-                <input
+                <DateField
                   id="filter-to"
-                  type="date"
                   value={filterTo}
                   onChange={(e) => setFilterTo(e.target.value)}
-                  className="min-h-[44px] rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-40"
                 />
               </div>
               <div className="flex flex-col gap-1">

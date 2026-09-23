@@ -13,7 +13,7 @@ import {
   type ParQuote, type ParVendor,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
-import { Alert, Button, Input, Label, Select } from "@/components/ds";
+import { Alert, Button, DateField, Input, Label, Select } from "@/components/ds";
 
 function fmt(cents: number, currency: string): string {
   return formatCurrency(cents, currency);
@@ -106,7 +106,7 @@ export function QuotesSection({ parId, vendors, currency = "MDL" }: { parId: str
         </div>
         <div className="sm:col-span-2">
           <Label className="mb-1 block text-xs text-muted-foreground">Valabil până</Label>
-          <Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} aria-label="Valabilitate ofertă" />
+          <DateField value={validUntil} onChange={(e) => setValidUntil(e.target.value)} aria-label="Valabilitate ofertă" />
         </div>
         <div className="sm:col-span-1">
           <Button type="submit" size="lg" disabled={busy} aria-label="Adaugă oferta" className="w-full px-0">

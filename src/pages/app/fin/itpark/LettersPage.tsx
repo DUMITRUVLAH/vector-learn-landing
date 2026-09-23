@@ -38,6 +38,7 @@ import {
 import { generateLetterBodies, type LetterData } from "@/lib/itpark/letterTemplates";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 // ─── Letter kind config ───────────────────────────────────────────────────────
 
 const LETTER_KINDS: PacketKind[] = [
@@ -181,12 +182,11 @@ function LetterCard({ kind, letterData, existingDoc, engagementId, onSaved }: Le
             >
               Data scrisorii
             </label>
-            <input
+            <DateField
               id={`letter-date-${kind}`}
-              type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-40"
+              className="w-40"
               aria-label="Data scrisorii"
             />
           </div>

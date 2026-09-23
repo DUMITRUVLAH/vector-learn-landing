@@ -31,6 +31,7 @@ import {
   type StockSnapshotRow,
 } from "@/lib/api/finInventory";
 
+import { DateField } from "@/components/ds";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatMDL(cents: number): string {
@@ -237,13 +238,12 @@ export function InventoryReportPage(): JSX.Element {
                 >
                   La data de
                 </label>
-                <input
+                <DateField
                   id="snapshot-date"
-                  type="date"
                   value={snapshotDate}
                   max={todayStr()}
                   onChange={(e) => setSnapshotDate(e.target.value)}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="w-40"
                 />
               </div>
               <button
@@ -354,24 +354,22 @@ export function InventoryReportPage(): JSX.Element {
                 <label htmlFor="period-from" className="text-sm font-medium text-foreground">
                   De la
                 </label>
-                <input
+                <DateField
                   id="period-from"
-                  type="date"
                   value={periodFrom}
                   onChange={(e) => setPeriodFrom(e.target.value)}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="w-40"
                 />
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="period-to" className="text-sm font-medium text-foreground">
                   Până la
                 </label>
-                <input
+                <DateField
                   id="period-to"
-                  type="date"
                   value={periodTo}
                   onChange={(e) => setPeriodTo(e.target.value)}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="w-40"
                 />
               </div>
               <button

@@ -24,6 +24,7 @@ import {
   type ExportFormat,
 } from "@/lib/api/finExport";
 
+import { DateField } from "@/components/ds";
 // ─── Format-uri fallback dacă API e absent ────────────────────────────────────
 
 const FALLBACK_FORMATS: ExportFormat[] = [
@@ -225,12 +226,10 @@ export function ExportCenter() {
               <label htmlFor="export-from" className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
                 De la
               </label>
-              <input
+              <DateField
                 id="export-from"
-                type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 aria-label="Data de start export"
               />
             </div>
@@ -238,12 +237,10 @@ export function ExportCenter() {
               <label htmlFor="export-to" className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
                 Până la
               </label>
-              <input
+              <DateField
                 id="export-to"
-                type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 aria-label="Data de final export"
               />
             </div>

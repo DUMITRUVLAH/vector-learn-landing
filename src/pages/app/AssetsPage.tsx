@@ -36,6 +36,7 @@ import {
 } from "@/lib/api/finAssets";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatMDL(cents: number): string {
@@ -200,14 +201,12 @@ function NewAssetDialog({ onClose, onCreated }: NewAssetDialogProps) {
               <label className="block text-sm font-medium text-foreground mb-1" htmlFor="new-asset-date">
                 Data achiziției <span className="text-destructive">*</span>
               </label>
-              <input
+              <DateField
                 id="new-asset-date"
                 name="acquisitionDate"
-                type="date"
                 required
                 value={form.acquisitionDate}
-                onChange={handleChange}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                onChange={(e) => setForm((prev) => ({ ...prev, acquisitionDate: e.target.value }))}
               />
             </div>
             <div>

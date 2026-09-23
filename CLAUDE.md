@@ -357,6 +357,10 @@ the Lovable.dev platform. If the owner references "Lovable", look to / work in v
 - Spacing uses Tailwind scale; arbitrary values `[123px]` are a last resort and must be justified in a code comment
 - Radius via `rounded-lg|md|sm` or `var(--radius)`
 - Every new component must work in both light AND dark mode
+- **Dates: never `<input type="date">` — use `<DateField>` from `@/components/ds`.** The native field orders
+  day/month by the BROWSER language (en-US Chrome showed 01/13/2027); `DateField` always shows zi.lună.an and
+  still emits ISO. Guarded by `src/__tests__/no-native-date-input.test.ts`. See
+  [docs/solutions/frontend/native-date-input-follows-browser-locale.md].
 
 ### 3.2 TypeScript
 - `strict: true` is on. Don't disable.

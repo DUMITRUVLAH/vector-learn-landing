@@ -13,6 +13,7 @@ import { useRouter } from "@/router/HashRouter";
 import { getEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import { getDoc, upsertDoc } from "@/lib/api/itparkDocs";
 
+import { DateField } from "@/components/ds";
 function useEngagementId(): string {
   const { path } = useRouter();
   const match = path.match(/^\/app\/fin\/itpark\/([^/]+)\/declaratie$/);
@@ -163,7 +164,7 @@ export function SelfDeclarationPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="decl-date" className="block text-sm font-medium text-foreground mb-1">Data declarației</label>
-              <input id="decl-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary min-h-[44px]" />
+              <DateField id="decl-date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div>
               <label htmlFor="decl-admin" className="block text-sm font-medium text-foreground mb-1">Reprezentant legal / Administrator</label>

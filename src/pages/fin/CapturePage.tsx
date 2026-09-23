@@ -52,6 +52,7 @@ import {
 } from "@/lib/api/finCaptures";
 import { cn } from "@/lib/utils";
 
+import { DateField } from "@/components/ds";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getFieldConf(fields: ExtractedFields | null, key: keyof ExtractedFields): number | null {
@@ -854,13 +855,11 @@ export default function CapturePage({ captureId }: { captureId: string }) {
                 required
                 edited={isEdited("expense_date")}
               >
-                <input
-                  type="date"
+                <DateField
                   value={form.expense_date}
                   onChange={(e) =>
                     setForm((p) => p && { ...p, expense_date: e.target.value })
                   }
-                  className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   aria-label="Data documentului"
                 />
               </CaptureFieldRow>

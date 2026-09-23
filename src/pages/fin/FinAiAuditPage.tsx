@@ -29,6 +29,7 @@ import {
   type AiAuditEntry,
 } from "@/lib/api/finAiAudit";
 
+import { DateField } from "@/components/ds";
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
@@ -214,12 +215,11 @@ export function FinAiAuditPage() {
               >
                 De la
               </label>
-              <input
+              <DateField
                 id="filter-from"
-                type="date"
                 value={filterFrom}
                 onChange={(e) => setFilterFrom(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-40"
               />
             </div>
 
@@ -230,12 +230,11 @@ export function FinAiAuditPage() {
               >
                 Până la
               </label>
-              <input
+              <DateField
                 id="filter-to"
-                type="date"
                 value={filterTo}
                 onChange={(e) => setFilterTo(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-40"
               />
             </div>
 

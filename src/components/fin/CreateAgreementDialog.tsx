@@ -9,6 +9,7 @@ import { X, Loader2, AlertTriangle } from "lucide-react";
 import { createAgreement, type AgreementStatus } from "@/lib/api/finAgreements";
 import { ApiError } from "@/lib/api";
 
+import { DateField } from "@/components/ds";
 interface Party {
   id: string;
   name: string;
@@ -215,12 +216,10 @@ export function CreateAgreementDialog({
               >
                 Data start
               </label>
-              <input
+              <DateField
                 id="agr-start"
-                type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
@@ -230,12 +229,10 @@ export function CreateAgreementDialog({
               >
                 Data end
               </label>
-              <input
+              <DateField
                 id="agr-end"
-                type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>

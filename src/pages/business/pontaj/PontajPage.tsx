@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link } from "@/router/HashRouter";
-import { Alert, Badge, Button, Dialog, Input, Label, Select, Switch } from "@/components/ds";
+import { Alert, Badge, Button, DateField, Dialog, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
 import {
@@ -721,11 +721,11 @@ function LeaveDialog({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="pontaj-leave-start">De la</Label>
-            <Input id="pontaj-leave-start" type="date" value={startDate} onChange={(e) => onStartChange(e.target.value)} />
+            <DateField id="pontaj-leave-start" value={startDate} onChange={(e) => onStartChange(e.target.value)} />
           </div>
           <div>
             <Label htmlFor="pontaj-leave-end">Până la (inclusiv)</Label>
-            <Input id="pontaj-leave-end" type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+            <DateField id="pontaj-leave-end" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>
         <div>

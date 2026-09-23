@@ -17,6 +17,7 @@ import {
 import { searchRegistry, type RegistryCompany } from "@/lib/api/paymentAccounts";
 import { createParty, listParties, getParty, updateParty } from "@/lib/api/finParties";
 
+import { DateField } from "@/components/ds";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LineInput {
@@ -358,12 +359,10 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
               >
                 Dată scadentă
               </label>
-              <input
+              <DateField
                 id="fin-due-date"
-                type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>

@@ -35,6 +35,7 @@ import {
   Button,
   Card,
   Checkbox,
+  DateField,
   Input,
   Select,
   Table,
@@ -464,9 +465,8 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
             <label htmlFor="payment-date" className="block text-sm font-medium text-foreground mb-1">
               Data plății <span aria-hidden="true" className="text-destructive">*</span>
             </label>
-            <Input
+            <DateField
               id="payment-date"
-              type="date"
               value={paymentDate}
               onChange={(e) => setPaymentDate(e.target.value)}
                           />
@@ -1430,8 +1430,8 @@ export default function ParFinanceQueue() {
             <Input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Caută PAR, beneficiar, IBAN…" aria-label={archivedView ? "Caută în arhiva finanțelor" : "Caută în coada finanțe"} className="min-w-[240px] flex-1" />
             <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="w-auto"><option value="">Toate proiectele</option>{[...new Set(items.map((i) => i.projectName).filter(Boolean))].map((p) => <option key={p!} value={p!}>{p}</option>)}</Select>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut" className="w-auto"><option value="">Toate statusurile</option><option value="approved">Aprobate</option><option value="in_finance">În finanțe</option><option value="reapproval_required">Reaprobare</option><option value="changes_requested">Refuzate de finanțe</option></Select>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="De la" className="w-auto" />
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Până la" className="w-auto" />
+            <DateField value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="De la" className="w-40" />
+            <DateField value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Până la" className="w-40" />
             <Input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="w-28" />
             <Input type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" className="w-28" />
           </Card>

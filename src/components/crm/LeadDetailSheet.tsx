@@ -39,6 +39,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import {
+  DateField,
   Sheet,
   Button,
   Input,
@@ -1406,9 +1407,8 @@ export function LeadDetailSheet({
                             >
                               Scadență
                             </Label>
-                            <Input
+                            <DateField
                               id="lead-sheet-new-task-due"
-                              type="date"
                               value={newTaskDueDate}
                               onChange={(e) =>
                                 setNewTaskDueDate(e.target.value)

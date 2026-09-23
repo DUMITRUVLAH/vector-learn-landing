@@ -22,6 +22,7 @@ import {
 } from "@/lib/api/finInvoices";
 import { searchRegistry, type RegistryCompany } from "@/lib/api/paymentAccounts";
 
+import { DateField } from "@/components/ds";
 type Lang = "ro" | "ru" | "en";
 type Currency = "MDL" | "EUR" | "USD";
 
@@ -449,22 +450,18 @@ export function FinInvoiceDocPage() {
               </div>
               <div>
                 <label htmlFor="doc-issued" className="mb-1 block text-xs font-medium text-muted-foreground">Data emiterii</label>
-                <input
+                <DateField
                   id="doc-issued"
-                  type="date"
                   value={issuedAt}
                   onChange={(e) => setIssuedAt(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
                 <label htmlFor="doc-due" className="mb-1 block text-xs font-medium text-muted-foreground">Data scadentă</label>
-                <input
+                <DateField
                   id="doc-due"
-                  type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             </div>

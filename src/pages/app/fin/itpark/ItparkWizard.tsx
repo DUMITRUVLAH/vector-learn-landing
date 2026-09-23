@@ -13,6 +13,7 @@
 import { useState, useRef, useCallback } from "react";
 import { createEngagement } from "../../../../lib/api/itparkEngagements";
 
+import { DateField } from "@/components/ds";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface WizardData {
@@ -222,12 +223,10 @@ function Step1({ data, onChange, errors }: Step1Props) {
           />
         </Field>
         <Field id="mitpContractDate" label="Data contractului MITP">
-          <input
+          <DateField
             id="mitpContractDate"
-            type="date"
             value={data.mitpContractDate}
             onChange={(e) => onChange({ mitpContractDate: e.target.value })}
-            className={inputClass}
           />
         </Field>
       </div>
@@ -250,9 +249,8 @@ function Step2({ data, onChange, errors }: Step2Props) {
 
       <div className="grid grid-cols-2 gap-4">
         <Field id="periodStart" label="Perioadă — start" required error={errors.periodStart}>
-          <input
+          <DateField
             id="periodStart"
-            type="date"
             value={data.periodStart}
             onChange={(e) => {
               const val = e.target.value;
@@ -261,13 +259,11 @@ function Step2({ data, onChange, errors }: Step2Props) {
             }}
             aria-required="true"
             aria-describedby={errors.periodStart ? "periodStart-error" : undefined}
-            className={inputClass}
           />
         </Field>
         <Field id="periodEnd" label="Perioadă — end" required error={errors.periodEnd}>
-          <input
+          <DateField
             id="periodEnd"
-            type="date"
             value={data.periodEnd}
             onChange={(e) => {
               const val = e.target.value;
@@ -276,7 +272,6 @@ function Step2({ data, onChange, errors }: Step2Props) {
             }}
             aria-required="true"
             aria-describedby={errors.periodEnd ? "periodEnd-error" : undefined}
-            className={inputClass}
           />
         </Field>
       </div>

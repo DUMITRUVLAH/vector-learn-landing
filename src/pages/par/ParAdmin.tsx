@@ -48,7 +48,7 @@ import {
 import { AppShell } from "@/components/app/AppShell";
 import { ParImportMappingDialog } from "@/components/par/ParImportMappingDialog";
 import { cn } from "@/lib/utils";
-import { Alert, Badge, Button, Card, Checkbox, Input, Label, Select, Switch, Tabs, Textarea } from "@/components/ds";
+import { Alert, Badge, Button, Card, Checkbox, DateField, Input, Label, Select, Switch, Tabs, Textarea } from "@/components/ds";
 import { validateIban } from "@/lib/par/iban";
 import { PAR_EVENT_TITLES, eventTitle, humanizeDetail } from "@/lib/par/timelineHumanize";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
@@ -1146,11 +1146,11 @@ function DelegationSection({ members }: { members: ParMember[] }) {
         </div>
         <div>
           <label htmlFor="deleg-from" className="text-xs font-medium text-muted-foreground block mb-1">De la</label>
-          <Input id="deleg-from" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+          <DateField id="deleg-from" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
         </div>
         <div>
           <label htmlFor="deleg-until" className="text-xs font-medium text-muted-foreground block mb-1">Până la</label>
-          <Input id="deleg-until" type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+          <DateField id="deleg-until" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
         </div>
         <div className="sm:col-span-4">
           <button type="submit" disabled={busy || !toUserId || !startsAt || !endsAt}
@@ -1433,12 +1433,12 @@ function AuditTab() {
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut PAR"><option value="">Toate statusurile</option>{["draft","pending_approval","changes_requested","rejected","approved","in_finance","reapproval_required","paid","cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}</Select>
         <div>
           <label htmlFor="audit-from" className="text-xs font-medium text-muted-foreground block mb-1">De la</label>
-          <Input id="audit-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+          <DateField id="audit-from" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
             />
         </div>
         <div>
           <label htmlFor="audit-to" className="text-xs font-medium text-muted-foreground block mb-1">Până la</label>
-          <Input id="audit-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+          <DateField id="audit-to" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
             />
         </div>
         <button type="button" onClick={exportCsv} disabled={entries.length === 0}
@@ -3142,9 +3142,8 @@ function EventsTable({ events, projects, budgetCodes, onReload }: EventsTablePro
               <label htmlFor="ev-starts" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                 <Calendar className="h-3 w-3" aria-hidden /> Data început
               </label>
-              <Input
+              <DateField
                 id="ev-starts"
-                type="date"
                 value={form.starts_at}
                 onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
                
@@ -3154,9 +3153,8 @@ function EventsTable({ events, projects, budgetCodes, onReload }: EventsTablePro
               <label htmlFor="ev-ends" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                 <Calendar className="h-3 w-3" aria-hidden /> Data sfârșit
               </label>
-              <Input
+              <DateField
                 id="ev-ends"
-                type="date"
                 value={form.ends_at}
                 min={form.starts_at || undefined}
                 onChange={(e) => setForm((f) => ({ ...f, ends_at: e.target.value }))}

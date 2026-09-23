@@ -45,6 +45,7 @@ import {
   type ReconcileResponse,
 } from "@/lib/api/finLedger";
 
+import { DateField } from "@/components/ds";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const ACCOUNT_CLASSES = [
@@ -320,22 +321,20 @@ export function FinLedgerPage() {
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label htmlFor="from-date" className="text-xs text-muted-foreground">De la</label>
-              <input
+              <DateField
                 id="from-date"
-                type="date"
                 value={filterFrom}
                 onChange={(e) => { setFilterFrom(e.target.value); setJournalPage(1); }}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-40"
               />
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="to-date" className="text-xs text-muted-foreground">Pana la</label>
-              <input
+              <DateField
                 id="to-date"
-                type="date"
                 value={filterTo}
                 onChange={(e) => { setFilterTo(e.target.value); setJournalPage(1); }}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-40"
               />
             </div>
           </div>

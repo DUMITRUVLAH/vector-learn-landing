@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { ParCreateForm } from "../ParCreateForm";
 import { plusDays } from "@/lib/par/dates";
+import { formatDayDate } from "@/lib/dayDate";
 import * as parApi from "@/lib/api/par";
 import type { ParRequest } from "@/lib/api/par";
 
@@ -127,7 +128,8 @@ describe("ParCreateForm — VM3-03 (feedback Violeta)", () => {
 
     const dn = (await screen.findByLabelText(/data necesară/i)) as HTMLInputElement;
     const expected = plusDays(iso(new Date()), 10);
-    expect(dn.value).toBe(expected);
+    // Câmpul arată zi.lună.an (DateField), formularul ține ISO.
+    expect(dn.value).toBe(formatDayDate(expected));
   });
 
   it("[blocant] schimbarea datei cererii recalculează +10; editarea manuală oprește sincronizarea", async () => {
@@ -137,18 +139,18 @@ describe("ParCreateForm — VM3-03 (feedback Violeta)", () => {
     const dor = (await screen.findByLabelText(/data cererii/i)) as HTMLInputElement;
     const dn = (await screen.findByLabelText(/data necesară/i)) as HTMLInputElement;
 
-    // 1. schimb data cererii → data necesară urmează (+10)
-    fireEvent.change(dor, { target: { value: "2026-07-01" } });
-    await waitFor(() => expect(dn.value).toBe("2026-07-11"));
+    // 1. schimb data cererii → data necesară urmează (+10); omul scrie zi.lună.an
+    fireEvent.change(dor, { target: { value: "01.07.2026" } });
+    await waitFor(() => expect(dn.value).toBe("11.07.2026"));
 
     // 2. editez manual data necesară
-    fireEvent.change(dn, { target: { value: "2026-07-20" } });
-    expect(dn.value).toBe("2026-07-20");
+    fireEvent.change(dn, { target: { value: "20.07.2026" } });
+    expect(dn.value).toBe("20.07.2026");
 
     // 3. schimb iar data cererii → data necesară NU se mai suprascrie
-    fireEvent.change(dor, { target: { value: "2026-07-05" } });
-    await waitFor(() => expect(dor.value).toBe("2026-07-05"));
-    expect(dn.value).toBe("2026-07-20");
+    fireEvent.change(dor, { target: { value: "05.07.2026" } });
+    await waitFor(() => expect(dor.value).toBe("05.07.2026"));
+    expect(dn.value).toBe("20.07.2026");
   });
 
   it("UM are datalist cu sugestii, inclusiv 'bucăți' și 'servicii'", async () => {

@@ -26,6 +26,7 @@ import {
   type AccountLedgerResponse,
 } from "@/lib/api/finLedger";
 
+import { DateField } from "@/components/ds";
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function today(): string {
@@ -124,22 +125,20 @@ export function FinLedgerCarteMare({ accountCode }: FinLedgerCarteMareProps) {
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label htmlFor="carte-from" className="text-xs text-muted-foreground">De la</label>
-              <input
+              <DateField
                 id="carte-from"
-                type="date"
                 value={filterFrom}
                 onChange={(e) => setFilterFrom(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-40"
               />
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="carte-to" className="text-xs text-muted-foreground">Pana la</label>
-              <input
+              <DateField
                 id="carte-to"
-                type="date"
                 value={filterTo}
                 onChange={(e) => setFilterTo(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-40"
               />
             </div>
             <button

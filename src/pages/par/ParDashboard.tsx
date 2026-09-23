@@ -20,6 +20,7 @@ import {
   Badge,
   Button,
   Card,
+  DateField,
   Input,
   KpiTile,
   Label,
@@ -605,11 +606,11 @@ export function ParDashboard() {
           <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="date-from">De la data</Label>
-              <Input id="date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              <DateField id="date-from" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="date-to">Până la data</Label>
-              <Input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              <DateField id="date-to" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="min-total">Sumă minimă (MDL)</Label>

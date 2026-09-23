@@ -12,6 +12,7 @@ import {
   type RegistryCompanyDetail,
 } from "@/lib/api/paymentAccounts";
 
+import { DateField } from "@/components/ds";
 interface EditorLine {
   description: string;
   unit: string;
@@ -297,12 +298,10 @@ export function PaymentAccountEditorPage({ accountId }: PaymentAccountEditorPage
           <section className="rounded-2xl border border-border bg-card p-5">
             <h2 className="mb-3 text-sm font-semibold text-foreground">Detalii document</h2>
             <Label>Scadență</Label>
-            <input
-              type="date"
+            <DateField
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               aria-label="Data scadenței"
-              className={inputCls}
             />
             <div className="mt-3">
               <Label>Notițe</Label>

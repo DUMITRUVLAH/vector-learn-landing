@@ -38,6 +38,7 @@ import {
   Badge,
   Button,
   Card,
+  DateField,
   Dialog,
   EmptyState,
   Input,
@@ -1338,11 +1339,11 @@ function OfferDialog({
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="of-date">Data ofertei</Label>
-            <Input id="of-date" type="date" value={offeredAt} onChange={(e) => setOfferedAt(e.target.value)} />
+            <DateField id="of-date" value={offeredAt} onChange={(e) => setOfferedAt(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="of-valid">Valabilă până la</Label>
-            <Input id="of-valid" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+            <DateField id="of-valid" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -1446,11 +1447,11 @@ function DocumentDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <Label htmlFor="doc-issued">Data emiterii</Label>
-            <Input id="doc-issued" type="date" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
+            <DateField id="doc-issued" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="doc-valid">Valabil până la</Label>
-            <Input id="doc-valid" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+            <DateField id="doc-valid" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
           </div>
         </div>
         <div className="flex flex-col gap-1">

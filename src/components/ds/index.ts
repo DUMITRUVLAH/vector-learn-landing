@@ -20,6 +20,9 @@ export type { ComboboxProps, ComboboxOption } from "./Combobox";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./Card";
 export type { CardProps } from "./Card";
 
+export { DateField } from "./DateField";
+export type { DateFieldChange, DateFieldProps } from "./DateField";
+
 export { EmptyState } from "./EmptyState";
 
 export { Checkbox, Input, Label, Select, Switch, Textarea } from "./Field";

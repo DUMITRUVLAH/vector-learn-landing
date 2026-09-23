@@ -33,6 +33,7 @@ import {
   Alert,
   Button,
   Card,
+  DateField,
   Input,
   Label,
   Progress,
@@ -82,7 +83,7 @@ function fmtWhen(iso: string | null): string {
   return d.toLocaleString("ro-MD", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-/** `YYYY-MM-DD` în ora locală — ce așteaptă `<input type="date">`. */
+/** `YYYY-MM-DD` în ora locală — ce așteaptă `<DateField>`. */
 function isoDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -486,9 +487,8 @@ export function ParEfacturaInvoices({
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <Label htmlFor="efp-from">De la</Label>
-            <Input
+            <DateField
               id="efp-from"
-              type="date"
               value={from}
               onChange={(e) => {
                 setFrom(e.target.value);
@@ -498,9 +498,8 @@ export function ParEfacturaInvoices({
           </div>
           <div>
             <Label htmlFor="efp-to">Până la</Label>
-            <Input
+            <DateField
               id="efp-to"
-              type="date"
               value={to}
               onChange={(e) => {
                 setTo(e.target.value);

@@ -33,7 +33,7 @@ import { BusinessShell } from "@/components/business/BusinessShell";
 // same lazyWithTimeout() pattern App.tsx uses for whole pages (see PERF-003 comment there).
 import { lazyWithTimeout } from "@/lib/lazyWithTimeout";
 const ParFxLineChart = lazyWithTimeout(() => import("@/components/par/ParFxLineChart"));
-import { Alert, Button, Card, EmptyState, Input, Label, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
+import { Alert, Button, Card, DateField, EmptyState, Input, Label, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { EMOJI_FONT_STACK, flagOf } from "@/lib/par/currencyFlag";
 import {
@@ -374,9 +374,8 @@ function HistoryChart({
         <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
           <div className="space-y-1.5">
             <Label htmlFor="fx-from-date">De la</Label>
-            <Input
+            <DateField
               id="fx-from-date"
-              type="date"
               value={from}
               max={to}
               onChange={(e) => onFrom(e.target.value)}
@@ -385,9 +384,8 @@ function HistoryChart({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="fx-to-date">Până la</Label>
-            <Input
+            <DateField
               id="fx-to-date"
-              type="date"
               value={to}
               min={from}
               max={todayIso()}
@@ -542,9 +540,8 @@ export function ParExchange() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="fx-date">Data cursului</Label>
-            <Input
+            <DateField
               id="fx-date"
-              type="date"
               value={date}
               max={todayIso()}
               onChange={(e) => setDate(e.target.value || todayIso())}

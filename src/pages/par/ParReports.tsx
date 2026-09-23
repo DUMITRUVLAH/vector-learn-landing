@@ -59,6 +59,7 @@ import {
   Alert,
   Button,
   Card,
+  DateField,
   EmptyState,
   Input,
   KpiTile,
@@ -668,20 +669,18 @@ export function ParReports() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="par-report-from">De la</Label>
-            <Input
+            <DateField
               id="par-report-from"
-              className="w-auto"
-              type="date"
+              className="w-40"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="par-report-to">Până la</Label>
-            <Input
+            <DateField
               id="par-report-to"
-              className="w-auto"
-              type="date"
+              className="w-40"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
             />
