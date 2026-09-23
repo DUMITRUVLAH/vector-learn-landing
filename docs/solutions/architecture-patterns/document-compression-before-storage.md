@@ -28,9 +28,9 @@ PDF-uri**. Compoziția reală, nu presupusă (`npm run storage:report`):
      TCPDF), iar rescrierea aruncă ce nu ține de document (octeții de după `%%EOF`);
    - **scan**: paginile care sunt deja doar o fotografie (fără fonturi în resurse, o singură
      imagine JPEG) se reîncodează la 150 DPI / q 0,62 — `Contract Fox.pdf`: 3,11 MB → 1,44 MB.
-2. **Pentru trecut** — `scripts/storage-compress.ts`, rulat cu `--apply --lossless-only`:
-   **95,09 MB → 60,18 MB** (48 obiecte, −37%), cu originalele salvate local și mărimile din baza
-   de date aliniate.
+2. **Pentru trecut** — `scripts/storage-compress.ts`, rulat pe storage-ul real:
+   **95,09 MB → 56,68 MB** (54 obiecte, −40%), cu originalele salvate local, mărimile din baza de
+   date aliniate și fiecare obiect recitit după scriere. Copia patentei din dosar: 1241 KB → 497 KB.
 
 ## Regula care nu se încalcă: nimic semnat nu se rescrie
 
@@ -58,12 +58,18 @@ Dovada că pericolul e real, nu teoretic: pe `74484483_1_FiscalInvoice.pdf` (e-F
   codul fiscal (`readUploadedDoc`); spațiul câștigat s-ar plăti cu pre-completarea AI.
 - **1754 px (150 DPI) e pragul de jos, nu o preferință.** Modelele de vedere micșorează oricum
   imaginea sub ~1568 px pe latura lungă, deci la 1754 px nu se pierde nimic din ce vede AI-ul.
+- **Un scan poate avea un LANȚ de filtre.** Scanerele de birou scriu imaginea ca
+  `[/FlateDecode /DCTDecode]` — JPEG comprimat încă o dată cu Flate. Codul care căuta un singur
+  filtru trimitea octeții comprimați la decodor, acesta nu recunoștea un JPEG, și tot fișierul
+  rămânea neatins. Exact asta pățea copia patentei (Xerox VersaLink B7035). Regresia e în teste,
+  cu umplutură pseudo-aleatoare în JPEG-ul de fixture: cu spații, Flate ar fi strivit-o și testul
+  ar fi măsurat altceva decât face un scan adevărat.
 - **Suitele e2e scriu în Storage-ul de producție.** Cele trei „Patenta AB 282679…pdf" de 1,27 MB
   erau fixture-uri de test, cu 1,3 MB de umplutură fiecare, urcate în bucket-ul clientului.
 
 ## Ce NU rezolvă asta
 
-**45% din storage erau copii identice** ale acelorași fișiere reurcate (același nume, aceeași
+**45% din storage (41 MB din 92) erau copii identice** ale acelorași fișiere reurcate (același nume, aceeași
 mărime: `MM8710246.signed.pdf` de 4 ori, `74484483_1_FiscalInvoice.pdf` de 3 ori). Deduplicarea
 după amprenta conținutului ar câștiga mai mult decât compresia și ar merge și pe actele semnate,
 dar are o capcană: ștergerea unui atașament ar șterge obiectul partajat de sub celelalte. Cere
