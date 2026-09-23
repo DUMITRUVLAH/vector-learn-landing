@@ -40,7 +40,14 @@ export function paddedJpeg(padBytes: number): Uint8Array {
     seg[1] = 0xfe; // COM
     seg[2] = ((size + 2) >> 8) & 0xff;
     seg[3] = (size + 2) & 0xff;
-    seg.fill(0x20, 4);
+    // Umplutură pseudo-aleatoare, nu octeți identici: un JPEG real e deja de mare entropie, iar
+    // un comentariu plin de spații s-ar comprima la nimic cu Flate — testul lanțului
+    // `[/FlateDecode /DCTDecode]` ar măsura atunci altceva decât realitatea.
+    let seed = size;
+    for (let i = 4; i < seg.length; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      seg[i] = (seed >> 16) & 0xff;
+    }
     segments.push(seg);
     left -= size;
   }
@@ -148,5 +155,28 @@ export async function pdfWithoutAnnotation(): Promise<Uint8Array> {
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const page = doc.addPage([595, 842]);
   page.drawText("Vezi anexa", { x: 50, y: 780, size: 12, font });
+  return doc.save({ useObjectStreams: false });
+}
+
+/**
+ * Un scan în care imaginea e JPEG comprimat ÎNCĂ o dată cu Flate — lanțul de filtre
+ * `[/FlateDecode /DCTDecode]`, exact cum scriu scanerele de birou (copia patentei din storage
+ * vine de pe un Xerox VersaLink B7035). Octeții imaginii NU sunt un JPEG până nu-i decomprimi,
+ * iar asta a făcut prima versiune să renunțe la fișier cu „reincodare_esuata".
+ */
+export async function scannedPdfFlateJpeg(pageCount: number, jpeg: Uint8Array): Promise<Uint8Array> {
+  const plain = await scannedPdf(pageCount, jpeg);
+  const doc = await PDFDocument.load(plain);
+  for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+    if (!(obj instanceof PDFRawStream)) continue;
+    if (obj.dict.get(PDFName.of("Subtype"))?.toString() !== "/Image") continue;
+    const deflated = new Uint8Array(
+      await new Response(
+        new Blob([obj.contents as unknown as BlobPart]).stream().pipeThrough(new CompressionStream("deflate")),
+      ).arrayBuffer(),
+    );
+    obj.dict.set(PDFName.of("Filter"), doc.context.obj([PDFName.of("FlateDecode"), PDFName.of("DCTDecode")]));
+    doc.context.assign(ref, PDFRawStream.of(obj.dict, deflated));
+  }
   return doc.save({ useObjectStreams: false });
 }

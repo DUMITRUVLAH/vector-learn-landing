@@ -162,15 +162,31 @@ export async function rasterizeScannedPdf(
     if (images.length !== 1) return { bytes: null, method: "none", reason: "pagina_nu_e_scan" };
 
     const img = images[0];
-    if (!String(img.dict.get(PDFName.of("Filter"))).includes("DCTDecode")) {
-      // Doar JPEG: un scan pe alt filtru (Flate brut, CCITT, JPX) ar trebui decodat de noi, iar o
-      // decodare greșită ar livra un document alterat fără să se vadă.
-      return { bytes: null, method: "none", reason: "imagine_nu_e_jpeg" };
-    }
     if (img.dict.get(PDFName.of("SMask"))) return { bytes: null, method: "none", reason: "imagine_cu_transparenta" };
 
+    // Filtrele se aplică în ordine, deci `[/FlateDecode /DCTDecode]` înseamnă „octeții sunt
+    // comprimați cu Flate, iar dedesubt e un JPEG". Scanerele de birou chiar scriu așa (copia
+    // patentei din storage vine de pe un Xerox VersaLink), iar dacă am trimite octeții ca atare
+    // la decodor, el n-ar recunoaște un JPEG și am renunța la un fișier perfect comprimabil.
+    const filters = filterNames(img.dict.get(PDFName.of("Filter")));
+    const parms = img.dict.get(PDFName.of("DecodeParms"));
+    let jpeg: Uint8Array;
+    if (filters.length === 1 && filters[0] === "DCTDecode") {
+      jpeg = img.contents;
+    } else if (filters.length === 2 && filters[0] === "FlateDecode" && filters[1] === "DCTDecode" && !hasDecodeParms(parms)) {
+      try {
+        jpeg = await inflate(img.contents);
+      } catch {
+        return { bytes: null, method: "none", reason: "imagine_nedecomprimabila" };
+      }
+    } else {
+      // Un scan pe alt filtru (CCITT, JPX, Flate brut) ar trebui decodat de noi, iar o decodare
+      // greșită ar livra un document alterat fără să se vadă.
+      return { bytes: null, method: "none", reason: "imagine_nu_e_jpeg" };
+    }
+
     const { width, height } = page.getSize();
-    scans.push({ jpeg: img.contents, width, height, rotation: page.getRotation().angle });
+    scans.push({ jpeg, width, height, rotation: page.getRotation().angle });
   }
 
   const out = await PDFDocument.create();
@@ -191,6 +207,20 @@ export async function rasterizeScannedPdf(
     return { bytes: null, method: "none", reason: "verificare_esuata" };
   }
   return { bytes: saved, method: "pdf-scan" };
+}
+
+/** Numele filtrelor unui stream, fie că e unul singur, fie un lanț. */
+function filterNames(filter: unknown): string[] {
+  if (!filter) return [];
+  const text = String(filter);
+  return (text.match(/\/([A-Za-z0-9]+)/g) ?? []).map((n) => n.slice(1));
+}
+
+/** Are parametri de decodare care chiar schimbă ceva (predictori)? `null`-urile nu contează. */
+function hasDecodeParms(parms: unknown): boolean {
+  if (!parms) return false;
+  const text = String(parms);
+  return /\/[A-Za-z]/.test(text.replace(/null/g, ""));
 }
 
 /* ──────────────────────────────── Verificare ──────────────────────────────── */

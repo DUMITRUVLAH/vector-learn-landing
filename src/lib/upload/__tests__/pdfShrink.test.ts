@@ -9,6 +9,7 @@ import {
   pdfWithUncompressedStream,
   readRawStream,
   scannedPdf,
+  scannedPdfFlateJpeg,
   tinyJpeg,
   withTrailingJunk,
 } from "./fixtures";
@@ -77,6 +78,18 @@ describe("rasterizeScannedPdf — doar pagini care sunt deja o fotografie", () =
     expect(result.method).toBe("pdf-scan");
     expect(result.bytes!.length).toBeLessThan(original.length / 2);
     expect(await verifyStructurallyEqual(original, result.bytes!, { skipTextOps: true })).toBe(true);
+  });
+
+  it("decomprimă lanțul `[/FlateDecode /DCTDecode]` scris de scanere, în loc să renunțe", async () => {
+    // Fără pasul de inflate, decodorul nu recunoaște un JPEG în octeții comprimați și întregul
+    // fișier rămâne neatins — exact ce a pățit copia patentei de pe Xerox (1241 KB → 497 KB).
+    const original = await scannedPdfFlateJpeg(2, paddedJpeg(200_000));
+
+    const result = await rasterizeScannedPdf(original, halveJpeg);
+
+    expect(result.reason).toBeUndefined();
+    expect(result.method).toBe("pdf-scan");
+    expect(result.bytes!.length).toBeLessThan(original.length / 2);
   });
 
   it("REFUZĂ o pagină cu text — stratul din care se extrag suma și IBAN-ul nu se sacrifică pentru spațiu", async () => {
