@@ -9,6 +9,7 @@
  * există deja în acest worktree, nu doar ca spec) — nu inventa alte nume.
  */
 import { api } from "@/lib/api";
+import { compressForUpload } from "@/lib/upload/compressForUpload";
 import { crmSegmentQuery, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
 
 // ─── Leaduri ──────────────────────────────────────────────────────────────────
@@ -979,11 +980,16 @@ export function listCrmLeadFiles(leadId: string): Promise<{ items: CrmLeadFile[]
 export async function uploadCrmLeadFile(
   leadId: string,
   file: File,
-  opts: { onStep?: (step: "upload" | "finalize") => void } = {}
+  opts: { onStep?: (step: "compress" | "upload" | "finalize") => void } = {}
 ): Promise<CrmLeadFile> {
+  // Micșorare înainte de semnare — aceeași poartă ca la dosarele PAR (`compressForUpload`):
+  // storage-ul e comun, deci și disciplina trebuie să fie.
+  opts.onStep?.("compress");
+  const { file: upload } = await compressForUpload(file);
+
   const { path, signedUrl } = await api<{ path: string; signedUrl: string }>("/api/crm/lead-files/sign", {
     method: "POST",
-    body: JSON.stringify({ leadId, fileName: file.name, mime: file.type, sizeBytes: file.size }),
+    body: JSON.stringify({ leadId, fileName: upload.name, mime: upload.type, sizeBytes: upload.size }),
   });
 
   opts.onStep?.("upload");
@@ -993,8 +999,8 @@ export async function uploadCrmLeadFile(
   try {
     put = await fetch(signedUrl, {
       method: "PUT",
-      headers: { "content-type": file.type || "application/octet-stream" },
-      body: file,
+      headers: { "content-type": upload.type || "application/octet-stream" },
+      body: upload,
     });
   } catch {
     throw new Error("Fișierul nu a ajuns la server (conexiune întreruptă). Reîncearcă.");
@@ -1004,7 +1010,7 @@ export async function uploadCrmLeadFile(
   opts.onStep?.("finalize");
   return api<CrmLeadFile>("/api/crm/lead-files/finalize", {
     method: "POST",
-    body: JSON.stringify({ leadId, path, fileName: file.name, mime: file.type }),
+    body: JSON.stringify({ leadId, path, fileName: upload.name, mime: upload.type }),
   });
 }
 

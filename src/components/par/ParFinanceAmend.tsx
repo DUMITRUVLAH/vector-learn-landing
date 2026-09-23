@@ -263,7 +263,7 @@ export function FinanceAddendum({
   const [kind, setKind] = useState<ParAttachmentKind>("other");
   const [kindOther, setKindOther] = useState("Act adițional");
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState<"upload" | "finalize" | null>(null);
+  const [step, setStep] = useState<"compress" | "upload" | "finalize" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -334,7 +334,7 @@ export function FinanceAddendum({
         )}
         <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => inputRef.current?.click()}>
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Paperclip className="h-3.5 w-3.5" aria-hidden />}
-          {busy ? (step === "finalize" ? "Se verifică…" : "Se încarcă…") : "Alege fișierul"}
+          {busy ? (step === "finalize" ? "Se verifică…" : step === "compress" ? "Se pregătește…" : "Se încarcă…") : "Alege fișierul"}
         </Button>
         {!alwaysOpen && (
           <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setOpen(false); setError(null); }}>

@@ -59,3 +59,6 @@ HR365*.html
 # Screenshoturi de research competitiv (binare, păstrate local, nu în git)
 backlog/research/**/screenshots/
 backlog/research/**/TRIAL-ACCOUNT-CREDENTIALS.local.md
+
+# Originalele salvate de scripts/storage-compress.ts înainte de a suprascrie în Storage.
+.storage-backup/

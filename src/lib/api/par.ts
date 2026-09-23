@@ -4,6 +4,7 @@
  */
 import { api, apiUpload } from "../api";
 import { fileNameFromDisposition, saveBlob } from "@/lib/par/downloadName";
+import { compressForUpload, extensionOf, withExtension } from "@/lib/upload/compressForUpload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -910,21 +911,32 @@ export async function uploadAttachmentDirect(
     kind_other?: string;
     fileName?: string;
     /**
-     * Anunță interfața la ce pas suntem. Încărcarea directă are două etape cu durate foarte
-     * diferite — fișierul urcă în Storage, apoi serverul îl verifică — iar un buton care tace pe
-     * tot parcursul arată identic cu o aplicație blocată (owner, 13.09.2026, dialogul de plată).
+     * Anunță interfața la ce pas suntem. Încărcarea directă are etape cu durate foarte
+     * diferite — fișierul se comprimă, urcă în Storage, apoi serverul îl verifică — iar un buton
+     * care tace pe tot parcursul arată identic cu o aplicație blocată (owner, 13.09.2026,
+     * dialogul de plată).
      */
-    onStep?: (step: "upload" | "finalize") => void;
+    onStep?: (step: "compress" | "upload" | "finalize") => void;
   } = {}
 ): Promise<ParAttachment> {
+  // Micșorăm ÎNAINTE de semnare: calea din Storage, mărimea declarată și verificarea octeților de
+  // la `finalize` trebuie să descrie fișierul care chiar urcă. Ce e semnat electronic sau nu se
+  // poate micșora în siguranță trece neatins — vezi `compressForUpload`.
+  opts.onStep?.("compress");
+  const { file: upload } = await compressForUpload(file);
+
   // Numele sub care documentul apare la dosar poate diferi de cel de pe disc (dovada de plată e
-  // botezată după cerere, ca să se recunoască în listă).
-  const displayName = opts.fileName ?? file.name;
+  // botezată după cerere, ca să se recunoască în listă). Dacă micșorarea a schimbat formatul
+  // (un PNG devine JPEG), extensia numelui afișat îl urmează — altfel dosarul ar arăta un
+  // „.png" care nu mai e PNG.
+  const displayName = opts.fileName
+    ? withExtension(opts.fileName, extensionOf(upload.name))
+    : upload.name;
   const { path, signed_url } = await api<{ path: string; signed_url: string }>(
     `/api/par/${parId}/attachment-upload/sign`,
     {
       method: "POST",
-      body: JSON.stringify({ file_name: displayName, mime: file.type, size_bytes: file.size }),
+      body: JSON.stringify({ file_name: displayName, mime: upload.type, size_bytes: upload.size }),
     }
   );
 
@@ -940,8 +952,8 @@ export async function uploadAttachmentDirect(
   try {
     put = await fetch(signed_url, {
       method: "PUT",
-      headers: { "content-type": file.type || "application/octet-stream" },
-      body: file,
+      headers: { "content-type": upload.type || "application/octet-stream" },
+      body: upload,
     });
   } catch {
     throw new Error(
@@ -956,7 +968,7 @@ export async function uploadAttachmentDirect(
     body: JSON.stringify({
       path,
       file_name: displayName,
-      mime: file.type,
+      mime: upload.type,
       kind: opts.kind ?? "other",
       ...(opts.kind === "other" && opts.kind_other ? { kind_other: opts.kind_other } : {}),
     }),
@@ -983,13 +995,20 @@ export async function uploadPayeePatent(
   opts: {
     /** Tipul real, când browserul l-a lăsat gol (HEIC). Implicit `file.type`. */
     mime?: string;
-    onStep?: (step: "upload" | "finalize") => void;
+    onStep?: (step: "compress" | "upload" | "finalize") => void;
   } = {}
 ): Promise<ParPatentFileInfo> {
-  const mime = opts.mime ?? file.type;
+  // Copia patentei e un scan, deci exact cazul în care micșorarea scoate cel mai mult (de 3–8 ori)
+  // fără să se vadă: fotografia rămâne la 150 DPI, citibilă. Un act semnat electronic trece neatins.
+  opts.onStep?.("compress");
+  const source = new File([file], file.name, { type: opts.mime ?? file.type, lastModified: file.lastModified });
+  const { file: upload } = await compressForUpload(source);
+  const mime = upload.type || opts.mime || file.type;
+  const fileName = upload.name;
+
   const { path, signed_url } = await api<{ path: string; signed_url: string }>(
     `/api/par/${parId}/payee-patent/sign`,
-    { method: "POST", body: JSON.stringify({ file_name: file.name, mime, size_bytes: file.size }) }
+    { method: "POST", body: JSON.stringify({ file_name: fileName, mime, size_bytes: upload.size }) }
   );
   opts.onStep?.("upload");
   let put: Response;
@@ -997,7 +1016,7 @@ export async function uploadPayeePatent(
     put = await fetch(signed_url, {
       method: "PUT",
       headers: { "content-type": mime || "application/octet-stream" },
-      body: file,
+      body: upload,
     });
   } catch {
     throw new Error("Patenta nu a ajuns la server (conexiune întreruptă) — reîncearcă.");
@@ -1006,7 +1025,7 @@ export async function uploadPayeePatent(
   opts.onStep?.("finalize");
   return api<ParPatentFileInfo>(`/api/par/${parId}/payee-patent/finalize`, {
     method: "POST",
-    body: JSON.stringify({ path, file_name: file.name, mime }),
+    body: JSON.stringify({ path, file_name: fileName, mime }),
   });
 }
 

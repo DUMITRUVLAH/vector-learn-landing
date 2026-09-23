@@ -602,7 +602,7 @@ export function ParCreateForm() {
    * serverul a confirmat fișierul (owner, 23.09.2026: „acum pui, dar nu e clar dacă s-a pus").
    */
   const [payeePatentFile, setPayeePatentFile] = useState<PatentFileState | null>(null);
-  const [patentUploadStep, setPatentUploadStep] = useState<"reading" | "upload" | "finalize" | null>(null);
+  const [patentUploadStep, setPatentUploadStep] = useState<"reading" | "compress" | "upload" | "finalize" | null>(null);
   /** Ce s-a citit din patentă / de ce nu s-a salvat copia — lângă câmpurile patentei, nu mai sus. */
   const [patentNote, setPatentNote] = useState<string | null>(null);
   const [patentError, setPatentError] = useState<string | null>(null);

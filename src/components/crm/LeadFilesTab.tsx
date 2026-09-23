@@ -36,7 +36,7 @@ function formatSize(bytes: number): string {
 export function LeadFilesTab({ leadId, onToast }: LeadFilesTabProps) {
   const [files, setFiles] = useState<CrmLeadFile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState<"idle" | "upload" | "finalize">("idle");
+  const [step, setStep] = useState<"idle" | "compress" | "upload" | "finalize">("idle");
   const [busyId, setBusyId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -109,7 +109,7 @@ export function LeadFilesTab({ leadId, onToast }: LeadFilesTabProps) {
           ) : (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           )}
-          {step === "upload" ? "Se încarcă…" : step === "finalize" ? "Se verifică…" : "Încarcă fișier"}
+          {step === "compress" ? "Se pregătește…" : step === "upload" ? "Se încarcă…" : step === "finalize" ? "Se verifică…" : "Încarcă fișier"}
         </Button>
         <span className="text-xs text-muted-foreground">PDF, imagini, Office, CSV, ZIP · max 15 MB</span>
       </div>

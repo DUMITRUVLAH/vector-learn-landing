@@ -34,7 +34,9 @@
     "e2e:browser": "node scripts/e2e-gate.mjs --browser",
     "e2e:all": "node scripts/e2e-gate.mjs --all",
     "build:blog": "tsx scripts/build-blog.ts",
-    "check:blog-live": "node scripts/check-blog-live.mjs"
+    "check:blog-live": "node scripts/check-blog-live.mjs",
+    "storage:report": "tsx scripts/storage-compress.ts",
+    "storage:compress": "tsx scripts/storage-compress.ts --apply --lossless-only"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",

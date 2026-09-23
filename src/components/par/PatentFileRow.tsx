@@ -104,13 +104,19 @@ export function PatentFileRow({
 }
 
 export interface PatentFileUploadingProps {
-  step: "reading" | "upload" | "finalize";
+  step: "reading" | "compress" | "upload" | "finalize";
 }
 
 /** Rândul care ține locul copiei cât timp urcă — același loc, ca omul să știe unde să se uite. */
 export function PatentFileUploading({ step }: PatentFileUploadingProps) {
   const label =
-    step === "finalize" ? "Verific fișierul…" : step === "upload" ? "Se încarcă patenta…" : "Pregătesc încărcarea…";
+    step === "finalize"
+      ? "Verific fișierul…"
+      : step === "upload"
+        ? "Se încarcă patenta…"
+        : step === "compress"
+          ? "Micșorez scanul…"
+          : "Pregătesc încărcarea…";
   return (
     <div role="status" className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2">
       <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />

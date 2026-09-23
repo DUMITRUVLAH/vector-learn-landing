@@ -23,6 +23,7 @@ import {
   finalizeCaptures,
   type FinDocTeam,
 } from "@/lib/api/finCaptures";
+import { compressForUpload } from "@/lib/upload/compressForUpload";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -156,18 +157,29 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
     try {
       queue.forEach((it) => setItemStatus(it.id, "uploading"));
 
+      // 0) Micșorăm fiecare fișier ÎNAINTE de semnare, ca numele, tipul și calea din Storage să
+      //    descrie fișierul care chiar urcă. Secvențial, nu `Promise.all`: munca e pe firul
+      //    principal oricum, iar 50 de fișiere decodate simultan ar umfla memoria degeaba.
+      //    `await` pe un timeout de 0 lasă browserul să redeseneze între fișiere — altfel lista
+      //    de stări ar îngheța pe „se încarcă" exact cât durează munca.
+      const prepared: Array<{ item: UploadItem; file: File }> = [];
+      for (const it of queue) {
+        prepared.push({ item: it, file: (await compressForUpload(it.file)).file });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
       // 1) One tiny JSON request → a signed Supabase URL per file.
-      const signed = await signCaptureUploads(queue.map((it) => ({ fileName: it.file.name })));
+      const signed = await signCaptureUploads(prepared.map((p) => ({ fileName: p.file.name })));
 
       // 2) Upload each binary DIRECTLY to Supabase Storage (NOT through our function → no body
       //    limit, no edge 4xx on large files). A storage failure marks just that file.
-      const uploaded: Array<{ item: UploadItem; path: string }> = [];
+      const uploaded: Array<{ item: UploadItem; path: string; file: File }> = [];
       await Promise.all(
-        queue.map(async (it, i) => {
+        prepared.map(async ({ item: it, file }, i) => {
           const s = signed[i];
           try {
-            await putToSignedUrl(s.signedUrl, it.file);
-            uploaded.push({ item: it, path: s.path });
+            await putToSignedUrl(s.signedUrl, file);
+            uploaded.push({ item: it, path: s.path, file });
           } catch (e) {
             setItemStatus(it.id, "error", e instanceof ApiError ? `storage_${e.status}` : "Eroare");
           }
@@ -181,7 +193,7 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
         if (hitRateLimit) break;
         try {
           const { results } = await finalizeCaptures(
-            group.map((g) => ({ path: g.path, fileName: g.item.file.name, mimeType: g.item.file.type })),
+            group.map((g) => ({ path: g.path, fileName: g.file.name, mimeType: g.file.type })),
             team,
           );
           group.forEach((g, i) => {
