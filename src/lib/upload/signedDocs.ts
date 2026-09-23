@@ -23,6 +23,8 @@ const SIGNATURE_MARKERS = [
   "/ETSI.CAdES.detached", // SubFilter PAdES — ce folosesc MSign și SFS
   "/ETSI.RFC3161", // marcă temporală (DocTimeStamp)
   "/DocMDP", // semnătură de certificare, care blochează modificările
+  "/FT/Sig",
+  "/FT /Sig", // câmpul de formular care ȚINE semnătura
 ];
 
 /** Extensiile care sunt ele însele un container de semnătură sau un act care se verifică octet cu octet. */

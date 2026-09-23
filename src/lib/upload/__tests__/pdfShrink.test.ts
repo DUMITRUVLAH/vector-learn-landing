@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { rasterizeScannedPdf, shrinkPdfStreams, verifyStructurallyEqual } from "../pdfShrink";
+import { hasSignatureMarkers } from "../signedDocs";
 import {
   paddedJpeg,
   pdfWithAnnotation,
+  pdfWithHiddenSignatureField,
   pdfWithoutAnnotation,
   pdfWithTextAndImage,
   pdfWithUncompressedStream,
@@ -56,6 +58,17 @@ describe("shrinkPdfStreams — micșorare FĂRĂ pierderi", () => {
     const twice = await shrinkPdfStreams(once.bytes ?? original);
     expect(twice.bytes).toBeNull();
     expect(twice.reason).toBe("castig_prea_mic");
+  });
+
+  it("se oprește la un câmp de semnătură ascuns în structură, nu doar la marcajele din octeți", async () => {
+    const pdf = await pdfWithHiddenSignatureField(fontLikePayload(300_000));
+    // Plasa pe octeți bruți nu are ce vedea aici — dicționarele sunt comprimate.
+    expect(hasSignatureMarkers(pdf)).toBe(false);
+
+    const result = await shrinkPdfStreams(pdf);
+
+    expect(result.bytes).toBeNull();
+    expect(result.reason).toBe("semnat");
   });
 
   it("răspunde cu un motiv, nu cu o excepție, pe un fișier care nu e PDF", async () => {

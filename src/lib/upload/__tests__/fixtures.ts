@@ -180,3 +180,31 @@ export async function scannedPdfFlateJpeg(pageCount: number, jpeg: Uint8Array): 
   }
   return doc.save({ useObjectStreams: false });
 }
+
+/**
+ * Un PDF al cărui câmp de semnătură e ASCUNS într-un object stream comprimat, deci invizibil
+ * pentru căutarea pe octeți bruți din `signedDocs.ts`.
+ *
+ * Niciun producător real nu scrie așa (zona `/Contents` a semnăturii trebuie să fie o bucată
+ * literală din fișier, ca `/ByteRange` să o poată sări), dar „niciun producător real" nu e o
+ * garanție — iar consecința unei rateuri e un act rescris, adică desemnat. Fixture-ul există ca
+ * plasa structurală să fie chiar verificată, nu doar declarată.
+ */
+export async function pdfWithHiddenSignatureField(payload: Uint8Array): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage([595, 842]);
+  page.drawText("Act semnat electronic", { x: 50, y: 780, size: 12, font });
+
+  const stream = doc.context.stream(payload); // necomprimat, ca fișierul să merite micșorat
+  doc.catalog.set(PDFName.of(RAW_STREAM_KEY), doc.context.register(stream));
+
+  const field = doc.context.obj({ FT: "Sig", T: "Signature1", Ff: 0 });
+  doc.catalog.set(
+    PDFName.of("AcroForm"),
+    doc.context.obj({ SigFlags: 3, Fields: [doc.context.register(field)] }),
+  );
+  // `useObjectStreams: true` împinge dicționarele în stream-uri comprimate: marcajele NU se mai
+  // văd în octeții bruți.
+  return doc.save({ useObjectStreams: true });
+}

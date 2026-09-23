@@ -73,6 +73,7 @@ export async function shrinkPdfStreams(bytes: Uint8Array): Promise<PdfShrinkResu
   } catch {
     return { bytes: null, method: "none", reason: "pdf_illizibil" };
   }
+  if (await hasSignatureFields(doc)) return { bytes: null, method: "none", reason: "semnat" };
 
   for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
     if (!(obj instanceof PDFRawStream)) continue;
@@ -137,6 +138,7 @@ export async function rasterizeScannedPdf(
   } catch {
     return { bytes: null, method: "none", reason: "pdf_illizibil" };
   }
+  if (await hasSignatureFields(doc)) return { bytes: null, method: "none", reason: "semnat" };
 
   const pages = doc.getPages();
   if (pages.length === 0) return { bytes: null, method: "none", reason: "fara_pagini" };
@@ -207,6 +209,35 @@ export async function rasterizeScannedPdf(
     return { bytes: null, method: "none", reason: "verificare_esuata" };
   }
   return { bytes: saved, method: "pdf-scan" };
+}
+
+/**
+ * A doua plasă pentru semnături: formularul documentului, citit din structura PARSATĂ.
+ *
+ * Prima plasă (`signedDocs.ts`) caută marcaje în octeții bruți, și în practică le găsește mereu:
+ * `/Contents` al semnăturii e o zonă literală din fișier, pe care `/ByteRange` o sare, deci
+ * dicționarul semnăturii nu poate sta într-un object stream comprimat — n-ai unde pune „gaura".
+ * „În practică" nu e însă „prin definiție", iar aici documentul e oricum deja deschis: dacă
+ * AcroForm-ul are `/SigFlags` sau un câmp `/FT /Sig`, ne oprim, oricât de ascuns ar fi.
+ */
+async function hasSignatureFields(doc: PDFDocument): Promise<boolean> {
+  const { PDFName, PDFDict, PDFArray, PDFNumber } = await import("pdf-lib");
+  try {
+    const acroForm = doc.catalog.lookup(PDFName.of("AcroForm"));
+    if (!(acroForm instanceof PDFDict)) return false;
+    const sigFlags = acroForm.lookup(PDFName.of("SigFlags"));
+    if (sigFlags instanceof PDFNumber && sigFlags.asNumber() > 0) return true;
+    const fields = acroForm.lookup(PDFName.of("Fields"));
+    if (!(fields instanceof PDFArray)) return false;
+    for (let i = 0; i < fields.size(); i++) {
+      const field = fields.lookup(i);
+      if (field instanceof PDFDict && field.get(PDFName.of("FT"))?.toString() === "/Sig") return true;
+    }
+    return false;
+  } catch {
+    // Un AcroForm pe care nu-l putem citi e un motiv să nu atingem fișierul, nu unul să-l atingem.
+    return true;
+  }
 }
 
 /** Numele filtrelor unui stream, fie că e unul singur, fie un lanț. */
