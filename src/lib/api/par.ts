@@ -170,6 +170,13 @@ export interface ParDetail extends ParRequest {
    * Se afișează pe fișă: cine a semnat trebuie să vadă din document că a fost completat ulterior.
    */
   finance_amendments?: ParFinanceAmendment[];
+  /**
+   * Corecturile făcute de verificatorul solicitantului ÎNAINTE de aprobatori (linia de buget,
+   * evenimentul, descrierea, data necesară). Aceeași formă ca la finanțe.
+   */
+  verifier_amendments?: ParFinanceAmendment[];
+  /** Poate cel care se uită să corecteze ACUM cererea, ca verificator al solicitantului? */
+  verifier_amend?: boolean;
 }
 
 export interface ParFinanceAmendment {
@@ -1438,6 +1445,8 @@ export async function listVendors(q?: string): Promise<{ items: ParVendor[] }> {
 
 export interface ParMemberProfile {
   id: string; userId: string; departmentId: string | null; jobTitle: string | null; staffCode: string | null;
+  /** Colegul care verifică cererile acestui om înaintea aprobatorilor (null = fără verificare). */
+  verifierUserId?: string | null;
 }
 export async function getMyParProfile(): Promise<{ profile: ParMemberProfile | null; projectIds: string[]; payerIds: string[] }> {
   return api("/api/par/profiles/me");
@@ -1445,7 +1454,7 @@ export async function getMyParProfile(): Promise<{ profile: ParMemberProfile | n
 export async function getParMemberProfile(userId: string): Promise<{ profile: ParMemberProfile | null; projectIds: string[]; payerIds: string[] }> {
   return api(`/api/par/profiles/${userId}`);
 }
-export async function updateParMemberProfile(userId: string, payload: { department_id?: string | null; job_title?: string | null; staff_code?: string | null }): Promise<ParMemberProfile> {
+export async function updateParMemberProfile(userId: string, payload: { department_id?: string | null; job_title?: string | null; staff_code?: string | null; verifier_user_id?: string | null }): Promise<ParMemberProfile> {
   return api(`/api/par/profiles/${userId}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export async function setParMemberProjects(userId: string, projectIds: string[]): Promise<{ ok: boolean; projectIds: string[] }> {
@@ -1543,6 +1552,8 @@ export interface ParMember {
    * revoke button must not pretend it can take it away.
    */
   implicit?: boolean;
+  /** Cine verifică cererile acestui om înaintea aprobatorilor (null = nimeni). */
+  verifierUserId?: string | null;
   implicitFromTenantRole?: string;
 }
 

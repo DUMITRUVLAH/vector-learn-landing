@@ -128,9 +128,21 @@ export function splitFinanceAmendment<T extends Record<string, unknown>>(
   body: T,
   sentKeys?: readonly string[]
 ): { amendment: Partial<T>; blocked: string[] } {
+  return splitAmendment(body, FINANCE_AMENDABLE_FIELDS, sentKeys);
+}
+
+/**
+ * Aceeași împărțire, pe o listă albă dată. O folosește și verificatorul solicitantului
+ * (`requesterVerifier.ts`), care are propria listă — dar aceeași capcană cu cheile brute.
+ */
+export function splitAmendment<T extends Record<string, unknown>>(
+  body: T,
+  allowedFields: readonly string[],
+  sentKeys?: readonly string[]
+): { amendment: Partial<T>; blocked: string[] } {
   const amendment: Partial<T> = {};
   const blocked: string[] = [];
-  const allowed = FINANCE_AMENDABLE_FIELDS as readonly string[];
+  const allowed = allowedFields;
   const keys = sentKeys ?? Object.keys(body);
 
   for (const key of keys) {

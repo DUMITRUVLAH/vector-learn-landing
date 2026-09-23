@@ -26,6 +26,7 @@ import {
   parAudit,
 } from "../../db/schema/par";
 import { amendedFieldLabels } from "./postSignatureEdit";
+import { verifierAmendedFieldLabels } from "./requesterVerifier";
 import { users } from "../../db/schema/users";
 
 export interface ParFormLineItem {
@@ -92,6 +93,12 @@ export interface ParFormData {
    * cine o citește peste un an nu are cum să știe că linia de buget s-a schimbat după semnături.
    */
   financeAmendments?: Array<{ at: Date | string | null; byName: string | null; fields: string[] }>;
+  /**
+   * Corecturile verificatorului solicitantului, făcute ÎNAINTE de aprobatori. Semnătura
+   * solicitantului (pasul 0) e pe varianta depusă; fără nota asta, hârtia i-ar pune numele sub un
+   * text pe care nu l-a scris el.
+   */
+  verifierAmendments?: Array<{ at: Date | string | null; byName: string | null; fields: string[] }>;
   payment: {
     parBl: string | null;
     receivedAt: Date | string | null;
@@ -124,6 +131,7 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
     db.select().from(parPayments)
       .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId))),
     db.select({
+      event: parAudit.event,
       actorUserId: parAudit.actorUserId,
       diff: parAudit.diff,
       createdAt: parAudit.createdAt,
@@ -132,7 +140,7 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
       .where(and(
         eq(parAudit.parId, parId),
         eq(parAudit.tenantId, tenantId),
-        eq(parAudit.event, "finance_amended"),
+        inArray(parAudit.event, ["finance_amended", "verifier_amended"]),
       ))
       .orderBy(asc(parAudit.createdAt)),
   ]);
@@ -237,10 +245,15 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
       decision: a.decision,
       decidedAt: a.decidedAt,
     })),
-    financeAmendments: amendmentRows.map((r) => ({
+    financeAmendments: amendmentRows.filter((r) => r.event === "finance_amended").map((r) => ({
       at: r.createdAt,
       byName: userName(r.actorUserId),
       fields: amendedFieldLabels(r.diff, "en"),
+    })),
+    verifierAmendments: amendmentRows.filter((r) => r.event === "verifier_amended").map((r) => ({
+      at: r.createdAt,
+      byName: userName(r.actorUserId),
+      fields: verifierAmendedFieldLabels(r.diff, "en"),
     })),
     payment: payment
       ? {

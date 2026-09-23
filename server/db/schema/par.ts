@@ -222,6 +222,16 @@ export const parMemberProfiles = pgTable(
     departmentId: uuid("department_id").references(() => parDepartments.id, { onDelete: "set null" }),
     jobTitle: varchar("job_title", { length: 300 }),
     staffCode: varchar("staff_code", { length: 100 }),
+    /**
+     * Verificatorul cererilor acestui om — semnătura cerută ÎNAINTEA oricărui alt pas.
+     *
+     * Cererea owner-ului (23.09.2026): Iulian Lungu verifică PAR-urile colegelor lui (Cristina
+     * Onicov, Marina Certan) înainte să ajungă la aprobatorii workspace-ului, și le poate corecta
+     * singur (linia de buget etc.) sau întoarce. Legat de OM, nu de proiect: pre-aprobarea de
+     * proiect (`par_project_pre_approvers`) ar fi trimis la el și cererile altor colegi de pe
+     * același proiect. Regulile sunt în `server/lib/par/requesterVerifier.ts`. Migrare 0189.
+     */
+    verifierUserId: uuid("verifier_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1317,6 +1317,13 @@
       "when": 1789000000011,
       "tag": "0188_par_patenta_fisier",
       "breakpoints": true
+    },
+    {
+      "idx": 189,
+      "version": "7",
+      "when": 1789000000012,
+      "tag": "0189_par_verificator_solicitant",
+      "breakpoints": true
     }
   ]
 }

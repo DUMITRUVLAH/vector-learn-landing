@@ -22,7 +22,7 @@ import { db } from "../db/client";
 import { parRequests, parAttachments, parAudit, parPayers } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
-import { isWorkspaceAdminRole } from "../lib/par/visibility";
+import { holdsNamedStep, isWorkspaceAdminRole } from "../lib/par/visibility";
 import { sharesTeamWith } from "../lib/par/teamScope";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
@@ -287,7 +287,7 @@ async function markAttachmentsPresent(
 
 export async function hasScopedDossierAccess(
   user: { id: string; tenantId: string; role: string },
-  par: { requestedByUserId: string; projectId: string | null; payerId: string | null; status?: string | null },
+  par: { id?: string; requestedByUserId: string; projectId: string | null; payerId: string | null; status?: string | null },
 ): Promise<boolean> {
   if (par.requestedByUserId === user.id) return true;
   const roles = await getUserPARRoles(user.id, user.tenantId, user.role);
@@ -297,6 +297,12 @@ export async function hasScopedDossierAccess(
   // VM5-22: coechipierul preia dosarul colegului plecat — deci vede și documentele, și pe cele ale
   // unei ciorne. Aria (proiect/plătitor) rămâne verificată: echipa nu deschide alt plătitor.
   if (roles.length > 0 && await sharesTeamWith(user.id, par.requestedByUserId, user.tenantId)) {
+    return inAria();
+  }
+  // Cine e pus PE NUME pe lanțul cererii (verificatorul solicitantului, un pre-aprobator de
+  // proiect) semnează pe baza documentelor — trebuie să le poată deschide, chiar fără rol elevat.
+  // Doar citire: adăugarea/ștergerea/reetichetarea au propriile reguli, mai jos în fiecare rută.
+  if (roles.length > 0 && par.id && (await holdsNamedStep(user.id, user.tenantId, par.id))) {
     return inAria();
   }
   if (!roles.some((role) => ["approver", "finance", "par_admin"].includes(role))) return false;
@@ -548,7 +554,7 @@ parAttachmentsRoutes.get("/:parId/attachments/:attId/preview", async (c) => {
   const { parId, attId } = c.req.param();
   const user = c.get("user");
   const tenantId = user.tenantId;
-  const [par] = await db.select({ requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId, status: parRequests.status }).from(parRequests)
+  const [par] = await db.select({ id: parRequests.id, requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId, status: parRequests.status }).from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return c.json({ error: "not_found" }, 404);
   if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);

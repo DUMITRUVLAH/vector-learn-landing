@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { isPreApprover } from "../lib/par/preApprovers";
+import { isVerifierOfAnyone } from "../lib/par/requesterVerifier";
 
 export const parMeRoutes = new Hono<{ Variables: AuthVariables }>();
 parMeRoutes.use("*", requireAuth);
@@ -15,6 +16,12 @@ parMeRoutes.get("/", async (c) => {
   // `preApprover` deschide inboxul de aprobare cui n-are rolul general: un pre-aprobator de proiect
   // semnează pe nume, deci meniul și ruta trebuie să-l lase înăuntru fără să-i dăm rolul
   // `approver`, care i-ar da drept de semnătură pe toate cererile organizației.
-  const preApprover = await isPreApprover(user.tenantId, user.id);
+  // Verificatorul unui coleg (lib/par/requesterVerifier.ts) e în aceeași situație: semnează pe
+  // nume, fără rolul general de aprobator.
+  const [projectPreApprover, verifier] = await Promise.all([
+    isPreApprover(user.tenantId, user.id),
+    isVerifierOfAnyone(user.tenantId, user.id),
+  ]);
+  const preApprover = projectPreApprover || verifier;
   return c.json({ roles, preApprover, userId: user.id, tenantId: user.tenantId });
 });

@@ -14,15 +14,17 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Paperclip, Pencil, Plus } from "lucide-react";
-import { Button, Combobox, Input, Select, Textarea } from "@/components/ds";
+import { Button, Combobox, DateField, Input, Select, Textarea } from "@/components/ds";
 import {
   listBudgetCodes,
+  listEvents,
   reconcileInBackground,
   updatePar,
   uploadAttachmentDirect,
   type ParAttachmentKind,
   type ParBudgetCode,
   type ParDetail,
+  type ParEvent,
 } from "@/lib/api/par";
 import { ATTACHMENT_KIND_LABELS, ATTACHMENT_KIND_ORDER, KIND_OTHER_MAX_LEN } from "@/lib/par/attachmentKinds";
 import { MAX_ATTACHMENT_BYTES, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
@@ -42,6 +44,12 @@ export function canAmendAfterSignature(roles: readonly string[], status: string)
 function errorText(e: unknown, fallback: string): string {
   if (e && typeof e === "object" && "detail" in e && typeof (e as { detail: unknown }).detail === "string") {
     return (e as { detail: string }).detail;
+  }
+  // `api()` aruncă `ApiError`, care ține fraza în română în `body.detail` — `message` e doar
+  // codul („forbidden_after_signature"), adică exact ce nu trebuie să vadă omul.
+  const body = e && typeof e === "object" && "body" in e ? (e as { body: unknown }).body : null;
+  if (body && typeof body === "object" && typeof (body as { detail?: unknown }).detail === "string") {
+    return (body as { detail: string }).detail;
   }
   return e instanceof Error && e.message ? e.message : fallback;
 }
@@ -314,6 +322,106 @@ export function FinanceAddendum({ par, onSaved }: FinanceAmendProps) {
   );
 }
 
+// ─── Doar verificatorul: evenimentul și data necesară ─────────────────────────
+//
+// Verificatorul solicitantului corectează cererea ÎNAINTE de aprobatori (server/lib/par/
+// requesterVerifier.ts), deci are două câmpuri în plus față de finanțe: evenimentul (atribuirea
+// cheltuielii, alături de linia de buget) și data necesară. Sumele și beneficiarul nu — pentru ele
+// cererea se întoarce la solicitant.
+
+export function AmendEvent({ par, onSaved }: FinanceAmendProps) {
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState<ParEvent[]>([]);
+  const [eventId, setEventId] = useState(par.eventId ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    listEvents(par.projectId)
+      .then((r) => {
+        // Aceeași regulă ca pe server: un eveniment legat de alt proiect nu merge pe cererea asta.
+        if (alive) setEvents(r.events.filter((ev) => ev.active && (!ev.projectId || ev.projectId === par.projectId)));
+      })
+      .catch(() => { if (alive) setError("Lista evenimentelor nu s-a încărcat."); });
+    return () => { alive = false; };
+  }, [open, par.projectId]);
+
+  if (!open) {
+    return <EditTrigger label={par.eventId ? "Schimbă evenimentul" : "Alege evenimentul"} onClick={() => setOpen(true)} />;
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await updatePar(par.id, { event_id: eventId || null });
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      setError(errorText(err, "Evenimentul nu a putut fi schimbat."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-2 space-y-2" aria-label="Schimbă evenimentul">
+      <Select aria-label="Eveniment" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+        <option value="">Fără eveniment</option>
+        {events.map((ev) => (
+          <option key={ev.id} value={ev.id}>{ev.name}</option>
+        ))}
+      </Select>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <AmendActions busy={busy} onCancel={() => { setOpen(false); setError(null); }} />
+    </form>
+  );
+}
+
+export function AmendDateNeeded({ par, onSaved }: FinanceAmendProps) {
+  const [open, setOpen] = useState(false);
+  // `DateField` lucrează cu „YYYY-MM-DD" (afișează zi.lună.an); serverul primește ISO, ca formularul.
+  const [value, setValue] = useState(par.dateNeeded ? par.dateNeeded.slice(0, 10) : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return <EditTrigger label="Schimbă data" onClick={() => setOpen(true)} />;
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await updatePar(par.id, { date_needed: value ? new Date(value).toISOString() : null });
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      setError(errorText(err, "Data nu a putut fi schimbată."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-2 space-y-2" aria-label="Schimbă data necesară">
+      <DateField
+        aria-label="Data necesară"
+        className="sm:max-w-[11.5rem]"
+        value={value}
+        min={par.dateOfRequest ? par.dateOfRequest.slice(0, 10) : undefined}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <AmendActions busy={busy} onCancel={() => { setOpen(false); setError(null); }} />
+    </form>
+  );
+}
+
 // ─── Urma completărilor, pe fișă ──────────────────────────────────────────────
 
 /**
@@ -338,6 +446,32 @@ export function FinanceAmendNotice({
       Completat de finanțe după semnare{last.byName ? ` (${last.byName})` : ""}
       {whenText ? `, ${whenText}` : ""}
       {fields.length ? `: ${fields.join(", ")}` : ""}. Sumele semnate nu s-au schimbat.
+    </p>
+  );
+}
+
+/**
+ * Corecturile verificatorului, lângă semnături: aprobatorii văd că cererea a fost corectată
+ * înainte să ajungă la ei, iar solicitantul vede ce i s-a schimbat și cine a schimbat.
+ */
+export function VerifierAmendNotice({
+  amendments,
+}: {
+  amendments: NonNullable<ParDetail["verifier_amendments"]>;
+}) {
+  if (!amendments.length) return null;
+  const last = amendments[amendments.length - 1];
+  const when = new Date(last.at);
+  const whenText = Number.isNaN(when.getTime())
+    ? ""
+    : when.toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" });
+  const fields = [...new Set(amendments.flatMap((a) => a.fields))];
+
+  return (
+    <p className="mt-2 text-xs text-muted-foreground">
+      Corectată la verificare{last.byName ? ` de ${last.byName}` : ""}
+      {whenText ? `, ${whenText}` : ""}
+      {fields.length ? `: ${fields.join(", ")}` : ""}. Sumele și beneficiarul sunt cele depuse de solicitant.
     </p>
   );
 }

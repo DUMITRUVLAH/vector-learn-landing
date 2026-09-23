@@ -8,7 +8,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
-import { parMembers } from "../db/schema/par";
+import { parMemberProfiles, parMembers } from "../db/schema/par";
 import { users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole, IMPLICIT_PAR_ADMIN_TENANT_ROLES } from "../middleware/requirePARRole";
@@ -96,7 +96,23 @@ parMembersRoutes.get("/", requirePARRole("par_admin"), async (c) => {
       implicitFromTenantRole: u.role,
     }));
 
-  return c.json({ members: [...members, ...implicit] });
+  // Cine verifică cererile fiecăruia (lib/par/requesterVerifier.ts) — ca administratorul să vadă
+  // relațiile dintr-o privire, fără să deschidă fiecare profil. Best-effort: coloana poate rămâne
+  // în urma codului la deploy, iar lista de membri nu are voie să pice pentru asta.
+  const verifierOf = new Map<string, string>();
+  try {
+    const rows = await db
+      .select({ userId: parMemberProfiles.userId, verifierUserId: parMemberProfiles.verifierUserId })
+      .from(parMemberProfiles)
+      .where(eq(parMemberProfiles.tenantId, tenantId));
+    for (const r of rows) if (r.verifierUserId) verifierOf.set(r.userId, r.verifierUserId);
+  } catch {
+    /* fără verificatori afișați — restul listei rămâne corect */
+  }
+
+  return c.json({
+    members: [...members, ...implicit].map((m) => ({ ...m, verifierUserId: verifierOf.get(m.userId) ?? null })),
+  });
 });
 
 /** POST /api/par/members — assign a role */

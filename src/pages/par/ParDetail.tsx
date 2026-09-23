@@ -37,7 +37,7 @@ import {
   RotateCcw,
   CornerUpLeft,
   History,
-  Paperclip, BookOpen, Eye, Archive, ArchiveRestore} from "lucide-react";
+  Paperclip, BookOpen, Eye, Archive, ArchiveRestore, Pencil} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import {
@@ -46,6 +46,9 @@ import {
   FinanceAmendBudgetLine,
   FinanceAmendEndUse,
   FinanceAmendNotice,
+  AmendDateNeeded,
+  AmendEvent,
+  VerifierAmendNotice,
 } from "@/components/par/ParFinanceAmend";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { ParApprovalChain } from "@/components/par/ParApprovalChain";
@@ -1288,7 +1291,11 @@ export function ParDetailPage() {
   // Completarea de după semnare: doar finanțele, doar pe cererea deja semnată. Regula e impusă
   // pe server (server/lib/par/postSignatureEdit.ts); aici doar nu arătăm ce oricum s-ar refuza.
   const canAmend = canAmendAfterSignature(currentRoles, par.status);
+  // Verificatorul solicitantului corectează ÎNAINTE de aprobatori — răspunsul e al serverului
+  // (`verifier_amend`, aceeași regulă pe care o aplică PATCH-ul), nu o ghicire din roluri.
+  const canVerify = par.verifier_amend === true;
   const financeAmendments = par.finance_amendments ?? [];
+  const verifierAmendments = par.verifier_amendments ?? [];
   const requestorIdentity = par.requestorCode && par.requestorTitle?.includes(par.requestorCode)
     ? par.requestorTitle
     : [par.requestorTitle, par.requestorCode].filter(Boolean).join(" · ");
@@ -1396,6 +1403,22 @@ export function ParDetailPage() {
           );
         })()}
 
+        {/* Verificatorul solicitantului: ce poate face aici, spus o singură dată, deasupra
+            acțiunilor. Creioanele stau lângă câmpuri; sumele și beneficiarul se întorc. */}
+        {canVerify && (
+          <div className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-3" role="note">
+            <Pencil className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <div className="text-sm">
+              <p className="font-semibold text-foreground">Verifici cererea înainte să ajungă la aprobatori</p>
+              <p className="text-muted-foreground">
+                Poți corecta direct aici linia de buget, evenimentul, descrierea și data necesară (creionul de lângă
+                fiecare). Pentru sume, beneficiar sau documente folosește „Cere modificări" — cererea se întoarce
+                la {par.requestedByName ?? "solicitant"}. După „Aprobă", merge la aprobatori în varianta corectată.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Role-aware actions */}
         {currentUserId && (
           <ActionPanel
@@ -1431,12 +1454,18 @@ export function ParDetailPage() {
             <Field label="2. Solicitat de" value={par.requestedByName ?? "—"} />
             <Field label="3. Funcție / Cod" value={requestorIdentity || "—"} />
             <Field label="4. Departament" value={par.departmentName ?? "—"} />
-            <Field label="5. Data necesară" value={fmtDate(par.dateNeeded)} />
+            <div>
+              <Field label="5. Data necesară" value={fmtDate(par.dateNeeded)} />
+              {canVerify && <AmendDateNeeded par={par} onSaved={load} />}
+            </div>
             <Field label="Plătitor / Organizație" value={par.payerName ?? "—"} />
             <Field label="6. Pentru / Livrare la" value={par.projectName ?? "—"} />
             {/* VM1-04: show event if set */}
-            {(par as ParDetailType & { eventName?: string | null }).eventName && (
-              <Field label="6b. Eveniment" value={(par as ParDetailType & { eventName?: string | null }).eventName} />
+            {((par as ParDetailType & { eventName?: string | null }).eventName || canVerify) && (
+              <div>
+                <Field label="6b. Eveniment" value={(par as ParDetailType & { eventName?: string | null }).eventName ?? "—"} />
+                {canVerify && <AmendEvent par={par} onSaved={load} />}
+              </div>
             )}
             <div>
               <Field
@@ -1445,7 +1474,7 @@ export function ParDetailPage() {
               />
               {/* Finanțele corectează linia de buget aici, pe cererea semnată: cheltuiala se pune
                   pe linia potrivită fără să se anuleze și să se refacă cererea. */}
-              {canAmend && <FinanceAmendBudgetLine par={par} onSaved={load} />}
+              {(canAmend || canVerify) && <FinanceAmendBudgetLine par={par} onSaved={load} />}
             </div>
           </dl>
         </Section>
@@ -1565,7 +1594,7 @@ export function ParDetailPage() {
           <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
             {par.endUse || <span className="text-muted-foreground">—</span>}
           </p>
-          {canAmend && <FinanceAmendEndUse par={par} onSaved={load} />}
+          {(canAmend || canVerify) && <FinanceAmendEndUse par={par} onSaved={load} />}
         </Section>
 
         {/* SECTION 12: Payee
@@ -1733,6 +1762,7 @@ export function ParDetailPage() {
           <ParApprovalChain approvals={approvals} parStatus={par.status} />
           {/* Urma completărilor de după semnare stă lângă semnături: cine a semnat află din
               document, nu din jurnal, că linia de buget sau descrierea au fost completate apoi. */}
+          <VerifierAmendNotice amendments={verifierAmendments} />
           <FinanceAmendNotice amendments={financeAmendments} />
         </Section>
 

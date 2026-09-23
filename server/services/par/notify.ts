@@ -753,6 +753,37 @@ export async function notifyFinanceReturned(
   });
 }
 
+/**
+ * Verificatorul solicitantului a corectat cererea înainte de aprobatori → solicitantul află CE i
+ * s-a schimbat și CINE a schimbat. Nu cere o reacție (cererea merge mai departe singură), deci
+ * rămâne în aplicație, iar emailul îl face digestul — ca aprobările intermediare.
+ */
+export async function notifyVerifierAmended(
+  ctx: ParNotifyContext,
+  requestorUserId: string,
+  verifierUserId: string,
+  fieldLabels: readonly string[]
+): Promise<void> {
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const who = await decidedByLabel(ctx.tenantId, verifierUserId);
+  const what = fieldLabels.length ? `: ${fieldLabels.join(", ")}` : "";
+  const body = [
+    outcomeLine(facts, ctx.requestNo, `a fost corectată la verificare${who} pe ${nowLabel()}${what}`),
+    "Aprobatorii de după verificare o vor vedea în varianta corectată.",
+    `Link: /business/par/${ctx.parId}`,
+  ].join("\n");
+
+  await notifyUser({
+    tenantId: ctx.tenantId,
+    userId: requestorUserId,
+    parId: ctx.parId,
+    body,
+    subject: subjectFor(facts, ctx.requestNo, "corectată la verificare"),
+    detailsBlock: facts ? summaryBlock(facts) : null,
+    emailNow: false,
+  });
+}
+
 // ─── PAR-EFP: e-Factura lipsă de la prestator ─────────────────────────────────
 
 export interface EfacturaReminderInput {

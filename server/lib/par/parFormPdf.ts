@@ -540,6 +540,28 @@ export function buildParFormDefinition(
       layout: FRAME,
     },
 
+    // Corecturile verificatorului solicitantului — făcute înaintea aprobatorilor, deci aprobatorii
+    // au semnat varianta corectată; solicitantul (secțiunea 14) a semnat-o pe cea depusă.
+    ...(d.verifierAmendments?.length
+      ? [{
+          table: {
+            widths: ["*"],
+            body: [[{
+              stack: [
+                { text: "Corrected at verification, before the approvals (amounts and payee as submitted by the requestor):", bold: true, fontSize: 7.5 },
+                ...d.verifierAmendments.map((a) => ({
+                  text: `${formDate(a.at)} — ${a.fields.join(", ") || "record updated"}${a.byName ? ` (${a.byName})` : ""}`,
+                  fontSize: 7,
+                  color: FAINT,
+                  margin: [8, 1, 0, 0] as [number, number, number, number],
+                })),
+              ],
+            }]],
+          },
+          layout: FRAME,
+        }]
+      : []),
+
     // Completările de după semnare — sub semnături, unde le caută un auditor. Hârtia arată
     // valorile de ACUM (linia de buget corectată, descrierea completată); fără rândul ăsta,
     // diferența față de ce s-a semnat ar fi invizibilă pe hârtie.

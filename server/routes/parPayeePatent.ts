@@ -26,6 +26,7 @@ import { parRequests } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { holdsNamedStep } from "../lib/par/visibility";
 import { PAR_ATTACHMENT_BUCKET } from "../lib/par/attachmentStore";
 import { isPatentFileMime, patentFileResponse } from "../lib/par/payeePatentFile";
 import { downloadObject, removeObjects, signUploads } from "../lib/storage/objectStore";
@@ -165,6 +166,7 @@ parPayeePatentRoutes.get("/:parId/payee-patent", async (c) => {
   const user = c.get("user");
   const [par] = await db
     .select({
+      id: parRequests.id,
       requestedByUserId: parRequests.requestedByUserId,
       projectId: parRequests.projectId,
       payerId: parRequests.payerId,
@@ -179,7 +181,12 @@ parPayeePatentRoutes.get("/:parId/payee-patent", async (c) => {
   if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
   if (par.requestedByUserId !== user.id) {
     const roles = await getUserPARRoles(user.id, user.tenantId);
-    if (!roles.some((r) => ["approver", "finance", "par_admin"].includes(r))) {
+    // Cine e pus PE NUME pe lanț (verificatorul solicitantului, un pre-aprobator de proiect) vede
+    // rechizitele pe fișă — deci și copia patentei, altfel linkul „Deschide" i-ar da 404.
+    if (
+      !roles.some((r) => ["approver", "finance", "par_admin"].includes(r)) &&
+      !(await holdsNamedStep(user.id, user.tenantId, parId))
+    ) {
       return c.json({ error: "not_found" }, 404);
     }
   }

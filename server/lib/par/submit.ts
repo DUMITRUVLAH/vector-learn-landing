@@ -30,6 +30,7 @@ import { toMdlCents } from "../fx";
 import { computeParBodyHash, type ParBodyForHash } from "./integrity";
 import { notifySubmitted } from "../../services/par/notify";
 import { getProjectPreApprovers, withProjectPreApproval } from "./preApprovers";
+import { getRequesterVerifier, verifierCanReachPar, withRequesterVerification } from "./requesterVerifier";
 import { archiveApprovalsBeforeReset } from "./approvalArchive";
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -193,11 +194,31 @@ export async function submitPAR(params: {
   // managerul de proiect și abia apoi la finanțe (lib/par/preApprovers.ts). Proiect fără
   // pre-aprobatori — sau cerere fără proiect — înseamnă lanțul de până acum, neatins.
   const preApprovers = par.projectId ? await getProjectPreApprovers(tenantId, par.projectId) : [];
-  const sanitizedChain = withProjectPreApproval(
+  const withPreApproval = withProjectPreApproval(
     chainWithoutSelfApproval(chain, actorUserId),
     preApprovers,
     actorUserId
   );
+
+  // Verificatorul solicitantului stă în fața TUTUROR, pre-aprobarea de proiect inclusă: el poate
+  // corecta cererea, deci nimeni nu semnează înaintea lui (lib/par/requesterVerifier.ts). Cine
+  // depune nu se verifică singur — dacă verificatorul însuși a trimis cererea, a semnat la pasul 0.
+  const requesterUserId = par.requestedByUserId ?? actorUserId;
+  let verifierUserId = await getRequesterVerifier(tenantId, requesterUserId);
+  if (verifierUserId === actorUserId) verifierUserId = null;
+  if (verifierUserId && !(await verifierCanReachPar(tenantId, verifierUserId, par))) {
+    // Un pas pe numele cuiva care nu poate deschide cererea ar bloca-o definitiv (rutele de
+    // aprobare îi răspund 404). Mai bine lanțul obișnuit, cu motivul scris în jurnal.
+    await db.insert(parAudit).values({
+      tenantId,
+      parId,
+      actorUserId,
+      event: "verification_skipped",
+      detail: "Verificatorul solicitantului nu are acces la proiectul/plătitorul cererii — pasul de verificare a fost omis.",
+    });
+    verifierUserId = null;
+  }
+  const sanitizedChain = withRequesterVerification(withPreApproval, verifierUserId, requesterUserId);
 
   // Compute body hash for immutability (PAR-109)
   const bodyForHash: ParBodyForHash = {

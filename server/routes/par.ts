@@ -70,8 +70,19 @@ import {
   blockedFieldsMessage,
   canFinanceAmend,
   FINANCE_FIELD_LABELS,
+  splitAmendment,
   splitFinanceAmendment,
 } from "../lib/par/postSignatureEdit";
+import {
+  canVerifierAmend,
+  getRequesterVerifier,
+  openVerifierStep,
+  VERIFIER_AMENDABLE_FIELDS,
+  verifierCanReachPar,
+  verifierAmendedFieldLabels,
+  verifierBlockedMessage,
+} from "../lib/par/requesterVerifier";
+import { notifyVerifierAmended } from "../services/par/notify";
 import { renderDosarPagesPdf } from "../lib/par/dosarPdf";
 import { buildDosar } from "../lib/par/buildDosar";
 import { buildParFormDefinition, parFormFileName } from "../lib/par/parFormPdf";
@@ -1204,13 +1215,14 @@ parRoutes.get("/:id", async (c) => {
   //
   // Completările se văd pe FIȘĂ, nu doar în jurnal: cine a semnat documentul trebuie să afle din
   // document că linia de buget sau descrierea au fost completate ulterior, cu nume și dată.
-  const [paymentRows, amendmentRows] = await Promise.all([
+  const [paymentRows, amendmentRowsAll] = await Promise.all([
     db
       .select()
       .from(parPayments)
       .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId))),
     db
       .select({
+        event: parAudit.event,
         actorUserId: parAudit.actorUserId,
         diff: parAudit.diff,
         createdAt: parAudit.createdAt,
@@ -1220,12 +1232,15 @@ parRoutes.get("/:id", async (c) => {
         and(
           eq(parAudit.parId, parId),
           eq(parAudit.tenantId, tenantId),
-          eq(parAudit.event, "finance_amended")
+          // Și corecturile verificatorului, făcute ÎNAINTE de aprobatori — tot pe fișă, cu nume.
+          inArray(parAudit.event, ["finance_amended", "verifier_amended"])
         )
       )
       .orderBy(asc(parAudit.createdAt)),
   ]);
   const [payment] = paymentRows;
+  const verifierAmendRows = amendmentRowsAll.filter((r) => r.event === "verifier_amended");
+  const amendmentRows = amendmentRowsAll.filter((r) => r.event !== "verifier_amended");
 
   // Get micro-purchase threshold for flag
   const [settings] = await db
@@ -1234,9 +1249,12 @@ parRoutes.get("/:id", async (c) => {
     .where(eq(parSettings.tenantId, tenantId));
   const threshold = settings?.threshold ?? 1000000;
 
-  // GDPR (CORE §9): only show payee fields to requestor/routed approvers/finance/admin
+  // GDPR (CORE §9): only show payee fields to requestor/routed approvers/finance/admin.
+  // „Routed approvers" include și pe cine e pus PE NUME pe lanț fără rol elevat — verificatorul
+  // solicitantului, un pre-aprobator de proiect: semnează plata, deci trebuie să vadă cui pleacă.
+  const holdsNamedStep = approvals.some((a) => a.step > 0 && a.approverUserId === user.id);
   const canSeePayee =
-    par.requestedByUserId === user.id || hasElevatedRole;
+    par.requestedByUserId === user.id || hasElevatedRole || holdsNamedStep;
 
   const parData = canSeePayee
     ? par
@@ -1285,7 +1303,7 @@ parRoutes.get("/:id", async (c) => {
     // `signature_name` e o singură casetă, completată de om (și, pe cererile de dinainte de
     // 2026-09-10, cu funcția în loc de nume). Le rezolvăm din conturi, nu din instantaneu.
     ...approvals.map((a) => a.approverUserId),
-    ...amendmentRows.map((r) => r.actorUserId),
+    ...amendmentRowsAll.map((r) => r.actorUserId),
   ])].filter((v): v is string => !!v);
 
   const [userRows, profileRows] = await Promise.all([
@@ -1412,6 +1430,14 @@ parRoutes.get("/:id", async (c) => {
       byName: userName(r.actorUserId),
       fields: amendedFieldLabels(r.diff),
     })),
+    /** Corecturile verificatorului solicitantului, făcute înainte de aprobatori. */
+    verifier_amendments: verifierAmendRows.map((r) => ({
+      at: r.createdAt,
+      byName: userName(r.actorUserId),
+      fields: verifierAmendedFieldLabels(r.diff),
+    })),
+    /** Poate THIS viewer corecta acum cererea, ca verificator (drives the pencils on the page). */
+    verifier_amend: await viewerMayVerifierAmend(par, user.id, tenantId, approvals),
   });
 });
 
@@ -1531,20 +1557,7 @@ async function financeAmendPar(
   // ambele amprente: ce s-a schimbat rămâne dovedit de `diff`, iar alarma rămâne credibilă
   // pentru ce contează cu adevărat — sume, linii, beneficiar — câmpuri pe care calea asta nu le
   // poate atinge.
-  let reseal: { from: string; to: string } | null = null;
-  if (par.bodyHash) {
-    const freshBody = await buildBodyForHash(par.id, tenantId);
-    if (freshBody) {
-      const newHash = computeParBodyHash(freshBody);
-      if (newHash !== par.bodyHash) {
-        await db
-          .update(parRequests)
-          .set({ bodyHash: newHash })
-          .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, tenantId)));
-        reseal = { from: par.bodyHash, to: newHash };
-      }
-    }
-  }
+  const reseal = await resealParBody(par, tenantId);
 
   const changedLabels = Object.keys(diffObj).map(
     (col) => FINANCE_FIELD_LABELS[AMENDED_COLUMN_TO_FIELD[col] ?? col] ?? col
@@ -1565,6 +1578,272 @@ async function financeAmendPar(
     bodyHash: reseal?.to ?? updated.bodyHash,
     above_micro_threshold: updated.totalEstimatedCents > microThreshold,
     finance_amended: true,
+  });
+}
+
+/**
+ * Recalculează sigiliul corpului după o corectură legitimă (finanțe după semnare, verificatorul
+ * înainte de aprobatori). Fără el, verificarea de integritate ar striga „datele diferă de cele
+ * semnate" la fiecare deschidere și ar bloca cu 409 semnăturile rămase. Ce s-a schimbat rămâne
+ * dovedit de `diff`-ul din jurnal; întoarce ambele amprente, ca jurnalul să le poată scrie.
+ */
+async function resealParBody(
+  par: typeof parRequests.$inferSelect,
+  tenantId: string
+): Promise<{ from: string; to: string } | null> {
+  if (!par.bodyHash) return null;
+  const freshBody = await buildBodyForHash(par.id, tenantId);
+  if (!freshBody) return null;
+  const newHash = computeParBodyHash(freshBody);
+  if (newHash === par.bodyHash) return null;
+  await db
+    .update(parRequests)
+    .set({ bodyHash: newHash })
+    .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, tenantId)));
+  return { from: par.bodyHash, to: newHash };
+}
+
+// ─── Corectura verificatorului (înainte de aprobatori) ───────────────────────
+
+/** Poate `userId` corecta ACUM cererea ca verificator al solicitantului? Vezi `canVerifierAmend`. */
+async function viewerMayVerifierAmend(
+  par: typeof parRequests.$inferSelect,
+  userId: string,
+  tenantId: string,
+  preloadedSteps?: Array<typeof parApprovals.$inferSelect>
+): Promise<boolean> {
+  if (par.status !== "pending_approval" || !par.requestedByUserId) return false;
+  const steps =
+    preloadedSteps ??
+    (await db
+      .select()
+      .from(parApprovals)
+      .where(and(eq(parApprovals.parId, par.id), eq(parApprovals.tenantId, tenantId))));
+  // Verificarea pură întâi: fișa se deschide des, iar pentru aproape toți cei care o deschid nu
+  // există niciun pas de verificare al lor — n-are rost să citim profilul solicitantului.
+  if (!openVerifierStep(steps, userId)) return false;
+  const currentVerifierUserId = await getRequesterVerifier(tenantId, par.requestedByUserId);
+  if (!canVerifierAmend({ status: par.status, steps, userId, currentVerifierUserId })) return false;
+  // Aria și modulul se re-verifică la fiecare corectură: i s-ar fi putut retrage accesul după
+  // depunere, iar pe un plătitor cu PAR oprit fișa oricum îi răspunde 404.
+  if (!(await verifierCanReachPar(tenantId, userId, par))) return false;
+  return hasPayerModuleEntitlement(userId, tenantId, par.payerId, "par");
+}
+
+/**
+ * Verificatorul solicitantului corectează cererea cât timp pasul lui e deschis — linia de buget,
+ * evenimentul, descrierea, data necesară (lista albă și motivele: `lib/par/requesterVerifier.ts`).
+ * Aprobatorii de după el n-au semnat încă, deci vor semna varianta corectată; solicitantul află
+ * din notificare și din fișă ce i s-a schimbat și cine a schimbat.
+ */
+async function verifierAmendPar(
+  c: Context<{ Variables: AuthVariables }>,
+  args: {
+    par: typeof parRequests.$inferSelect;
+    userId: string;
+    tenantId: string;
+    body: Record<string, unknown>;
+  }
+) {
+  const { par, userId, tenantId, body } = args;
+  // Cheile trimise CU ADEVĂRAT, din corpul brut — aceeași capcană ca la finanțe (vezi
+  // `splitFinanceAmendment`): zod pune `null` pe câmpuri pe care clientul nici nu le-a trimis.
+  const rawBody = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const sentKeys = rawBody && typeof rawBody === "object" ? Object.keys(rawBody) : undefined;
+  const { amendment, blocked } = splitAmendment(body, VERIFIER_AMENDABLE_FIELDS, sentKeys);
+
+  if (blocked.length) {
+    return c.json(
+      { error: "forbidden_for_verifier", fields: blocked, detail: verifierBlockedMessage(blocked) },
+      403
+    );
+  }
+  if (Object.keys(amendment).length === 0) {
+    return c.json(
+      {
+        error: "no_amendable_fields",
+        detail: "La verificare se pot corecta linia de buget, evenimentul, descrierea și data necesară.",
+      },
+      400
+    );
+  }
+
+  // Linia de buget și evenimentul rămân în ARIA cererii, ca la depunere: un cod sau un eveniment
+  // din alt proiect ar muta cheltuiala într-un buget care n-are treabă cu cererea.
+  const nextBudgetCodeId = (amendment.budget_code_id as string | null | undefined) ?? null;
+  if (amendment.budget_code_id !== undefined && nextBudgetCodeId) {
+    const [bc] = await db
+      .select({ id: parBudgetCodes.id, payerId: parBudgetCodes.payerId, projectId: parBudgetCodes.projectId })
+      .from(parBudgetCodes)
+      .where(and(eq(parBudgetCodes.id, nextBudgetCodeId), eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.active, true)));
+    if (!bc) return c.json({ error: "budget_code_not_found" }, 400);
+    if (bc.payerId && par.payerId && bc.payerId !== par.payerId) return c.json({ error: "budget_code_not_in_payer" }, 400);
+    if (bc.projectId && bc.projectId !== par.projectId) return c.json({ error: "budget_code_not_in_project" }, 400);
+  }
+  const nextEventId = (amendment.event_id as string | null | undefined) ?? null;
+  if (amendment.event_id !== undefined && nextEventId) {
+    const [ev] = await db
+      .select({ id: parEvents.id, projectId: parEvents.projectId })
+      .from(parEvents)
+      .where(and(eq(parEvents.id, nextEventId), eq(parEvents.tenantId, tenantId), eq(parEvents.active, true)));
+    if (!ev) return c.json({ error: "event_not_found" }, 400);
+    if (ev.projectId && ev.projectId !== par.projectId) return c.json({ error: "event_not_in_project" }, 400);
+  }
+  let nextDateNeeded: Date | null | undefined;
+  if (amendment.date_needed !== undefined) {
+    nextDateNeeded = amendment.date_needed ? new Date(amendment.date_needed as string) : null;
+    if (nextDateNeeded && nextDateNeeded < par.dateOfRequest) {
+      return c.json(
+        { error: "date_needed must be >= date_of_request", detail: "Data necesară nu poate fi înaintea datei cererii." },
+        400
+      );
+    }
+  }
+
+  // Descrierea e obligatorie la depunerea unei plăți (`validateParForSubmit`); corectura n-are voie
+  // s-o golească — aprobatorii ar semna o cerere care n-ar fi putut fi depusă așa.
+  if (
+    amendment.end_use !== undefined &&
+    par.purpose === "execute_payment" &&
+    !String(amendment.end_use ?? "").trim()
+  ) {
+    return c.json(
+      { error: "end_use_required", detail: "Descrierea utilizării finale e obligatorie la o plată — corecteaz-o, nu o șterge." },
+      400
+    );
+  }
+
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (amendment.budget_code_id !== undefined) updateData.budgetCodeId = amendment.budget_code_id ?? null;
+  if (amendment.budget_code_note !== undefined) updateData.budgetCodeNote = amendment.budget_code_note ?? null;
+  if (amendment.event_id !== undefined) updateData.eventId = amendment.event_id ?? null;
+  if (amendment.end_use !== undefined) updateData.endUse = amendment.end_use ?? null;
+  if (nextDateNeeded !== undefined) updateData.dateNeeded = nextDateNeeded;
+
+  const parRec = par as unknown as Record<string, unknown>;
+  const norm = (v: unknown) => (v instanceof Date ? v.toISOString() : v ?? null);
+  const diffObj: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(updateData)) {
+    if (key === "updatedAt") continue;
+    const before = norm(parRec[key]);
+    const after = norm(updateData[key]);
+    if (before === after) continue;
+    diffObj[key] = { from: before, to: after };
+  }
+
+  const [settingsRow] = await db
+    .select({ threshold: parSettings.microPurchaseThresholdCents })
+    .from(parSettings)
+    .where(eq(parSettings.tenantId, tenantId));
+  const microThreshold = settingsRow?.threshold ?? 1000000;
+
+  // Retrimis identic: fără jurnal și fără notificare pentru o „corectură" care nu schimbă nimic.
+  if (Object.keys(diffObj).length === 0) {
+    return c.json({
+      ...par,
+      above_micro_threshold: par.totalEstimatedCents > microThreshold,
+      verifier_amended: false,
+    });
+  }
+
+  // Sigiliul de ÎNAINTE de corectură trebuie să fie intact. Altfel resigilarea ar „spăla" o
+  // modificare făcută pe la spate (IBAN, linii) sub semnătura unei corecturi de linie de buget —
+  // exact alarma pe care aprobatorii n-ar mai vedea-o (revizie 23.09.2026).
+  const lineItems = await db
+    .select()
+    .from(parLineItems)
+    .where(and(eq(parLineItems.parId, par.id), eq(parLineItems.tenantId, tenantId)))
+    .orderBy(asc(parLineItems.position));
+  if (par.bodyHash) {
+    const beforeBody = await buildBodyForHash(par.id, tenantId, { par, lineItems });
+    const check = beforeBody ? verifyParBodyHash(beforeBody, par.bodyHash) : null;
+    if (check && !check.valid) {
+      await writeAudit({ tenantId, parId: par.id, actorUserId: userId, event: "integrity_mismatch", detail: check.detail });
+      return c.json(
+        {
+          error: "integrity_violation",
+          detail: "Datele cererii diferă deja de cele depuse — corectura nu se poate aplica peste ele. Întoarce cererea solicitantului.",
+        },
+        409
+      );
+    }
+  }
+
+  // Noul sigiliu se calculează din corpul COMBINAT, în memorie, ca să intre în aceeași scriere cu
+  // câmpurile: între două UPDATE-uri separate, o cădere lăsa cererea cu sigiliu vechi și fiecare
+  // aprobare ulterioară pica pe „integrity_violation".
+  const mergedPar = { ...par, ...updateData } as typeof parRequests.$inferSelect;
+  const afterBody = await buildBodyForHash(par.id, tenantId, { par: mergedPar, lineItems });
+  const newHash = par.bodyHash && afterBody ? computeParBodyHash(afterBody) : par.bodyHash;
+  const changedLabels = verifierAmendedFieldLabels(JSON.stringify(diffObj));
+  const myStep = openVerifierStep(
+    await db.select().from(parApprovals).where(and(eq(parApprovals.parId, par.id), eq(parApprovals.tenantId, tenantId))),
+    userId
+  );
+  if (!myStep) return c.json({ error: "verification_step_closed", detail: "Pasul tău de verificare s-a încheiat între timp." }, 409);
+
+  let updated: typeof parRequests.$inferSelect | undefined;
+  try {
+    updated = await db.transaction(async (tx) => {
+      // UPDATE condiționat pe pasul de verificare = lacătul: o aprobare trimisă în paralel pe
+      // același rând așteaptă sfârșitul tranzacției, iar dacă ea a câștigat, rândul nu mai e
+      // `pending` și corectura se anulează. Totul în `tx` — pe Vercel pool-ul are o conexiune.
+      const locked = await tx
+        .update(parApprovals)
+        .set({ updatedAt: new Date() })
+        .where(
+          and(
+            eq(parApprovals.id, myStep.id),
+            eq(parApprovals.tenantId, tenantId),
+            eq(parApprovals.decision, "pending"),
+            eq(parApprovals.locked, false)
+          )
+        )
+        .returning({ id: parApprovals.id });
+      if (locked.length === 0) throw new Error("verification_step_closed");
+      const [row] = await tx
+        .update(parRequests)
+        .set({ ...updateData, bodyHash: newHash })
+        .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, tenantId), eq(parRequests.status, "pending_approval")))
+        .returning();
+      if (!row) throw new Error("verification_step_closed");
+      await tx.insert(parAudit).values({
+        tenantId,
+        parId: par.id,
+        actorUserId: userId,
+        event: "verifier_amended",
+        detail:
+          `Verificatorul a corectat cererea înainte de aprobatori: ${changedLabels.join(", ")}.` +
+          (par.bodyHash && newHash && newHash !== par.bodyHash
+            ? ` Sigiliul corpului a fost recalculat (${par.bodyHash.slice(0, 8)}… → ${newHash.slice(0, 8)}…).`
+            : ""),
+        diff: JSON.stringify(diffObj),
+      });
+      return row;
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "verification_step_closed") {
+      return c.json({ error: "verification_step_closed", detail: "Pasul tău de verificare s-a încheiat între timp." }, 409);
+    }
+    throw err;
+  }
+
+  // Best-effort: corectura e deja scrisă; o notificare picată nu are voie să întoarcă 500.
+  try {
+    await notifyVerifierAmended(
+      { tenantId, parId: par.id, requestNo: par.requestNo },
+      par.requestedByUserId,
+      userId,
+      changedLabels
+    );
+  } catch (err) {
+    console.error("[par] notifyVerifierAmended failed:", err instanceof Error ? err.message : err);
+  }
+
+  return c.json({
+    ...updated,
+    above_micro_threshold: updated.totalEstimatedCents > microThreshold,
+    verifier_amended: true,
   });
 }
 
@@ -1591,6 +1870,17 @@ parRoutes.patch(
     // (linia de buget, descrierea, nota anexelor), banii semnați rămân neatinși.
     const viewerParRoles = await getUserPARRoles(user.id, tenantId);
     const financeMayAmend = canFinanceAmend({ roles: viewerParRoles, status: par.status });
+    // A treia cale, ÎNAINTE de aprobatori: verificatorul solicitantului, cât timp pasul lui e
+    // deschis (lib/par/requesterVerifier.ts). Se calculează doar când celelalte două nu se aplică.
+    const verifierMayAmend =
+      !authorMayEdit &&
+      !financeMayAmend &&
+      par.status === "pending_approval" &&
+      (await viewerMayVerifierAmend(par, user.id, tenantId));
+
+    if (verifierMayAmend) {
+      return verifierAmendPar(c, { par, userId: user.id, tenantId, body });
+    }
 
     if (!authorMayEdit && !financeMayAmend) {
       if (par.requestedByUserId !== user.id) {

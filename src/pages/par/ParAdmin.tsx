@@ -1729,6 +1729,10 @@ interface GroupedMember {
   userId: string;
   userName?: string;
   userEmail?: string;
+  /** Cine îi verifică cererile înaintea aprobatorilor (server/lib/par/requesterVerifier.ts). */
+  verifierUserId?: string | null;
+  /** Are cel puțin un rând explicit în par_members — doar așa poate fi ales verificator. */
+  hasExplicitRole: boolean;
   roles: Array<{ id: string; role: ParMember["role"]; approvalLimitCents: number | null; implicit?: boolean; implicitFromTenantRole?: string }>;
 }
 
@@ -1739,11 +1743,15 @@ function groupMembers(members: ParMember[]): GroupedMember[] {
     const roleEntry = { id: m.id, role: m.role, approvalLimitCents: m.approvalLimitCents, implicit: m.implicit, implicitFromTenantRole: m.implicitFromTenantRole };
     if (existing) {
       existing.roles.push(roleEntry);
+      existing.hasExplicitRole = existing.hasExplicitRole || !m.implicit;
+      existing.verifierUserId = existing.verifierUserId ?? m.verifierUserId ?? null;
     } else {
       map.set(m.userId, {
         userId: m.userId,
         userName: m.userName,
         userEmail: m.userEmail,
+        verifierUserId: m.verifierUserId ?? null,
+        hasExplicitRole: !m.implicit,
         roles: [roleEntry],
       });
     }
@@ -1853,20 +1861,27 @@ function MemberAccessEditor({
   projects,
   payers,
   departments,
+  verifierCandidates,
   onClose,
+  onSaved,
 }: {
   userId: string;
   displayName: string;
   projects: ParProject[];
   payers: ParPayer[];
   departments: ParDepartment[];
+  /** Colegii care pot verifica cererile acestui om — membri PAR expliciți, fără el însuși. */
+  verifierCandidates: Array<{ userId: string; name: string }>;
   onClose: () => void;
+  /** Tabelul de membri arată verificatorul; se reîncarcă după salvare. */
+  onSaved?: () => void;
 }) {
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [payerIds, setPayerIds] = useState<string[]>([]);
   const [departmentId, setDepartmentId] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [staffCode, setStaffCode] = useState("");
+  const [verifierUserId, setVerifierUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -1879,6 +1894,7 @@ function MemberAccessEditor({
       setDepartmentId(profile?.departmentId ?? "");
       setJobTitle(profile?.jobTitle ?? "");
       setStaffCode(profile?.staffCode ?? "");
+      setVerifierUserId(profile?.verifierUserId ?? "");
     }).catch(() => setMessage("Nu am putut încărca profilul."))
       .finally(() => setLoading(false));
   }, [userId]);
@@ -1893,18 +1909,24 @@ function MemberAccessEditor({
     setSaving(true);
     setMessage(null);
     try {
+      // Accesul întâi, profilul după: verificatorul se validează pe server față de aria
+      // solicitantului, deci aria trebuie să fie deja cea nouă când ajunge el.
       await Promise.all([
-        updateParMemberProfile(userId, {
-          department_id: departmentId || null,
-          job_title: jobTitle.trim() || null,
-          staff_code: staffCode.trim() || null,
-        }),
         setParMemberProjects(userId, projectIds),
         setParMemberPayers(userId, payerIds),
       ]);
+      await updateParMemberProfile(userId, {
+        department_id: departmentId || null,
+        job_title: jobTitle.trim() || null,
+        staff_code: staffCode.trim() || null,
+        verifier_user_id: verifierUserId || null,
+      });
       setMessage("Profilul și accesul la organizații/proiecte au fost salvate.");
-    } catch {
-      setMessage("Nu am putut salva profilul și accesul.");
+      onSaved?.();
+    } catch (e) {
+      // Motivul refuzului (ex. verificatorul n-are acces la un proiect) vine de la server, în română.
+      const detail = e instanceof ApiError && typeof e.body.detail === "string" ? e.body.detail : null;
+      setMessage(detail ?? "Nu am putut salva profilul și accesul.");
     } finally {
       setSaving(false);
     }
@@ -1931,6 +1953,17 @@ function MemberAccessEditor({
             <label className="text-xs font-medium text-muted-foreground">Cod personal
               <Input value={staffCode} onChange={(e) => setStaffCode(e.target.value)} className="mt-1" placeholder="ex. FIN-024" />
             </label>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground" htmlFor={`verifier-${userId}`}>Verificator</label>
+            <Select id={`verifier-${userId}`} value={verifierUserId} onChange={(e) => setVerifierUserId(e.target.value)} className="mt-1 w-full sm:max-w-md">
+              <option value="">Fără verificare — cererile merg direct la aprobatori</option>
+              {verifierCandidates.map((c) => <option key={c.userId} value={c.userId}>{c.name}</option>)}
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Cererile lui {displayName} ajung întâi la verificator. El le poate corecta (linia de buget, evenimentul,
+              descrierea, data) sau întoarce, și abia apoi merg la aprobatorii workspace-ului.
+            </p>
           </div>
           <fieldset>
             <legend className="text-xs font-medium text-muted-foreground mb-2">Plătitori / organizații accesibile</legend>
@@ -2313,7 +2346,22 @@ function ParMembersTab() {
 
       {accessUserId && (() => {
         const person = grouped.find((entry) => entry.userId === accessUserId);
-        return person ? <MemberAccessEditor userId={person.userId} displayName={person.userName ?? person.userId} projects={projects} payers={payers} departments={departments} onClose={() => setAccessUserId(null)} /> : null;
+        const verifierCandidates = grouped
+          .filter((g) => g.userId !== person?.userId && g.hasExplicitRole)
+          .map((g) => ({ userId: g.userId, name: g.userName ?? g.userEmail ?? g.userId }))
+          .sort((a, b) => a.name.localeCompare(b.name, "ro"));
+        return person ? (
+          <MemberAccessEditor
+            userId={person.userId}
+            displayName={person.userName ?? person.userId}
+            projects={projects}
+            payers={payers}
+            departments={departments}
+            verifierCandidates={verifierCandidates}
+            onClose={() => setAccessUserId(null)}
+            onSaved={load}
+          />
+        ) : null;
       })()}
 
       {/* VM1-01: grouped by person — one row per person, multiple role badges */}
@@ -2349,6 +2397,11 @@ function ParMembersTab() {
                       <p className="font-medium text-foreground">{displayName}</p>
                       {g.userEmail && (
                         <p className="text-xs text-muted-foreground">{g.userEmail}</p>
+                      )}
+                      {g.verifierUserId && (
+                        <p className="text-xs text-muted-foreground">
+                          Verificat de {grouped.find((x) => x.userId === g.verifierUserId)?.userName ?? "un coleg"}
+                        </p>
                       )}
                     </div>
                   </td>

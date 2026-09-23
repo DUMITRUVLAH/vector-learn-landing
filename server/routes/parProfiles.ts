@@ -8,6 +8,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
+import { verifierScopeGap } from "../lib/par/requesterVerifier";
 
 export const parProfilesRoutes = new Hono<{ Variables: AuthVariables }>();
 parProfilesRoutes.use("*", requireAuth);
@@ -17,10 +18,17 @@ const profileSchema = z.object({
   job_title: z.string().max(300).nullable().optional(),
   staff_code: z.string().max(100).nullable().optional(),
 });
+/**
+ * Profilul editat de administrator primește și verificatorul (lib/par/requesterVerifier.ts). Nu e
+ * în `profileSchema`: un om nu-și alege singur cine îi verifică cererile — și nici nu și-l scoate.
+ */
+const adminProfileSchema = profileSchema.extend({
+  verifier_user_id: z.string().uuid().nullable().optional(),
+});
 const membershipsSchema = z.object({ project_ids: z.array(z.string().uuid()).max(200) });
 const payerMembershipsSchema = z.object({ payer_ids: z.array(z.string().uuid()).max(100) });
 
-async function upsertProfile(tenantId: string, userId: string, body: z.infer<typeof profileSchema>) {
+async function upsertProfile(tenantId: string, userId: string, body: z.infer<typeof adminProfileSchema>) {
   const [existing] = await db.select({
     id: parMemberProfiles.id,
     departmentId: parMemberProfiles.departmentId,
@@ -32,6 +40,8 @@ async function upsertProfile(tenantId: string, userId: string, body: z.infer<typ
     departmentId: body.department_id !== undefined ? body.department_id : existing?.departmentId ?? null,
     jobTitle: body.job_title !== undefined ? body.job_title : existing?.jobTitle ?? null,
     staffCode: body.staff_code !== undefined ? body.staff_code : existing?.staffCode ?? null,
+    // Doar când e trimis explicit: `PATCH /me` nu-l poate trimite, deci nu-l poate nici șterge.
+    ...(body.verifier_user_id !== undefined ? { verifierUserId: body.verifier_user_id } : {}),
     updatedAt: new Date(),
   };
   if (existing) return (await db.update(parMemberProfiles).set(values).where(eq(parMemberProfiles.id, existing.id)).returning())[0];
@@ -89,7 +99,7 @@ parProfilesRoutes.get("/:id", parUuidGuard("id"), requirePARRole("par_admin"), a
   return c.json({ profile: profile ?? null, projectIds: memberships.map((row) => row.projectId), payerIds: payerMemberships.map((row) => row.payerId) });
 });
 
-parProfilesRoutes.patch("/:id", parUuidGuard("id"), requirePARRole("par_admin"), zValidator("json", profileSchema), async (c) => {
+parProfilesRoutes.patch("/:id", parUuidGuard("id"), requirePARRole("par_admin"), zValidator("json", adminProfileSchema), async (c) => {
   const tenantId = c.get("user").tenantId;
   const userId = c.req.param("id");
   if (!(await isParMember(tenantId, userId))) return c.json({ error: "member_not_found" }, 404);
@@ -97,8 +107,47 @@ parProfilesRoutes.patch("/:id", parUuidGuard("id"), requirePARRole("par_admin"),
   if (!(await departmentBelongsToTenant(tenantId, body.department_id))) {
     return c.json({ error: "invalid_department" }, 400);
   }
+  const verifierError = body.verifier_user_id ? await validateVerifier(tenantId, userId, body.verifier_user_id) : null;
+  if (verifierError) return c.json(verifierError, 400);
   return c.json(await upsertProfile(tenantId, userId, body));
 });
+
+/**
+ * Verificatorul se validează la SALVARE, nu la depunere — exact ca pre-aprobatorii de proiect.
+ * O configurare greșită ar produce altfel o cerere blocată pe un pas pe care titularul lui nu-l
+ * poate deschide (rutele de aprobare îi răspund 404 în afara ariei lui).
+ */
+async function validateVerifier(
+  tenantId: string,
+  requesterUserId: string,
+  verifierUserId: string
+): Promise<{ error: string; detail: string } | null> {
+  if (verifierUserId === requesterUserId) {
+    return { error: "verifier_self", detail: "Un om nu-și poate verifica propriile cereri — alege un coleg." };
+  }
+  if (!(await isParMember(tenantId, verifierUserId))) {
+    return {
+      error: "verifier_not_member",
+      detail: "Verificatorul trebuie să fie membru PAR în acest workspace (orice rol).",
+    };
+  }
+  const gap = await verifierScopeGap(tenantId, verifierUserId, requesterUserId);
+  if (gap === null) {
+    return {
+      error: "verifier_out_of_scope",
+      detail: "Solicitantul are acces la toate proiectele, iar verificatorul nu — n-ar putea deschide toate cererile lui.",
+    };
+  }
+  if (gap.length) {
+    const names = await db.select({ name: parProjects.name }).from(parProjects)
+      .where(and(eq(parProjects.tenantId, tenantId), inArray(parProjects.id, gap)));
+    return {
+      error: "verifier_out_of_scope",
+      detail: `Verificatorul nu are acces la proiectele pe care depune solicitantul: ${names.map((n) => n.name).join(", ")}. Dă-i acces întâi, altfel cererile de acolo s-ar bloca la el.`,
+    };
+  }
+  return null;
+}
 
 parProfilesRoutes.put("/:id/projects", parUuidGuard("id"), requirePARRole("par_admin"), zValidator("json", membershipsSchema), async (c) => {
   const tenantId = c.get("user").tenantId;

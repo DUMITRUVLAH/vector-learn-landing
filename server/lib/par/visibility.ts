@@ -15,6 +15,9 @@
  * refuza cu 404. Acum aria e verificată AICI, deci toate căile o moștenesc, iar `projectId` și
  * `payerId` sunt obligatorii în tip: un apelant nou nu poate „uita" scope-ul fără să pice compilarea.
  */
+import { and, eq, gt } from "drizzle-orm";
+import { db } from "../../db/client";
+import { parApprovals } from "../../db/schema/par";
 import { getUserPARRoles } from "../../middleware/requirePARRole";
 import { isWorkspaceAdminRole } from "./roles";
 import { accessiblePayerIds, mayAccessPayer, mayAccessProject } from "./projectScope";
@@ -28,6 +31,8 @@ export async function canViewPar(
   user: { id: string; role?: string | null },
   tenantId: string,
   par: {
+    /** Cu el se verifică și „ești pus pe nume pe lanțul cererii" (verificator, pre-aprobator). */
+    id?: string;
     requestedByUserId: string | null;
     status?: string | null;
     /** Obligatorii: fără ele nu se poate verifica aria. Vezi antetul fișierului. */
@@ -45,7 +50,14 @@ export async function canViewPar(
     return parInUserScope(user, tenantId, par);
   }
   if (!roles.some((r) => (ELEVATED_PAR_ROLES as readonly string[]).includes(r))) {
-    return canViewAsProjectColleague(user, tenantId, par, roles);
+    if (await canViewAsProjectColleague(user, tenantId, par, roles)) return true;
+    // Cine e pus PE NUME pe lanțul cererii (verificatorul solicitantului, un pre-aprobator de
+    // proiect) trebuie s-o poată deschide ca s-o semneze — și pe o cerere fără proiect, unde regula
+    // colegilor de proiect nu se aplică. Aria rămâne a lui, ca la rutele de aprobare.
+    if (par.id && (await holdsNamedStep(user.id, tenantId, par.id))) {
+      return parInUserScope(user, tenantId, par);
+    }
+    return false;
   }
   if (par.status === "draft" && !isWorkspaceAdminRole(user.role ?? undefined)) return false;
   return parInUserScope(user, tenantId, par);
@@ -92,4 +104,24 @@ async function canViewAsProjectColleague(
   if (!par.projectId) return false;
   if (par.status === "draft") return false;
   return mayAccessProject(user.id, tenantId, par.projectId, user.role ?? undefined);
+}
+
+/**
+ * E omul pus pe nume pe un pas de aprobare al cererii (orice decizie, pasul 0 exclus)? Aceeași
+ * regulă deschide rechizitele beneficiarului pe fișă (`GET /api/par/:id`) și copia patentei.
+ */
+export async function holdsNamedStep(userId: string, tenantId: string, parId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: parApprovals.id })
+    .from(parApprovals)
+    .where(
+      and(
+        eq(parApprovals.tenantId, tenantId),
+        eq(parApprovals.parId, parId),
+        eq(parApprovals.approverUserId, userId),
+        gt(parApprovals.step, 0)
+      )
+    )
+    .limit(1);
+  return rows.length > 0;
 }

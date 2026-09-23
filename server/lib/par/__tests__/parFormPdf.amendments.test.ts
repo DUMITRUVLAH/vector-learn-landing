@@ -78,3 +78,21 @@ describe("formularul PAR — completările de după semnare", () => {
     expect(printed).toMatch(/amounts, payee and line items unchanged/i);
   });
 });
+
+describe("formularul PAR — corecturile verificatorului (înainte de aprobatori)", () => {
+  it("[blocant] hârtia spune că verificatorul a corectat cererea, ce și cine", () => {
+    const data = {
+      ...fixture(),
+      verifierAmendments: [{ at: "2026-09-23T12:00:00.000Z", byName: "Iulian Lungu", fields: ["budget line", "event"] }],
+    };
+    const printed = texts(buildParFormDefinition(data)).join("\n");
+    expect(printed).toContain("Corrected at verification, before the approvals");
+    expect(printed).toContain("budget line, event");
+    expect(printed).toContain("Iulian Lungu");
+  });
+
+  it("[normal] fără corecturi de verificare, nicio notă", () => {
+    const printed = texts(buildParFormDefinition(fixture())).join("\n");
+    expect(printed).not.toContain("Corrected at verification");
+  });
+});

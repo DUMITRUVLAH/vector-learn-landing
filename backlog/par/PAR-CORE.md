@@ -262,6 +262,24 @@ are **per-tenant configurable**; the matrix above is just the seed.
 create `par_approvals` rows (step 1 `pending`, rest `pending` but locked until prior approves). The
 PAR advances one step per approval. Reject/changes at any step stops the chain.
 
+**Nivelurile de dinaintea matricei DOA** (adăugate după v1, în ordinea în care se semnează):
+
+1. **Verificatorul solicitantului** (23.09.2026, `server/lib/par/requesterVerifier.ts`) — setat pe
+   profilul fiecărui membru (Administrare PAR → Membri → „Verificator"). Cererile omului ajung întâi
+   la el, singur pe pasul 1. Cât timp pasul lui e deschis, poate **corecta** linia de buget,
+   evenimentul, descrierea și data necesară (jurnal `verifier_amended` + resigilarea corpului +
+   notificare către solicitant) sau **întoarce** cererea („Cere modificări"). Sumele, liniile,
+   moneda, beneficiarul și proiectul nu se corectează pe calea asta — schimbă ce s-a semnat la
+   depunere și banda DOA, deci cererea se întoarce și se re-trimite. Cazul real: Iulian verifică
+   cererile Cristinei Onicov și Marinei Certan înaintea aprobatorilor ATIC.
+2. **Pre-aprobatorii de proiect** (16.09.2026, `server/lib/par/preApprovers.ts`) — toți oamenii bifați
+   pe proiect, în paralel, pe nivelul următor.
+3. **Matricea DOA**, decalată cu atâtea niveluri câte s-au adăugat în față.
+
+Pentru toate: cine depune nu se semnează singur, iar un om semnează o singură dată (rândul lui de mai
+târziu, pe nume, se scoate). Pasul e pe NUME, deci nu cere rolul `approver` — inboxul se deschide
+prin steagul `preApprover` din `GET /api/par/me`.
+
 **10% overage re-approval:** if Finance enters `actual_amount_cents` that exceeds
 `total_estimated_cents` by **> 10%** and `total_estimated_cents > micro_purchase_threshold` →
 PAR returns to a `reapproval_required` state and the final approver must re-approve before `paid`.
