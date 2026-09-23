@@ -16,6 +16,7 @@
  * invalidează `/ByteRange`-ul semnăturii. Storage-ul primește exact octeții semnatarului.
  */
 import { buildObjectPath, downloadObject, uploadObject } from "../storage/objectStore";
+import { shrinkIncomingBytes } from "../storage/shrinkIncoming";
 
 /** Bucket privat cu atașamentele dosarelor PAR și dovezile de plată. */
 export const PAR_ATTACHMENT_BUCKET = "par-attachments";
@@ -67,7 +68,9 @@ export async function storeAttachmentBytes(
   bytes: Buffer,
   mime: string,
 ): Promise<StoredAttachment> {
+  // Micșorare fără pierderi înainte de a ocupa loc în Storage; actele semnate trec neatinse.
+  const stored = await shrinkIncomingBytes(bytes, fileName, mime);
   const storagePath = buildObjectPath(tenantId, fileName);
-  await uploadObject(PAR_ATTACHMENT_BUCKET, storagePath, bytes, mime);
-  return { storagePath, mimeType: mime, sizeBytes: bytes.byteLength };
+  await uploadObject(PAR_ATTACHMENT_BUCKET, storagePath, stored, mime);
+  return { storagePath, mimeType: mime, sizeBytes: stored.byteLength };
 }

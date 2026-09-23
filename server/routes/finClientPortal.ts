@@ -15,6 +15,7 @@
  * Tenant isolation: all queries are filtered by the token's tenant_id.
  */
 import { Hono } from "hono";
+import { shrinkIncomingBytes } from "../lib/storage/shrinkIncoming";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, gte, sql } from "drizzle-orm";
@@ -397,10 +398,13 @@ publicRouter.post("/documents", async (c) => {
   // filesystem nu e baza de date: 10 MB de fișier deveneau ~13,4 MB de rând, iar planul are 500 MB
   // de bază de date cu totul. În DB rămâne doar calea obiectului.
   const arrayBuffer = await file.arrayBuffer();
+  // Micșorare fără pierderi (actele semnate trec neatinse) — aceeași regulă ca pe celelalte
+  // drumuri de încărcare, ca „ce intră în Storage e micșorat" să fie o regulă, nu un obicei.
+  const stored = await shrinkIncomingBytes(Buffer.from(arrayBuffer), file.name, file.type);
   let storagePath: string;
   try {
     storagePath = buildObjectPath(record.tenantId, file.name);
-    await uploadObject(CLIENT_PORTAL_BUCKET, storagePath, Buffer.from(arrayBuffer), file.type);
+    await uploadObject(CLIENT_PORTAL_BUCKET, storagePath, stored, file.type);
   } catch {
     return c.json({ error: "Documentul nu a putut fi salvat. Încearcă din nou." }, 503);
   }
@@ -413,7 +417,7 @@ publicRouter.post("/documents", async (c) => {
         portalTokenId: record.id,
         originalName: file.name,
         mimeType: file.type,
-        sizeBytes: file.size,
+        sizeBytes: stored.byteLength,
         storagePath,
         inObjectStore: true,
       })
