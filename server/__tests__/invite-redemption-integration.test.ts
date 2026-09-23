@@ -77,11 +77,14 @@ vi.mock("../auth/password", () => ({
 
 // Import authRoutes AFTER the mocks above are registered.
 import { authRoutes, rehomeGoogleUserToInvite } from "../routes/auth";
+import { parInvitesRoutes } from "../routes/parInvites";
+import { getSessionUser } from "../auth/session";
 import { Hono } from "hono";
 
-// Build a minimal Hono app with just the auth routes.
+// Build a minimal Hono app with the auth routes + invite creation.
 const app = new Hono();
 app.route("/api/auth", authRoutes);
+app.route("/api/par/invites", parInvitesRoutes);
 
 // ── Migration helper ──────────────────────────────────────────────────────────
 
@@ -557,5 +560,55 @@ describe("SHELL-503 Google email-match guard (f)", () => {
     const profileEmail = "attacker@gmail.com";
     expect(googleInviteEmailMatches(inviteEmail, profileEmail)).toBe(false);
     // In the callback: `resolvedInvite` stays null → no par_members insert
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Re-inviting someone who was removed from PAR (owner report 2026-09-23).
+// Removal deletes par_members rows but keeps the users row, and POST /invites used to 409
+// on the users row alone → "Acest email există deja în organizație." with no way back.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("re-invite a member removed from PAR", () => {
+  async function postInvite(email: string, payerId: string) {
+    const admin = await testDb.query.users.findFirst({ where: eq(users.id, adminUserId) });
+    vi.mocked(getSessionUser).mockResolvedValueOnce({
+      user: admin!,
+      session: { impersonatedByUserId: null },
+    } as unknown as Awaited<ReturnType<typeof getSessionUser>>);
+    return app.request("/api/par/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: "vl_session=test" },
+      body: JSON.stringify({ email, par_role: "requestor", payer_ids: [payerId] }),
+    });
+  }
+
+  it("account left with no PAR role → invite created (201), accepting restores the role", async () => {
+    const [payer] = await testDb.insert(parPayers).values({ tenantId, name: "Payer R" }).returning();
+    const [removed] = await testDb.insert(users).values({
+      tenantId, email: "removed@ong-vector-test.io", passwordHash: MOCK_CORRECT_HASH, name: "Removed", role: "teacher",
+    }).returning();
+
+    const res = await postInvite("Removed@ong-vector-test.io", payer.id);
+    expect(res.status).toBe(201);
+    const { inviteUrl } = (await res.json()) as { inviteUrl: string };
+    const token = inviteUrl.split("token=")[1];
+
+    const accept = await callAcceptInvite({ token, name: "Removed", password: "correctpassword" });
+    expect(accept.status).toBe(200);
+    const roles = await testDb.select().from(parMembers)
+      .where(and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, removed.id)));
+    expect(roles.map((r) => r.role)).toEqual(["requestor"]);
+  });
+
+  it("account that still holds a PAR role → 409 already_member", async () => {
+    const [payer] = await testDb.insert(parPayers).values({ tenantId, name: "Payer M" }).returning();
+    const [member] = await testDb.insert(users).values({
+      tenantId, email: "member@ong-vector-test.io", passwordHash: MOCK_CORRECT_HASH, name: "Member", role: "teacher",
+    }).returning();
+    await testDb.insert(parMembers).values({ tenantId, userId: member.id, role: "approver" });
+
+    const res = await postInvite("member@ong-vector-test.io", payer.id);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe("already_member");
   });
 });

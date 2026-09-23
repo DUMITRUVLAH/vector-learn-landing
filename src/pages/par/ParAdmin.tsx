@@ -1616,7 +1616,7 @@ function InviteSection({ payers }: { payers: ParPayer[] }) {
       await load();
     } catch (err) {
       setError(err instanceof Error && err.message.includes("already_member")
-        ? "Acest email există deja în organizație."
+        ? "Această persoană are deja acces în PAR. Schimbă-i rolul din lista de membri."
         : "Nu am putut crea invitația.");
     } finally { setBusy(false); }
   };

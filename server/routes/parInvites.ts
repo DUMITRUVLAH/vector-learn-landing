@@ -12,11 +12,11 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, gt, isNull, desc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
-import { parInvites, parPayers, parSettings } from "../db/schema/par";
+import { parInvites, parMembers, parPayers, parSettings } from "../db/schema/par";
 import { users } from "../db/schema";
 import { tenants } from "../db/schema/tenants";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { requirePARRole } from "../middleware/requirePARRole";
+import { requirePARRole, IMPLICIT_PAR_ADMIN_TENANT_ROLES } from "../middleware/requirePARRole";
 import {
   generateInviteToken,
   hashInviteToken,
@@ -54,12 +54,26 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
   ));
   if (validPayers.length !== payerIds.length) return c.json({ error: "invalid_payer_scope" }, 400);
 
-  // If a user with this email is already a member of this tenant, no invite needed.
+  // Refuse only when the person still HAS PAR access. Removing someone from PAR deletes their
+  // par_members rows but keeps the users row (it owns their past requests and signatures), so
+  // "an account exists" is not the same as "is a member": checking the users row alone made a
+  // removed person impossible to invite back. accept-invite already re-grants the role to an
+  // existing same-tenant account, so the invite can go ahead.
   const existingUser = await db.query.users.findFirst({
     where: and(eq(users.tenantId, tenantId), eq(users.email, normalizedEmail)),
   });
   if (existingUser) {
-    return c.json({ error: "already_member", detail: "Acest email există deja în organizație." }, 409);
+    const [stillMember] = await db
+      .select({ id: parMembers.id })
+      .from(parMembers)
+      .where(and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, existingUser.id)))
+      .limit(1);
+    if (stillMember || IMPLICIT_PAR_ADMIN_TENANT_ROLES.includes(existingUser.role)) {
+      return c.json({
+        error: "already_member",
+        detail: "Această persoană are deja acces în PAR. Schimbă-i rolul din lista de membri.",
+      }, 409);
+    }
   }
 
   // Drop any prior pending invite for the same email+tenant (re-invite replaces).
