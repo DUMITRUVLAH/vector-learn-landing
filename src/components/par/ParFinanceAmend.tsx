@@ -92,39 +92,72 @@ function AmendActions({
 
 // ─── Secțiunea 7: linia de buget ──────────────────────────────────────────────
 
+/**
+ * Ce îi trebuie completării dintr-o cerere. Deliberat mai puțin decât `ParDetail`: aceleași
+ * controale se folosesc și din coada de finanțe, unde rândul e un `ParFinanceQueueItem`.
+ */
+export interface AmendablePar {
+  id: string;
+  requestNo?: string;
+  payerId: string | null;
+  projectId: string | null;
+  budgetCodeId: string | null;
+  budgetCodeNote: string | null;
+  endUse: string | null;
+  attachmentsNote?: string | null;
+  budgetCodeLabel?: string | null;
+  /** Folosite doar de completările verificatorului (eveniment + data necesară). */
+  eventId?: string | null;
+  dateNeeded?: string | null;
+  /** Data cererii — pragul de jos pentru „data necesară". */
+  dateOfRequest?: string | null;
+}
+
 export interface FinanceAmendProps {
-  par: ParDetail;
+  par: AmendablePar;
   onSaved: () => void;
 }
 
-export function FinanceAmendBudgetLine({ par, onSaved }: FinanceAmendProps) {
-  const [open, setOpen] = useState(false);
+/**
+ * Codurile bugetare pe care cererea ASTA le poate primi — aceeași regulă ca pe server: codul
+ * trebuie să fie al plătitorului cererii, iar un cod legat de un proiect merge doar pe proiectul
+ * lui. Se încarcă doar când chiar se editează, nu la fiecare deschidere de fișă.
+ */
+function useAmendableBudgetCodes(par: AmendablePar, enabled: boolean) {
   const [codes, setCodes] = useState<ParBudgetCode[]>([]);
-  const [codeId, setCodeId] = useState(par.budgetCodeId ?? "");
-  const [note, setNote] = useState(par.budgetCodeNote ?? "");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!enabled) return;
     let alive = true;
     listBudgetCodes()
       .then((r) => { if (alive) setCodes(r.items.filter((c) => c.active)); })
       .catch(() => { if (alive) setError("Lista codurilor bugetare nu s-a încărcat."); });
     return () => { alive = false; };
-  }, [open]);
+  }, [enabled]);
+
+  const options = codes
+    .filter(
+      (c) =>
+        (!c.payerId || !par.payerId || c.payerId === par.payerId) &&
+        (!c.projectId || c.projectId === par.projectId)
+    )
+    .map((c) => ({ value: c.id, label: c.code, hint: c.name }));
+
+  return { options, error };
+}
+
+export function FinanceAmendBudgetLine({ par, onSaved }: FinanceAmendProps) {
+  const [open, setOpen] = useState(false);
+  const [codeId, setCodeId] = useState(par.budgetCodeId ?? "");
+  const [note, setNote] = useState(par.budgetCodeNote ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { options, error: codesError } = useAmendableBudgetCodes(par, open);
 
   if (!open) {
     return <EditTrigger label="Schimbă linia de buget" onClick={() => setOpen(true)} />;
   }
-
-  // Aceeași regulă ca pe server: codul trebuie să fie al plătitorului cererii, iar un cod legat
-  // de un proiect merge doar pe proiectul lui.
-  const eligible = codes.filter(
-    (c) =>
-      (!c.payerId || !par.payerId || c.payerId === par.payerId) &&
-      (!c.projectId || c.projectId === par.projectId)
-  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,7 +183,7 @@ export function FinanceAmendBudgetLine({ par, onSaved }: FinanceAmendProps) {
         aria-label="Cod bugetar"
         value={codeId}
         onChange={setCodeId}
-        options={eligible.map((c) => ({ value: c.id, label: c.code, hint: c.name }))}
+        options={options}
         placeholder="Caută după cod sau denumire…"
         emptyText="Niciun cod bugetar potrivit cererii"
       />
@@ -161,7 +194,7 @@ export function FinanceAmendBudgetLine({ par, onSaved }: FinanceAmendProps) {
         onChange={(e) => setNote(e.target.value)}
         placeholder="Notă (opțional)"
       />
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {(error || codesError) && <p className="text-xs text-destructive">{error ?? codesError}</p>}
       <AmendActions busy={busy} onCancel={() => { setOpen(false); setError(null); }} />
     </form>
   );
@@ -221,8 +254,12 @@ export function FinanceAmendEndUse({ par, onSaved }: FinanceAmendProps) {
  * Actele adiționale se pun la dosar cu tip și nume, nu ca „Alt document": peste un an, cine
  * deschide dosarul trebuie să știe ce a semnat, nu doar că mai era un fișier.
  */
-export function FinanceAddendum({ par, onSaved }: FinanceAmendProps) {
-  const [open, setOpen] = useState(false);
+export function FinanceAddendum({
+  par,
+  onSaved,
+  alwaysOpen = false,
+}: FinanceAmendProps & { alwaysOpen?: boolean }) {
+  const [open, setOpen] = useState(alwaysOpen);
   const [kind, setKind] = useState<ParAttachmentKind>("other");
   const [kindOther, setKindOther] = useState("Act adițional");
   const [busy, setBusy] = useState(false);
@@ -261,7 +298,7 @@ export function FinanceAddendum({ par, onSaved }: FinanceAmendProps) {
         onStep: setStep,
       });
       reconcileInBackground(par.id, att.id);
-      setOpen(false);
+      if (!alwaysOpen) setOpen(false);
       onSaved();
     } catch (err) {
       setError(errorText(err, "Documentul nu a putut fi atașat."));
@@ -299,9 +336,11 @@ export function FinanceAddendum({ par, onSaved }: FinanceAmendProps) {
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Paperclip className="h-3.5 w-3.5" aria-hidden />}
           {busy ? (step === "finalize" ? "Se verifică…" : "Se încarcă…") : "Alege fișierul"}
         </Button>
-        <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setOpen(false); setError(null); }}>
-          Renunță
-        </Button>
+        {!alwaysOpen && (
+          <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setOpen(false); setError(null); }}>
+            Renunță
+          </Button>
+        )}
       </div>
       <input
         ref={inputRef}
@@ -418,6 +457,129 @@ export function AmendDateNeeded({ par, onSaved }: FinanceAmendProps) {
       />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <AmendActions busy={busy} onCancel={() => { setOpen(false); setError(null); }} />
+    </form>
+  );
+}
+
+// ─── Panoul întreg, pentru coada de finanțe ──────────────────────────────────
+
+/**
+ * Aceleași completări, dar într-un singur formular — pentru omul de la finanțe, care lucrează din
+ * COADĂ, nu din fișa cererii (owner, 23.09.2026: „eu nu văd la coada finanțe să pot edita ceva").
+ * Acolo, a deschide fiecare cerere ca să corectezi o linie de buget înseamnă un drum dus-întors
+ * pentru fiecare rând; aici se corectează pe loc, cu o singură salvare.
+ */
+export function FinanceAmendPanel({
+  par,
+  onSaved,
+  onClose,
+}: FinanceAmendProps & { onClose: () => void }) {
+  const [codeId, setCodeId] = useState(par.budgetCodeId ?? "");
+  const [note, setNote] = useState(par.budgetCodeNote ?? "");
+  const [endUse, setEndUse] = useState(par.endUse ?? "");
+  const [attNote, setAttNote] = useState(par.attachmentsNote ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { options, error: codesError } = useAmendableBudgetCodes(par, true);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      // Trimitem DOAR ce s-a schimbat: serverul refuză orice câmp din afara listei albe, iar un
+      // formular care retrimite tot ar scrie în jurnal modificări care n-au avut loc.
+      const payload: Record<string, string | null> = {};
+      const nextNote = note.trim() ? note.trim() : null;
+      const nextEndUse = endUse.trim() ? endUse.trim() : null;
+      const nextAttNote = attNote.trim() ? attNote.trim() : null;
+      if ((codeId || null) !== (par.budgetCodeId ?? null)) payload.budget_code_id = codeId || null;
+      if (nextNote !== (par.budgetCodeNote ?? null)) payload.budget_code_note = nextNote;
+      if (nextEndUse !== (par.endUse ?? null)) payload.end_use = nextEndUse;
+      if (nextAttNote !== (par.attachmentsNote ?? null)) payload.attachments_note = nextAttNote;
+
+      if (Object.keys(payload).length) await updatePar(par.id, payload);
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(errorText(err, "Completarea nu a putut fi salvată."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="space-y-1.5">
+        <label htmlFor="amend-bc" className="block text-sm font-medium text-foreground">
+          Linia de buget
+        </label>
+        <Combobox
+          id="amend-bc"
+          aria-label="Linia de buget"
+          value={codeId}
+          onChange={setCodeId}
+          options={options}
+          placeholder="Caută după cod sau denumire…"
+          emptyText="Niciun cod bugetar potrivit cererii"
+        />
+        <Input
+          aria-label="Notă la linia de buget"
+          value={note}
+          maxLength={500}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Notă la linia de buget (opțional)"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="amend-enduse" className="block text-sm font-medium text-foreground">
+          Descrierea utilizării finale
+        </label>
+        <Textarea
+          id="amend-enduse"
+          aria-label="Descrierea utilizării finale"
+          value={endUse}
+          rows={3}
+          maxLength={5000}
+          onChange={(e) => setEndUse(e.target.value)}
+          placeholder="Ce s-a cumpărat și pentru ce se folosește."
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="amend-attnote" className="block text-sm font-medium text-foreground">
+          Nota anexelor
+        </label>
+        <Textarea
+          id="amend-attnote"
+          aria-label="Nota anexelor"
+          value={attNote}
+          rows={2}
+          maxLength={2000}
+          onChange={(e) => setAttNote(e.target.value)}
+          placeholder="ex. Act adițional nr. 2 din 12.09.2026 la contractul nr. 41."
+        />
+      </div>
+
+      <div className="rounded-md border border-border bg-muted/30 p-3">
+        <p className="mb-2 text-xs font-medium text-foreground">Acte adiționale la dosar</p>
+        <FinanceAddendum par={par} onSaved={onSaved} alwaysOpen />
+      </div>
+
+      {(error || codesError) && <p className="text-sm text-destructive">{error ?? codesError}</p>}
+      <p className="text-xs text-muted-foreground">
+        Sumele, liniile și rechizitele beneficiarului rămân cele semnate — nu se pot schimba de aici.
+      </p>
+      <div className="flex items-center justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+          Renunță
+        </Button>
+        <Button type="submit" disabled={busy}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+          Salvează
+        </Button>
+      </div>
     </form>
   );
 }

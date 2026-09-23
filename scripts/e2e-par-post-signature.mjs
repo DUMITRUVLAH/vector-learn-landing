@@ -345,6 +345,60 @@ if (process.argv.includes("--browser")) {
       await browser.close();
     }
   });
+
+  await T("[blocant] în browser: completarea se face DIN COADA de finanțe, fără să deschizi cererea", async () => {
+    // Owner, 23.09.2026: „eu nu văd la coada finanțe să pot editez ceva." Drumul ăsta e cel pe care
+    // îl face omul de la finanțe în fiecare zi — dacă el nu merge, funcția nu există pentru el.
+    must(CHROME, "niciun Chrome găsit — setează CHROME_PATH");
+    const { chromium } = await import("playwright-core");
+    // Cererea există ÎNAINTE ca omul de la finanțe să deschidă coada — ca în viața reală, și ca
+    // testul să nu depindă de momentul reîmprospătării. (Contul de finanțe aterizează chiar pe
+    // coadă după autentificare, iar o navigare la același hash nu reîncarcă lista: o cerere
+    // creată între timp nu apare până la „Reîncarcă lista".)
+    const { id } = await signedPar();
+    const requestNo = (await GET("finance", `/api/par/${id}`)).json.requestNo;
+
+    const browser = await chromium.launch({ executablePath: CHROME, headless: true });
+    try {
+      const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+      const crashes = [];
+      page.on("pageerror", (e) => crashes.push(e.message));
+
+      await page.goto(`${BASE}/#/business/login`, { waitUntil: "networkidle" });
+      await page.getByLabel(/email/i).first().fill(U.finance);
+      await page.getByLabel(/parol/i).first().fill(PW);
+      await page.getByRole("button", { name: /autentificare|conectare|intră/i }).first().click();
+      await page.waitForURL(/#\/business\/(?!login)/, { timeout: 20000 });
+
+      await page.goto(`${BASE}/#/business/par/finance`, { waitUntil: "networkidle" });
+      const amendBtn = page.getByRole("button", { name: new RegExp(`Completează cererea ${requestNo}`, "i") }).first();
+      try {
+        await amendBtn.waitFor({ timeout: 20000 });
+      } catch (e) {
+        // Un test care pică fără să spună CE a văzut pe ecran costă exact timpul pe care ar
+        // trebui să-l economisească.
+        const seen = await page.locator("button").evaluateAll((els) =>
+          els.map((el) => el.getAttribute("aria-label") ?? "").filter((l) => l.startsWith("Completează cererea")).slice(0, 5));
+        const body = (await page.locator("body").innerText().catch(() => "")).slice(0, 160).replace(/\n/g, " | ");
+        throw new Error(`butonul pentru ${requestNo} nu a apărut. URL=${page.url()} · butoane vizibile=[${seen.join(" ; ")}] · ecran="${body}"`);
+      }
+      await amendBtn.click();
+
+      await page.getByText("Completează cererea").first().waitFor({ timeout: 10000 });
+      const note = "Corectat din coada de finanțe.";
+      await page.getByLabel("Notă la linia de buget").fill(note);
+      await page.getByRole("button", { name: "Salvează" }).click();
+
+      await page.getByText("Completează cererea").first().waitFor({ state: "hidden", timeout: 15000 });
+      const after = (await GET("finance", `/api/par/${id}`)).json;
+      must(after.budgetCodeNote === note, `nota nu a ajuns în bază: ${after.budgetCodeNote}`);
+      must(after.body_hash_valid === true, "sigiliul a rămas invalid după completarea din coadă");
+      must(!crashes.length, `pagina a aruncat: ${crashes[0]}`);
+      return `${requestNo} completat din coadă`;
+    } finally {
+      await browser.close();
+    }
+  });
 }
 
 console.log(`\n═══ ${passed}/${total} verificări trecute ═══`);

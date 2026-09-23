@@ -28,6 +28,7 @@ import {
   Archive,
   ArchiveRestore,
   FolderDown,
+  Pencil,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -48,6 +49,7 @@ import {
   Textarea,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
+import { FinanceAmendPanel } from "@/components/par/ParFinanceAmend";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import {
@@ -1034,6 +1036,8 @@ interface QueueActionsProps {
   dosarJob: DosarJob | null;
   onSection16: (par: ParFinanceQueueItem) => void;
   onPay: (par: ParFinanceQueueItem) => void;
+  /** Completarea de după semnare: linia de buget, descrierea, anexele. */
+  onAmend: (par: ParFinanceQueueItem) => void;
   onDosar: (par: ParFinanceQueueItem) => void;
   onArchive: (par: ParFinanceQueueItem) => void;
   onRestore: (par: ParFinanceQueueItem) => void;
@@ -1042,11 +1046,52 @@ interface QueueActionsProps {
   wrap?: boolean;
 }
 
+/**
+ * „Completează" — corectura de după semnare, direct din coadă.
+ *
+ * Owner, 23.09.2026: „eu nu văd la coada finanțe să pot editez ceva". Controalele existau doar pe
+ * fișa cererii, dar omul de la finanțe lucrează din listă: linia de buget greșită se corectează
+ * aici, pe rând, fără să deschidă și să închidă fiecare cerere.
+ */
+function AmendModal({
+  par,
+  onClose,
+  onSaved,
+}: {
+  par: ParFinanceQueueItem;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  useEscapeToClose(onClose);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="amend-title"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm"
+    >
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
+        <div>
+          <h2 id="amend-title" className="text-lg font-semibold text-card-foreground">
+            Completează cererea
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {par.requestNo} · {parAmount(par.totalEstimatedCents, par.currency)}
+            {par.budgetCodeLabel ? ` · ${par.budgetCodeLabel}` : ""}
+          </p>
+        </div>
+        <FinanceAmendPanel par={par} onSaved={onSaved} onClose={onClose} />
+      </div>
+    </div>
+  );
+}
+
 function QueueActions({
   par,
   dosarJob,
   onSection16,
   onPay,
+  onAmend,
   onDosar,
   onArchive,
   onRestore,
@@ -1086,6 +1131,19 @@ function QueueActions({
       )}
       {!archivedView && par.status === "reapproval_required" && !par.payment?.overageReapproved && (
         <span className="whitespace-nowrap text-sm text-warning">Așteptare re-aprobare…</span>
+      )}
+      {/* Completarea de după semnare (doar în lista de lucru: în arhivă nu se mai corectează). */}
+      {!archivedView && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onAmend(par)}
+          aria-label={`Completează cererea ${par.requestNo} — linia de buget, descrierea, anexele`}
+          title="Corectează linia de buget, completează descrierea sau adaugă un act adițional"
+        >
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+          Completează
+        </Button>
       )}
       {/* VM1-12: dosarul complet PDF — pe orice status */}
       <Button
@@ -1151,6 +1209,7 @@ function QueueCard({
   dosarJob,
   onSection16,
   onPay,
+  onAmend,
   onDosar,
   onArchive,
   onRestore,
@@ -1232,6 +1291,7 @@ function QueueCard({
           dosarJob={dosarJob}
           onSection16={onSection16}
           onPay={onPay}
+          onAmend={onAmend}
           onDosar={onDosar}
           onArchive={onArchive}
           onRestore={onRestore}
@@ -1280,6 +1340,7 @@ export default function ParFinanceQueue() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [s16Par, setS16Par] = useState<ParFinanceQueueItem | null>(null);
+  const [amendPar, setAmendPar] = useState<ParFinanceQueueItem | null>(null);
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
   const [dosarJob, setDosarJob] = useState<DosarJob | null>(null);
@@ -1524,6 +1585,7 @@ export default function ParFinanceQueue() {
                 par={par}
                 dosarJob={dosarJob}
                 onSection16={setS16Par}
+                onAmend={setAmendPar}
                 onPay={setPayPar}
                 onDosar={(p) => void startDosar(p)}
                 onArchive={(p) => setArchivePar({ par: p, mode: "archive" })}
@@ -1592,6 +1654,7 @@ export default function ParFinanceQueue() {
                         par={par}
                         dosarJob={dosarJob}
                         onSection16={setS16Par}
+                        onAmend={setAmendPar}
                         onPay={setPayPar}
                         onDosar={(p) => void startDosar(p)}
                         onArchive={(p) => setArchivePar({ par: p, mode: "archive" })}
@@ -1776,6 +1839,13 @@ export default function ParFinanceQueue() {
           <Section16Modal
             par={s16Par}
             onClose={() => setS16Par(null)}
+            onSaved={() => void load()}
+          />
+        )}
+        {amendPar && (
+          <AmendModal
+            par={amendPar}
+            onClose={() => setAmendPar(null)}
             onSaved={() => void load()}
           />
         )}
