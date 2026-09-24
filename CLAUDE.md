@@ -444,6 +444,11 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   PGlite/CI/`db:reset` die with "cannot insert multiple commands into a prepared statement" (42601).
   `scripts/check-migration-breakpoints.mjs` enforces this in the build + CI. See
   [docs/solutions/database-issues/migration-statement-breakpoints.md].
+- **Heal columns carry their DEFAULT:** `sync-schema.ts` adds missing columns WITH the schema's literal
+  default (`literalDefault`) and restores a missing one. Drizzle never sends defaults in INSERT, so a
+  column healed without its default silently stores NULL on every insert that omits it (2026-09-24:
+  `par_vendors.kind` → companies shown as persons). See
+  [docs/solutions/database-issues/sync-schema-heal-without-default.md].
 - **Bidirectional schema match:** when a migration `ADD COLUMN`s, declare that column in the schema
   file (`server/db/schema/*.ts`) in the SAME commit. A column in the DB but not in the schema makes
   `table.column` `undefined` at runtime → `db.select` 500s with "Cannot convert undefined or null to

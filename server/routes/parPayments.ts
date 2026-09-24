@@ -42,6 +42,7 @@ import { notifyPaid, notifyPaymentReverted, notifyFinanceReturned, notifyReappro
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
+import { vendorKindFor } from "../lib/par/vendorKind";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { buildBodyForHash } from "../lib/par/submit";
 import {
@@ -138,6 +139,7 @@ async function autoLinkVendorOnPayment(par: typeof parRequests.$inferSelect, act
           idnp: par.payeeIdnp ?? null,
           iban,
           bank: par.payeeBank ?? null,
+          kind: vendorKindFor({ payeeType: par.payeeType, idnp: par.payeeIdnp, name: par.payeeName }),
           active: true,
         })
         .returning({ id: parVendors.id });
@@ -1288,8 +1290,15 @@ parPaymentsRoutes.post(
     for (const par of pars) if (await canViewPar(user, tenantId, par)) visible.push(par.id);
     if (!visible.length) return c.json({ filled: 0, remaining: 0 });
 
+    // Fără `file_url`: pe dosarele vechi el ține fișierul întreg ca data-URL base64. Coada de
+    // finanțe cheamă ruta la fiecare deschidere, iar `select()` trăgea ~12 MB din baza ATIC doar ca
+    // să afle care acte n-au încă referința. Conținutul se citește mai jos, doar pentru actele
+    // procesate (cel mult DOC_REF_BACKFILL_LIMIT).
     const rows = await db
-      .select()
+      .select({
+        id: parAttachments.id, kind: parAttachments.kind, analysis: parAttachments.analysis,
+        fileName: parAttachments.fileName, storagePath: parAttachments.storagePath, mimeType: parAttachments.mimeType,
+      })
       .from(parAttachments)
       .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, visible)));
 
@@ -1313,7 +1322,11 @@ parPaymentsRoutes.post(
       if (processed >= DOC_REF_BACKFILL_LIMIT || Date.now() >= deadline) break;
       processed += 1;
       try {
-        const { bytes, mime } = await loadAttachmentBytes(att);
+        const fileUrl = att.storagePath
+          ? null
+          : (await db.select({ fileUrl: parAttachments.fileUrl }).from(parAttachments)
+              .where(and(eq(parAttachments.id, att.id), eq(parAttachments.tenantId, tenantId))))[0]?.fileUrl ?? null;
+        const { bytes, mime } = await loadAttachmentBytes({ ...att, fileUrl });
         const { rawText } = await readUploadedDoc(bytes, att.fileName, mime);
         const document = parseDocumentRef(rawText);
         const analysis = { ...(JSON.parse(att.analysis as string) as Record<string, unknown>), document };

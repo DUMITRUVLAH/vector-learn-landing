@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import * as schema from "./schema/index";
 import { resolveDatabaseUrl } from "./env";
+import { literalDefault } from "./literalDefault";
 import { DOCGEN_ENSURE_STATEMENTS } from "./ensure/docgen";
 import { PAR_VENDOR_PROFILE_ENSURE_STATEMENTS } from "./ensure/parVendorProfile";
 import { PAR_DRIVE_ENSURE_STATEMENTS } from "./ensure/parDriveSync";
@@ -43,8 +44,8 @@ async function main() {
   for (const table of tables) {
     const tableName = getTableName(table as never);
     const cols = getTableColumns(table as never);
-    const actual = await sql<{ column_name: string }[]>`
-      SELECT column_name FROM information_schema.columns
+    const actual = await sql<{ column_name: string; column_default: string | null }[]>`
+      SELECT column_name, column_default FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = ${tableName}
     `;
     if (actual.length === 0) {
@@ -52,12 +53,24 @@ async function main() {
       continue;
     }
     const actualSet = new Set(actual.map((r) => r.column_name));
+    const withoutDefault = new Set(actual.filter((r) => r.column_default == null).map((r) => r.column_name));
     for (const col of Object.values(cols)) {
       const dbName = (col as { name: string }).name;
+      const literal = literalDefault(col);
+      if (actualSet.has(dbName) && literal && withoutDefault.has(dbName)) {
+        // O coloană adăugată mai demult de acest heal, fără default: Drizzle lasă default-ul pe
+        // seama bazei, deci fiecare INSERT care nu o numește scrie NULL (vezi `literalDefault`).
+        try {
+          await sql.unsafe(`ALTER TABLE "${tableName}" ALTER COLUMN "${dbName}" SET DEFAULT ${literal}`);
+          console.log(`[sync-schema] ~${tableName}.${dbName} DEFAULT ${literal}`);
+        } catch (e) {
+          console.error(`[sync-schema] FAILED default ${tableName}.${dbName}:`, e instanceof Error ? e.message : e);
+        }
+      }
       if (!actualSet.has(dbName)) {
         const sqlType = (col as { getSQLType: () => string }).getSQLType();
         try {
-          await sql.unsafe(`ALTER TABLE "${tableName}" ADD COLUMN IF NOT EXISTS "${dbName}" ${sqlType}`);
+          await sql.unsafe(`ALTER TABLE "${tableName}" ADD COLUMN IF NOT EXISTS "${dbName}" ${sqlType}${literal ? ` DEFAULT ${literal}` : ""}`);
           console.log(`[sync-schema] +${tableName}.${dbName} (${sqlType})`);
           added++;
         } catch (e) {
@@ -133,6 +146,17 @@ async function main() {
     `UPDATE fin_client_portal_documents SET in_object_store = false WHERE in_object_store IS NULL`,
     `ALTER TABLE fin_client_portal_documents ALTER COLUMN in_object_store SET DEFAULT false`,
     `ALTER TABLE fin_client_portal_documents ALTER COLUMN in_object_store SET NOT NULL`,
+    // `par_vendors.kind`: adăugată aici fără default, deci plata înregistrată și adăugarea din
+    // administrare scriau NULL — companiile apăreau „Persoană fizică" (vezi `vendorKind.ts`).
+    // Aceeași ordine de dovezi ca `vendorKindFor`: codul fiscal, apoi denumirea.
+    `ALTER TABLE par_vendors ALTER COLUMN kind SET DEFAULT 'individual'`,
+    `UPDATE par_vendors SET kind = CASE
+       WHEN regexp_replace(coalesce(idnp, ''), '\\s', '', 'g') ~ '^1[0-9]{12}$' THEN 'company'
+       WHEN regexp_replace(coalesce(idnp, ''), '\\s', '', 'g') ~ '^[02][0-9]{12}$' THEN 'individual'
+       WHEN name ~* '(s\\.?r\\.?l|\\ms\\.?a\\.?\\M|\\mao\\M|\\mong\\M|asocia|compan|institu|funda|agen[tț]ia|centrul|sec[tț]ia|[iî]ntreprinderea|\\m[iî]\\.?[is]\\.?\\M)' THEN 'company'
+       ELSE 'individual' END
+     WHERE kind IS NULL`,
+    `ALTER TABLE par_vendors ALTER COLUMN kind SET NOT NULL`,
   ];
   for (const stmt of ENSURE_COLUMN_STMTS) {
     try {

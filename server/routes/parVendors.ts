@@ -15,6 +15,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { validateIban } from "../lib/par/validators";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { vendorKindFor } from "../lib/par/vendorKind";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 import { splitBankRequisites } from "../lib/par/bankRequisites";
 import { normalizePatentDate, normalizePatentSeries } from "../../src/lib/par/patent";
@@ -211,6 +212,7 @@ parVendorsRoutes.post(
         tenantId,
         name: body.name,
         idnp: body.idnp ?? null,
+        kind: vendorKindFor({ idnp: body.idnp, name: body.name }),
         iban: normIban,
         bank: body.bank ?? null,
         bicSwift: body.bic_swift ?? null,
