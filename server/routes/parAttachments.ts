@@ -17,7 +17,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { parRequests, parAttachments, parAudit, parPayers } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -30,6 +30,8 @@ import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
 import { checkPayerOnDocument } from "../lib/par/payerOnDocument";
 import { ANALYSIS_VERSION, amountIsUnreliable, amountMismatch, comparesAmount, comparesPayee, currencyMismatch } from "../lib/par/reconcileScope";
+import { parseAmountInWords } from "../lib/par/amountInWords";
+import { isValidMdFiscalCode } from "../lib/par/amountSanity";
 import { bankMismatch } from "../lib/par/bankIdentity";
 import { partyAliases, sameParty } from "../lib/par/sameParty";
 import { parseDocumentRef } from "../lib/par/documentRef";
@@ -353,7 +355,7 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
   return c.json({ items: items.map((a) => ({ ...a, fileUrl: attachmentPreviewUrl(parId, a.id) })) });
 });
 
-type ReconcileCheck = { field: string; expected: string | number | null; found: string | number | null; matches: boolean | null };
+type ReconcileCheck = { field: string; expected: string | number | null; found: string | number | null; matches: boolean | null; note?: string };
 /** „E o nepotrivire?" → „se potrivește?", păstrând `null` = neverificat. */
 const invert = (v: boolean | null) => (v == null ? null : !v);
 const norm = (value: string | null | undefined) => (value ?? "").replace(/\s/g, "").toLocaleLowerCase("ro");
@@ -377,6 +379,34 @@ export function matchPartyToPar(
     by((p) => p.name, par.payeeName) ??
     choice.payee
   );
+}
+
+/**
+ * Același document atașat și la alte cereri vii ale tenantului (același nume ȘI aceeași mărime —
+ * aceeași factură urcată de mai multe ori, nu doar două fișiere numite „factura.pdf"). Întoarce
+ * totalul cumulat al cererilor în aceeași valută, sau null când documentul nu e împărțit.
+ */
+async function splitInvoiceShare(
+  par: typeof parRequests.$inferSelect,
+  attachment: typeof parAttachments.$inferSelect,
+): Promise<{ totalCents: number; requestNos: string[] } | null> {
+  if (!attachment.sizeBytes || !attachment.fileName) return null;
+  const siblings = await db
+    .selectDistinct({ id: parRequests.id, requestNo: parRequests.requestNo, total: parRequests.totalEstimatedCents })
+    .from(parAttachments)
+    .innerJoin(parRequests, and(eq(parRequests.id, parAttachments.parId), eq(parRequests.tenantId, par.tenantId)))
+    .where(and(
+      eq(parAttachments.tenantId, par.tenantId),
+      eq(parAttachments.fileName, attachment.fileName),
+      eq(parAttachments.sizeBytes, attachment.sizeBytes),
+      eq(parRequests.currency, par.currency),
+      notInArray(parRequests.status, ["cancelled", "rejected"]),
+    ));
+  if (siblings.length < 2 || !siblings.some((s) => s.id === par.id)) return null;
+  return {
+    totalCents: siblings.reduce((sum, s) => sum + (s.total ?? 0), 0),
+    requestNos: siblings.map((s) => s.requestNo).sort(),
+  };
 }
 
 async function analyzeAttachmentAgainstPar(
@@ -403,7 +433,11 @@ async function analyzeAttachmentAgainstPar(
   const payee = matchPartyToPar(choice, par);
   // `0` nu e o sumă citită din act, ci o extragere eșuată. La fel e și o valoare care se dovedește
   // a fi un rând din tabel, nu totalul (`amountIsUnreliable`) — amândouă devin „nedetectat".
-  const rawAmountCents = choice.amountCents === 0 ? null : choice.amountCents;
+  // Suma în litere e sursa legală de adevăr — aceeași regulă ca la prefill (`parAiPrefill.ts`),
+  // altfel același act dă o sumă în formular și alta la verificare.
+  const words = parseAmountInWords(rawText);
+  const wordsCents = words && (words.currency ?? "MDL") === choice.currency ? words.cents : null;
+  const rawAmountCents = wordsCents ?? (choice.amountCents === 0 ? null : choice.amountCents);
   const amountCents = amountIsUnreliable(rawAmountCents, extraction.lineItems) ? null : rawAmountCents;
 
   // VM5-04 („plătitorul e altul"): pe cine e emis documentul? Până acum se verifica doar CĂTRE
@@ -422,7 +456,14 @@ async function analyzeAttachmentAgainstPar(
   // întrebarea „pe cine e emis documentul": aceeași entitate nu poate fi și plătitor, și
   // beneficiar. Pe producție, un act ATIC–Centrul de Resurse Juridice raporta „plătitorul e
   // Centrul de Resurse Juridice" tocmai fiindcă ATIC fusese deja consumat ca beneficiar.
-  const weArePayee = ourAliases.some((alias) => sameParty(par.payeeName, alias, { aliases: ourAliases }) === true);
+  // …sau după cod: „card ATIC" poartă IDNO-ul ATIC (plată cu cardul organizației), deși numele
+  // nu seamănă cu niciun alias.
+  const weArePayee =
+    ourAliases.some((alias) => sameParty(par.payeeName, alias, { aliases: ourAliases }) === true) ||
+    (!!payerRow?.idno && !!par.payeeIdnp && norm(payerRow.idno) === norm(par.payeeIdnp));
+  // Când plătim din banii noștri (cardul organizației), documentul numește comerciantul, nu pe noi:
+  // „beneficiarul e altul" ar fi adevărat prin construcție. Potrivirea rămâne raportată, acuzația nu.
+  const ownFunds = (verdict: boolean | null) => (weArePayee && verdict === false ? null : verdict);
   const payerCheck = checkPayerOnDocument(
     docParties,
     payerRow ?? null,
@@ -432,12 +473,21 @@ async function analyzeAttachmentAgainstPar(
   // Suma se compară doar pe documentele care chiar declară suma de plată (vezi `reconcileScope`):
   // pe un contract-cadru, pe o listă de participanți sau pe un buletin scanat, „suma nu corespunde"
   // e zgomot garantat, iar zgomotul face avertismentele invizibile.
+  // Factura împărțită pe mai multe cereri (abonamentul Moldcell pe proiecte, factura Orange pe trei
+  // coduri bugetare): fiecare cerere plătește o parte, iar suma lor e totalul documentului.
+  const split = comparesAmount(attachment.kind) && amountCents != null && amountMismatch(par.totalEstimatedCents, amountCents)
+    ? await splitInvoiceShare(par, attachment)
+    : null;
+  const splitCovers = !!split && !amountMismatch(split.totalCents, amountCents);
   const amountChecks: ReconcileCheck[] = comparesAmount(attachment.kind)
     ? [
         // `amountMismatch` tace pe două situații care nu sunt diferențe: documentul n-a dat nicio
         // sumă (extragere eșuată), iar cererea n-are total completat. Și înghite bănuții pierduți
         // la scanare — 340,90 citit „340,00" nu e un motiv să oprești o plată.
-        { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: invert(amountMismatch(par.totalEstimatedCents, amountCents)) },
+        splitCovers
+          ? { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: true,
+              note: `Documentul e împărțit pe ${split!.requestNos.length} cereri (${split!.requestNos.join(", ")}), care împreună fac totalul lui.` }
+          : { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: invert(amountMismatch(par.totalEstimatedCents, amountCents)) },
         // Valuta cere aceeași dovadă ca restul: fără o sumă citită din document, „document MDL ·
         // PAR USD" e un cuvânt de pe pagină ridicat la rang de nepotrivire (vezi `currencyMismatch`).
         { field: "valută", expected: par.currency, found: choice.currency, matches: invert(currencyMismatch(par.currency, choice.currency, amountCents)) },
@@ -466,9 +516,15 @@ async function analyzeAttachmentAgainstPar(
     ...amountChecks,
     // Aliasurile intră și aici: cererea poate purta denumirea juridică întreagă, iar documentul
     // acronimul — același lucru scris în două feluri, nu o nepotrivire.
-    { field: "beneficiar", expected: par.payeeName, found: payee?.name ?? null, matches: aboutPayee ? sameParty(par.payeeName, payee?.name, { aliases: ourAliases }) : null },
-    { field: "IDNO/IDNP", expected: par.payeeIdnp, found: payee?.idno ?? null, matches: !aboutPayee || !payee?.idno || !par.payeeIdnp ? null : norm(payee.idno) === norm(par.payeeIdnp) },
-    { field: "IBAN", expected: par.payeeIban, found: payee?.iban ?? null, matches: !aboutPayee || !payee?.iban || !par.payeeIban ? null : norm(payee.iban) === norm(par.payeeIban) },
+    { field: "beneficiar", expected: par.payeeName, found: payee?.name ?? null, matches: ownFunds(aboutPayee ? sameParty(par.payeeName, payee?.name, { aliases: ourAliases }) : null) },
+    // Un cod de pe document care pică cifra de control e o greșeală de tipar sau de citire, nu o
+    // dovadă: actul Bulbaș scria IDNP-ul corect în corp și unul greșit la semnături. Invers, un cod
+    // greșit în CERERE rămâne acuzat — acolo e exact eroarea care trebuie prinsă (Deea House).
+    { field: "IDNO/IDNP", expected: par.payeeIdnp, found: payee?.idno ?? null,
+      matches: !aboutPayee || !payee?.idno || !par.payeeIdnp || (!isValidMdFiscalCode(payee.idno) && isValidMdFiscalCode(par.payeeIdnp))
+        ? null
+        : ownFunds(norm(payee.idno) === norm(par.payeeIdnp)) },
+    { field: "IBAN", expected: par.payeeIban, found: payee?.iban ?? null, matches: !aboutPayee || !payee?.iban || !par.payeeIban ? null : ownFunds(norm(payee.iban) === norm(par.payeeIban)) },
     // Banca, ca TEXT, nu e identificator: e scrisă altfel pe fiecare document („BC «MOLDINDCONBANK»
     // S.A" / „MOLDINDCONBANK" / „Moldindconbank") și băncile se redenumesc („Mobiasbanca-OTP Group"
     // → „OTP Bank") — de aceea v3 a scos-o cu totul dintre avertismente (toate cele 7 „nepotriviri"
@@ -483,10 +539,10 @@ async function analyzeAttachmentAgainstPar(
       found: payee?.bank ?? null,
       matches: sameParty(par.payeeBank, payee?.bank) === true
         ? true
-        : invert(bankMismatch(
+        : ownFunds(invert(bankMismatch(
             { name: par.payeeBank, iban: par.payeeIban },
             { name: payee?.bank, iban: payee?.iban, ibans: payee?.ibans, bic: payee?.bic },
-          )),
+          ))),
     },
     { field: "plătitor", expected: payerRow?.name ?? null, found: payerCheck.found, matches: payerCheck.matches },
   ];

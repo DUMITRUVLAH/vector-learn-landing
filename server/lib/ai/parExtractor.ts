@@ -12,6 +12,7 @@
 import { callAi } from "./client";
 import { parsePartiesFromText } from "../par/stubPartyParser";
 import { purifyExtraction } from "../par/partyPurify";
+import { amountLooksLikeIdentifier, restoreDroppedDecimals } from "../par/amountSanity";
 import type {
   ParPartiesExtraction,
   ParExtractedParty,
@@ -133,11 +134,13 @@ REGULI ABSOLUTE:
    "1 Bilet de avion TLLLISTLL, BORDEI VIORICA 11094 1 11094" rezultă
    {description:"Bilet de avion TLLLISTLL, BORDEI VIORICA", quantity:1, unit:null, unit_price:11094}.
    Extrage TOATE rândurile de acest fel — lista goală doar când documentul chiar nu are articole.
-3. amount: suma DE PLATĂ în UNITĂȚI ÎNTREGI ale valutei (lei/euro/dolari) — NU în cenți,
-   NU înmulți cu 100; aplicația face conversia. Folosește TOTALUL de plată ("Total de plată",
+3. amount: suma DE PLATĂ în unitatea PRINCIPALĂ a valutei (lei/euro/dolari, NU bani/cenți),
+   PĂSTRÂND ZECIMALELE exact cum sunt scrise — NU rotunji, NU tăia banii, NU înmulți cu 100;
+   aplicația face conversia. Folosește TOTALUL de plată ("Total de plată",
    "TOTAL DUE", "Итого к оплате", "всего", "Suma", "Remunerația", "în mărime de", "стоимость",
    "preț"), NU subtotalul fără TVA și NU doar TVA-ul.
    Exemplu: "5000 lei" → 5000. "45 000,00 lei" → 45000. "EUR 2,400.00" → 2400.
+   "1 508,51 lei" → 1508.51 (NU 1508). "9 645,41" → 9645.41. Aceeași regulă la unit_price.
    SUMA ÎN LITERE ESTE SURSA DE ADEVĂR: dacă documentul are un rând de tipul "Total factura în litere:
    douazeci si trei de mii patruzeci si doi lei 00 bani", transcrie ACEA sumă în cifre (→ 23042) și
    folosește-o. Cifra din tabel poate ajunge pe alt rând decât eticheta "TOTAL" (ordinea din PDF e
@@ -383,6 +386,26 @@ export function buildAiText(raw: string): string {
   return `${head}\n\n--- DATE DE PLATĂ / RECHIZITE (din restul documentului) ---${body}`;
 }
 
+/**
+ * Suma modelului, confruntată cu textul actului (vezi `amountSanity.ts`): un identificator citit ca
+ * sumă devine „nedetectat", iar banii tăiați se recuperează din document. Aici, și nu în rute, ca
+ * prefill-ul și verificarea documentului să primească ACEEAȘI sumă din același act.
+ */
+function checkAmountsAgainstText(ex: ParPartiesExtraction, rawText: string): ParPartiesExtraction {
+  if (!rawText.trim()) return ex;
+  const ids = ex.parties.flatMap((p) => [p.idno, p.iban, ...(p.ibans ?? [])]);
+  const identifier = amountLooksLikeIdentifier(ex.amountCents, rawText, ids);
+  return {
+    ...ex,
+    amountCents: identifier ? null : restoreDroppedDecimals(ex.amountCents, rawText),
+    amountConfidence: identifier ? 0 : ex.amountConfidence,
+    lineItems: ex.lineItems?.map((li) => ({
+      ...li,
+      unitPriceCents: restoreDroppedDecimals(li.unitPriceCents, rawText) ?? li.unitPriceCents,
+    })),
+  };
+}
+
 export async function extractParParties(
   text: string,
   opts: ExtractParPartiesOpts,
@@ -415,7 +438,7 @@ export async function extractParParties(
   // of labelling a real outage "(demo)".
   if (result.isStub) {
     return {
-      ...parsePartiesFromText(text ?? ""),
+      ...checkAmountsAgainstText(parsePartiesFromText(text ?? ""), text ?? ""),
       isStub: true,
       unavailable: result.unavailable ?? "no_key",
     };
@@ -423,8 +446,8 @@ export async function extractParParties(
 
   try {
     const json = JSON.parse(extractJsonBlock(result.text)) as Record<string, unknown>;
-    return normalizeParExtraction(json);
+    return checkAmountsAgainstText(normalizeParExtraction(json), text ?? "");
   } catch {
-    return { ...parsePartiesFromText(text ?? ""), isStub: true, unavailable: "api_error" };
+    return { ...checkAmountsAgainstText(parsePartiesFromText(text ?? ""), text ?? ""), isStub: true, unavailable: "api_error" };
   }
 }
