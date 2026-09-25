@@ -309,3 +309,15 @@
     box-shadow: 0 0 80px -20px hsl(228 76% 52% / 0.5);
   }
 }
+
+/* CRM-D06 — pagina publică a actului, pe telefon: blocul de semnături (două coloane pe hârtie)
+   se așază una sub alta, altfel partea clientului era tăiată la marginea ecranului. */
+@media (max-width: 640px) {
+  .doc-body table[data-role="signatures"],
+  .doc-body table[data-role="signatures"] tbody,
+  .doc-body table[data-role="signatures"] tr,
+  .doc-body table[data-role="signatures"] td {
+    display: block;
+    width: 100%;
+  }
+}

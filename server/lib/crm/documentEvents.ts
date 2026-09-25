@@ -34,14 +34,19 @@ export interface LeadDocumentRef {
   counterpartyId: string | null;
 }
 
-const KIND_NOUN: Record<string, string> = {
-  oferta_comerciala: "Oferta",
-  contract_servicii: "Contractul",
-  act_primire_predare: "Actul de primire-predare",
+const KIND_NOUN: Record<string, { noun: string; feminine: boolean }> = {
+  oferta_comerciala: { noun: "Oferta", feminine: true },
+  contract_servicii: { noun: "Contractul", feminine: false },
+  act_primire_predare: { noun: "Actul de primire-predare", feminine: false },
 };
 
+/** Acordul participiului: „oferta a fost trimisă", „contractul a fost trimis". */
+function agree(doc: LeadDocumentRef, masculine: string): string {
+  return KIND_NOUN[doc.kind]?.feminine ? `${masculine}ă` : masculine;
+}
+
 function docName(doc: LeadDocumentRef): string {
-  const noun = KIND_NOUN[doc.kind] ?? "Actul";
+  const noun = KIND_NOUN[doc.kind]?.noun ?? "Actul";
   return doc.docNumber ? `${noun} ${doc.docNumber}` : `${noun} „${doc.title}"`;
 }
 
@@ -49,15 +54,15 @@ function sentence(doc: LeadDocumentRef, event: LeadDocumentEvent, detail?: strin
   const name = docName(doc);
   switch (event) {
     case "created":
-      return `${name} a fost creat ca ciornă.`;
+      return `${name} a fost ${agree(doc, "creat")} ca ciornă.`;
     case "sent":
-      return detail ? `${name} a fost trimis la ${detail}.` : `${name} a fost trimis clientului.`;
+      return detail ? `${name} a fost ${agree(doc, "trimis")} la ${detail}.` : `${name} a fost ${agree(doc, "trimis")} clientului.`;
     case "viewed":
       return `Clientul a deschis ${name.charAt(0).toLowerCase()}${name.slice(1)}.`;
     case "signed":
-      return `${name} a fost semnat.`;
+      return `${name} a fost ${agree(doc, "semnat")}.`;
     case "rejected":
-      return detail ? `${name} a fost refuzat: ${detail}` : `${name} a fost refuzat.`;
+      return detail ? `${name} a fost ${agree(doc, "refuzat")}: ${detail}` : `${name} a fost ${agree(doc, "refuzat")}.`;
   }
 }
 

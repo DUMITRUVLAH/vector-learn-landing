@@ -13,8 +13,8 @@
  * Se citește pe telefon, fiindcă de pe telefon se deschid linkurile din e-mail: o coloană,
  * tabelul de poziții cu derulare proprie, corpul actului randat ca text, nu ca imagine.
  */
-import { useEffect, useState } from "react";
-import { FileText, Loader2, ShieldAlert } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { CheckCircle2, FileText, Loader2, ShieldAlert, XCircle } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface SharedDocLine {
@@ -38,6 +38,9 @@ interface SharedDoc {
   currency: string;
   bodyHtml: string;
   lines: SharedDocLine[];
+  /** CRM-D06: clientul poate accepta / refuza de aici. */
+  canRespond?: boolean;
+  response?: { decision: "accepted" | "declined"; name: string | null; at: string } | null;
 }
 
 function money(cents: number, currency: string): string {
@@ -124,11 +127,13 @@ export function DocSharePage() {
           {/* Corpul vine randat de pe server, fără acolade necompletate (`blanks.ts`). Conținutul
               e curățat la salvare (`sanitizeTemplateHtml`), deci aici se afișează ca atare. */}
           <div
-            className="doc-body prose-sm max-w-none text-sm leading-relaxed text-foreground [&_h1]:mb-3 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:font-semibold [&_p]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:p-2"
+            className="doc-body prose-sm max-w-none text-sm leading-relaxed text-foreground [&_h1]:mb-3 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:font-semibold [&_p]:mb-2 [&_table]:block [&_table]:w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:p-2"
             dangerouslySetInnerHTML={{ __html: doc.bodyHtml }}
           />
 
-          {doc.lines.length > 0 && (
+          {/* Tabelul pozițiilor e deja în corpul actului (șabloanele îl conțin) — îl arătăm separat
+              doar pentru un act fără el, altfel clientul vedea aceleași rânduri de două ori. */}
+          {doc.lines.length > 0 && !/<table/i.test(doc.bodyHtml) && (
             <div className="mt-6 overflow-x-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
@@ -166,10 +171,174 @@ export function DocSharePage() {
           </p>
         </article>
 
+        {doc.response ? (
+          <ResponseDone response={doc.response} />
+        ) : doc.canRespond ? (
+          <RespondForm
+            title={doc.title}
+            kind={doc.kind}
+            onDone={(response) => setDoc({ ...doc, canRespond: false, response })}
+          />
+        ) : null}
+
         <p className="mt-6 text-center text-xs text-muted-foreground">
           Pentru întrebări sau modificări, răspunde la e-mailul prin care ai primit acest link.
         </p>
       </div>
     </div>
+  );
+}
+
+// ─── CRM-D06: răspunsul clientului ───────────────────────────────────────────
+
+type SharedResponse = NonNullable<SharedDoc["response"]>;
+
+function ResponseDone({ response }: { response: SharedResponse }) {
+  const accepted = response.decision === "accepted";
+  const when = new Date(response.at).toLocaleString("ro-MD", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return (
+    <section className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-card p-5" role="status">
+      {accepted ? (
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+      ) : (
+        <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      )}
+      <div>
+        <p className="font-medium text-foreground">{accepted ? "Documentul a fost acceptat" : "Documentul a fost refuzat"}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {response.name ? `${response.name} · ` : ""}
+          {when}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+interface RespondFormProps {
+  title: string;
+  kind: string;
+  onDone: (response: SharedResponse) => void;
+}
+
+function RespondForm({ title, kind, onDone }: RespondFormProps) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [agree, setAgree] = useState(false);
+  const [declining, setDeclining] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const noun = kind === "oferta_comerciala" ? "oferta" : "documentul";
+
+  async function send(decision: "accept" | "decline") {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = tokenFromHash();
+      const res = await api<{ response: SharedResponse }>(`/api/public/doc/${encodeURIComponent(token)}/respond`, {
+        method: "POST",
+        body: JSON.stringify({ decision, name, email: email || null, reason: decision === "decline" ? reason : null }),
+      });
+      onDone(res.response);
+    } catch (err) {
+      const body = (err as { body?: { message?: string } }).body;
+      setError(body?.message ?? "Nu am putut trimite răspunsul. Încearcă din nou.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    void send(declining ? "decline" : "accept");
+  }
+
+  const nameOk = name.trim().length >= 3;
+
+  return (
+    <form onSubmit={onSubmit} className="mt-6 space-y-4 rounded-xl border border-border bg-card p-5 sm:p-6" aria-label="Răspunsul tău">
+      <div>
+        <h2 className="text-base font-semibold text-foreground">Răspunsul tău</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Numele tău complet ține loc de semnătură. Păstrăm data, ora și amprenta documentului acceptat.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm">
+          <span className="font-medium text-foreground">Numele tău complet</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            className="mt-1 h-11 w-full rounded-lg border border-input bg-background px-3 text-foreground"
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium text-foreground">E-mail (opțional)</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            className="mt-1 h-11 w-full rounded-lg border border-input bg-background px-3 text-foreground"
+          />
+        </label>
+      </div>
+
+      {declining ? (
+        <label className="block text-sm">
+          <span className="font-medium text-foreground">De ce refuzi?</span>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            className="mt-1 w-full rounded-lg border border-input bg-background p-3 text-foreground"
+          />
+        </label>
+      ) : (
+        <label className="flex min-h-11 items-start gap-3 text-sm text-foreground">
+          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1 h-4 w-4" />
+          <span>Am citit și accept {noun} „{title}".</span>
+        </label>
+      )}
+
+      {error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        {declining ? (
+          <>
+            <button
+              type="submit"
+              disabled={busy || !nameOk || !reason.trim()}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background disabled:opacity-50"
+            >
+              {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              Trimite refuzul
+            </button>
+            <button type="button" onClick={() => setDeclining(false)} className="h-11 px-3 text-sm font-medium text-primary">
+              Înapoi
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="submit"
+              disabled={busy || !nameOk || !agree}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            >
+              {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              Accept {noun}
+            </button>
+            <button type="button" onClick={() => setDeclining(true)} className="h-11 px-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Refuz
+            </button>
+          </>
+        )}
+      </div>
+    </form>
   );
 }

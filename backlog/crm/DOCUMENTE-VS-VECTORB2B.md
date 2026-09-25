@@ -43,23 +43,23 @@ generate nelegate de fișa persoanei.
 | 7 | Trimiterea cerea adresa într-un câmp gol; după prima trimitere, butonul dispărea | **reparat — D02** |
 | 8 | Tabelul pozițiilor ieșea turtit într-un rând de text în PDF — în **toate** șabloanele, și PAR | **reparat — D03** |
 | 9 | Oferta: Times, titlu centrat, fără TVA, fără loc de acceptare | **refăcut — D03** (stil modern) |
-| 10 | IDNO/IBAN/banca/administratorul NOSTRU nu au unde fi scrise → linii goale pe fiecare act | **D04** |
+| 10 | IDNO/IBAN/banca/administratorul NOSTRU nu au unde fi scrise → linii goale pe fiecare act | **reparat — D04** (CRM › Datele firmei) |
 
 ## 3. Următorii pași (în ordinea valorii)
 
-### CRM-D04 — „Datele firmei tale", o singură dată
+### ~~CRM-D04 — „Datele firmei tale", o singură dată~~ — livrat
 Coloane noi pe `fin_org_profile` (iban, banca, bic, administrator, funcție, telefon, e-mail, logo)
 cu heal în `sync-schema.ts`; ecran „Datele firmei" în CRM › Administrare (și un link din
 avertismentul „rechizite lipsă" al editorului); `fieldResolver` le citește ca `noi.*`.
 Criteriu: o ofertă nouă nu mai are niciun `____` în blocul furnizorului.
 
-### CRM-D05 — Actul în viața leadului
+### ~~CRM-D05 — Actul în viața leadului~~ — livrat (fără e-mail cu linkul — vezi mai jos)
 - Ofertă trimisă → leadul trece singur în etapa „ofertă" a pâlniei (dacă există); contract
   semnat → etapa câștigată (cu confirmare, reversibil).
 - Crearea / trimiterea / vizualizarea de către client / semnarea apar în cronologia leadului.
 - „Vizualizată de client" apare pe fișa leadului și trimite o notificare responsabilului.
 
-### CRM-D06 — Clientul acceptă online
+### ~~CRM-D06 — Clientul acceptă online~~ — livrat
 Pagina publică `#/act/:token` capătă „Accept oferta" (nume tastat + data + IP + amprenta
 actului, ca la ofertele de angajare din VectorB2B); acceptarea marchează actul „semnat" și
 declanșează D05. E-mailul trimite linkul, nu doar atașamentul.
@@ -78,3 +78,5 @@ același stil modern/clasic.
   baza ofertei acceptate" și completează `document.baza` cu numărul ofertei.
 - Pagina CRM › Documente: buton „Act nou", clientul ca link spre lead, Semnat/Refuzat și acolo.
 - Fișa firmei (G04) și cartonașul din pipeline: „Act nou" direct de acolo.
+- Rechizitele CLIENTULUI (IBAN, bancă) pe fișa firmei din CRM — azi ies goale în contract.
+- E-mailul de trimitere să conțină linkul de acceptare, nu doar PDF-ul atașat.

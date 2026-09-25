@@ -5192,11 +5192,12 @@
       "milestone": "CRM-D",
       "phase": "CRM-D-faza-1",
       "priority": "high",
-      "status": "pending",
+      "status": "done",
       "title": "Datele firmei tale (IBAN, bancă, administrator) o singură dată",
       "depends_on": [
         "CRM-D03"
-      ]
+      ],
+      "branch": "feat/CRM-google-redesign"
     },
     "CRM-D05": {
       "attempts": 0,
@@ -5205,11 +5206,12 @@
       "milestone": "CRM-D",
       "phase": "CRM-D-faza-1",
       "priority": "high",
-      "status": "pending",
+      "status": "done",
       "title": "Actul în viața leadului: etape automate, cronologie, notificare la vizualizare",
       "depends_on": [
         "CRM-D01"
-      ]
+      ],
+      "branch": "feat/CRM-google-redesign"
     },
     "CRM-D06": {
       "attempts": 0,
@@ -5218,11 +5220,12 @@
       "milestone": "CRM-D",
       "phase": "CRM-D-faza-1",
       "priority": "high",
-      "status": "pending",
+      "status": "done",
       "title": "Clientul acceptă oferta online (pagina publică)",
       "depends_on": [
         "CRM-D05"
-      ]
+      ],
+      "branch": "feat/CRM-google-redesign"
     },
     "CRM-D07": {
       "attempts": 0,

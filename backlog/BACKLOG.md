@@ -626,8 +626,8 @@ Comparația și planul: [crm/DOCUMENTE-VS-VECTORB2B.md](crm/DOCUMENTE-VS-VECTORB
 | 1 | `CRM-D01` | Actul din CRM nu mai dispare la editare; se deschide în CRM; tip, TVA, seria OF- | done ✅ |
 | 1 | `CRM-D02` | Oferta pre-completată din lead; e-mailul clientului propus; retrimitere | done ✅ |
 | 1 | `CRM-D03` | Stil modern pentru actele către clienți + tabelul pozițiilor reparat în PDF + TVA | done ✅ |
-| 2 | `CRM-D04` | Datele firmei tale (IBAN, bancă, administrator) o singură dată | pending |
-| 2 | `CRM-D05` | Actul în viața leadului: etape automate, cronologie, notificare la vizualizare | pending |
-| 2 | `CRM-D06` | Clientul acceptă oferta online | pending |
+| 2 | `CRM-D04` | Datele firmei tale (IBAN, bancă, administrator) o singură dată | done ✅ |
+| 2 | `CRM-D05` | Actul în viața leadului: etape automate, cronologie, notificare la vizualizare | done ✅ |
+| 2 | `CRM-D06` | Clientul acceptă oferta online | done ✅ |
 | 3 | `CRM-D07` | Șablon din Word-ul tău, cu AI care propune câmpurile | pending |
 | 3 | `CRM-D08` | Export .docx real | pending |

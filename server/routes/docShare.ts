@@ -18,13 +18,15 @@ import { Hono } from "hono";
 import { recordLeadDocumentEvent } from "../lib/crm/documentEvents";
 import { rateLimiter } from "hono-rate-limiter";
 import type { Context } from "hono";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { docShareLinks } from "../db/schema/docShareLinks";
 import { docDocuments, docDocumentLines, docAudit } from "../db/schema/docs";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { clientIp } from "../lib/clientIp";
 import { blankUnresolved } from "../lib/docs/blanks";
+import { leads } from "../db/schema/leads";
+import { createNotification } from "../lib/createNotification";
 
 // ─── Partea autentificată ─────────────────────────────────────────────────────
 
@@ -210,6 +212,9 @@ docPublicRoutes.get("/:token", async (c) => {
     docNumber: doc.docNumber,
     docDate: doc.docDate,
     status: doc.status,
+    // CRM-D06: clientul poate răspunde de pe pagină (accept / refuz), doar la actele din CRM.
+    canRespond: canRespond(doc),
+    response: await lastResponse(doc.id),
     counterpartyName: doc.counterpartyName,
     totalCents: doc.totalCents,
     currency: doc.currency,
@@ -218,4 +223,128 @@ docPublicRoutes.get("/:token", async (c) => {
     bodyHtml: blankUnresolved(doc.bodyHtml ?? ""),
     lines,
   });
+});
+
+// ─── CRM-D06: clientul acceptă sau refuză de pe pagină ────────────────────────
+
+/**
+ * Lecția din VectorB2B (scrisorile de ofertă): clientul semnează din link, fără cont — nume tastat,
+ * dată, IP, browser și amprenta actului. Nu e semnătură electronică calificată (MSign rămâne
+ * pentru contractele care o cer), ci acceptarea unei oferte comerciale, cu dovadă păstrată.
+ *
+ * Doar actele din CRM, doar după ce au plecat la client (final/trimis), doar o dată: un act deja
+ * semnat sau refuzat nu-și schimbă răspunsul de pe un link.
+ */
+function canRespond(doc: typeof docDocuments.$inferSelect): boolean {
+  return doc.counterpartyKind === "crm_lead" && (doc.status === "final" || doc.status === "sent");
+}
+
+async function lastResponse(documentId: string) {
+  const [row] = await db
+    .select({ action: docAudit.action, details: docAudit.details, createdAt: docAudit.createdAt })
+    .from(docAudit)
+    .where(and(eq(docAudit.documentId, documentId), inArray(docAudit.action, ["accepted_by_counterparty", "declined_by_counterparty"])))
+    .orderBy(desc(docAudit.createdAt))
+    .limit(1);
+  if (!row) return null;
+  let name: string | null = null;
+  try {
+    name = (JSON.parse(row.details ?? "{}") as { name?: string }).name ?? null;
+  } catch {
+    name = null;
+  }
+  return { decision: row.action === "accepted_by_counterparty" ? "accepted" : "declined", name, at: row.createdAt };
+}
+
+const respondSchema = {
+  parse(body: unknown): { decision: "accept" | "decline"; name: string; email: string | null; reason: string | null } | string {
+    const b = (body ?? {}) as Record<string, unknown>;
+    const decision = b.decision === "accept" || b.decision === "decline" ? b.decision : null;
+    const name = typeof b.name === "string" ? b.name.trim() : "";
+    const email = typeof b.email === "string" && b.email.trim() ? b.email.trim().slice(0, 255) : null;
+    const reason = typeof b.reason === "string" && b.reason.trim() ? b.reason.trim().slice(0, 500) : null;
+    if (!decision) return "Alege dacă accepți sau refuzi.";
+    if (name.length < 3 || name.length > 200) return "Scrie-ți numele complet — el ține loc de semnătură.";
+    if (decision === "decline" && !reason) return "Spune-ne pe scurt de ce — ne ajută să revenim cu o variantă mai bună.";
+    return { decision, name, email, reason };
+  },
+};
+
+docPublicRoutes.post("/:token/respond", async (c) => {
+  const token = c.req.param("token");
+  if (!/^[0-9a-f-]{36}$/i.test(token)) return c.json({ error: "not_found" }, 404);
+
+  const [link] = await db
+    .select()
+    .from(docShareLinks)
+    .where(and(eq(docShareLinks.token, token), isNull(docShareLinks.revokedAt)));
+  if (!link || (link.expiresAt && link.expiresAt.getTime() < Date.now())) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  const [doc] = await db.select().from(docDocuments).where(eq(docDocuments.id, link.documentId));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!canRespond(doc)) {
+    return c.json({ error: "cannot_respond", status: doc.status, message: "Acest document nu mai așteaptă un răspuns." }, 409);
+  }
+
+  const parsed = respondSchema.parse(await c.req.json().catch(() => null));
+  if (typeof parsed === "string") return c.json({ error: "invalid", message: parsed }, 400);
+
+  const status = parsed.decision === "accept" ? "signed" : "rejected";
+  // Condiția pe stare în UPDATE: două clicuri simultane nu pot scrie două răspunsuri.
+  const [updated] = await db
+    .update(docDocuments)
+    .set({ status, outcomeAt: new Date(), outcomeReason: parsed.reason, updatedAt: new Date() })
+    .where(and(eq(docDocuments.id, doc.id), inArray(docDocuments.status, ["final", "sent"])))
+    .returning();
+  if (!updated) return c.json({ error: "cannot_respond", message: "Acest document are deja un răspuns." }, 409);
+
+  await db.insert(docAudit).values({
+    tenantId: doc.tenantId,
+    documentId: doc.id,
+    action: parsed.decision === "accept" ? "accepted_by_counterparty" : "declined_by_counterparty",
+    actorUserId: null,
+    details: JSON.stringify({
+      name: parsed.name,
+      email: parsed.email,
+      reason: parsed.reason,
+      ip: clientIp(c),
+      userAgent: (c.req.header("user-agent") ?? "").slice(0, 300),
+      // Amprenta textului acceptat: dovada că s-a acceptat EXACT acest conținut.
+      bodyHash: doc.bodyHash,
+      at: new Date().toISOString(),
+    }),
+  });
+
+  // Leadul: istoric + mutare (contractul semnat → câștigat), în numele celui care a emis actul.
+  await recordLeadDocumentEvent({
+    doc,
+    event: status,
+    userId: doc.createdByUserId,
+    detail: parsed.decision === "decline" ? parsed.reason : null,
+  });
+
+  // Cine a emis actul și responsabilul leadului află pe loc.
+  const recipients = new Set<string>();
+  if (doc.createdByUserId) recipients.add(doc.createdByUserId);
+  if (doc.counterpartyId) {
+    const [lead] = await db.select({ assignedTo: leads.assignedTo }).from(leads).where(eq(leads.id, doc.counterpartyId));
+    if (lead?.assignedTo) recipients.add(lead.assignedTo);
+  }
+  for (const userId of recipients) {
+    await createNotification({
+      tenantId: doc.tenantId,
+      userId,
+      type: parsed.decision === "accept" ? "crm_document_accepted" : "crm_document_declined",
+      title:
+        parsed.decision === "accept"
+          ? `${doc.counterpartyName ?? "Clientul"} a acceptat ${doc.docNumber ?? doc.title}`
+          : `${doc.counterpartyName ?? "Clientul"} a refuzat ${doc.docNumber ?? doc.title}`,
+      body: parsed.decision === "accept" ? `Acceptat online de ${parsed.name}.` : `${parsed.name}: ${parsed.reason}`,
+      link: doc.counterpartyId ? `/business/crm/pipeline?lead=${doc.counterpartyId}` : `/business/crm/documente`,
+      metadata: { documentId: doc.id },
+    });
+  }
+
+  return c.json({ status, response: await lastResponse(doc.id) });
 });

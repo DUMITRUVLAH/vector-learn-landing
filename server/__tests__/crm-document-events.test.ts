@@ -14,7 +14,7 @@ import { tenants, users, leads, leadInteractions, inAppNotifications } from "../
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmPipelines } from "../db/schema/crmPipelines";
 import { crmProducts } from "../db/schema/crmProducts";
-import { docDocuments, docDocumentLines } from "../db/schema/docs";
+import { docDocuments, docDocumentLines, docAudit } from "../db/schema/docs";
 import { targetStageFor } from "../lib/crm/documentEvents";
 
 let pglite: PGlite;
@@ -152,7 +152,8 @@ describe("CRM-D05 — pe lead, prin rutele reale", () => {
     const lead = await leadAt("new");
     await finalDoc(lead.id, "oferta_comerciala");
     const rows = await history(lead.id);
-    expect(rows.some((r) => r.type === "system" && /creat ca ciornă/.test(r.body ?? ""))).toBe(true);
+    // „Oferta … a fost creatĂ" — acordul cu genul actului, nu „creat" pentru orice.
+    expect(rows.some((r) => r.type === "system" && /^Oferta .* a fost creată ca ciornă\.$/.test(r.body ?? ""))).toBe(true);
   });
 
   it("[blocant] contractul semnat mută leadul în „câștigat”, cu rândul de etapă pe care îl numără rapoartele", async () => {
@@ -174,7 +175,7 @@ describe("CRM-D05 — pe lead, prin rutele reale", () => {
     await call("POST", `/api/docs/documents/${id}/outcome`, { status: "rejected", reason: "Preț peste buget" });
     const [fresh] = await testDb.select().from(leads).where(eq(leads.id, lead.id));
     expect(fresh.stage).toBe("oferta");
-    expect((await history(lead.id)).some((r) => /refuzat: Preț peste buget/.test(r.body ?? ""))).toBe(true);
+    expect((await history(lead.id)).some((r) => /refuzată: Preț peste buget/.test(r.body ?? ""))).toBe(true);
   });
 
   it("[blocant] clientul deschide linkul → istoric + notificare la responsabil, o singură dată", async () => {
@@ -191,5 +192,72 @@ describe("CRM-D05 — pe lead, prin rutele reale", () => {
     // Vizualizarea nu mută leadul: clientul n-a răspuns încă.
     const [fresh] = await testDb.select().from(leads).where(eq(leads.id, lead.id));
     expect(fresh.stage).toBe("oferta");
+  });
+});
+
+describe("CRM-D06 — clientul răspunde de pe link", () => {
+  async function linkFor(id: string) {
+    const share = await call("POST", `/api/docs/${id}/share`);
+    return share.body.token as string;
+  }
+  const respond = (token: string, body: unknown) => call("POST", `/api/public/doc/${token}/respond`, body);
+
+  it("[blocant] pagina publică spune că se poate răspunde doar la un act CRM trimis", async () => {
+    const lead = await leadAt("oferta");
+    const token = await linkFor(await finalDoc(lead.id, "oferta_comerciala"));
+    const view = (await (await app.request(`/api/public/doc/${token}`)).json()) as Record<string, unknown>;
+    expect(view.canRespond).toBe(true);
+    expect(view.response).toBeNull();
+  });
+
+  it("[blocant] acceptarea semnează actul, păstrează dovada și câștigă leadul pentru un contract", async () => {
+    const lead = await leadAt("negociere");
+    const id = await finalDoc(lead.id, "contract_servicii");
+    const token = await linkFor(id);
+    const res = await respond(token, { decision: "accept", name: "Tatiana Frunze", email: "t@medlife.md" });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("signed");
+
+    const [doc] = await testDb.select().from(docDocuments).where(eq(docDocuments.id, id));
+    expect(doc.status).toBe("signed");
+    const [evidence] = await testDb
+      .select()
+      .from(docAudit)
+      .where(and(eq(docAudit.documentId, id), eq(docAudit.action, "accepted_by_counterparty")));
+    const details = JSON.parse(evidence.details ?? "{}");
+    expect(details).toMatchObject({ name: "Tatiana Frunze", email: "t@medlife.md" });
+    expect(details.bodyHash).toBe(doc.bodyHash);
+
+    const [fresh] = await testDb.select().from(leads).where(eq(leads.id, lead.id));
+    expect(fresh.stage).toBe("castigat");
+    // Responsabilul leadului (Bogdan) află pe loc.
+    const notes = await testDb.select().from(inAppNotifications).where(eq(inAppNotifications.recipientUserId, bogdan));
+    expect(notes.some((n) => JSON.stringify(n).includes("acceptat"))).toBe(true);
+  });
+
+  it("[blocant] un act are un singur răspuns — al doilea clic primește 409", async () => {
+    const lead = await leadAt("oferta");
+    const token = await linkFor(await finalDoc(lead.id, "oferta_comerciala"));
+    expect((await respond(token, { decision: "accept", name: "Ion Popescu" })).status).toBe(200);
+    expect((await respond(token, { decision: "decline", name: "Ion Popescu", reason: "m-am răzgândit" })).status).toBe(409);
+  });
+
+  it("[blocant] refuzul cere motiv și numele; ajunge în istoricul leadului", async () => {
+    const lead = await leadAt("oferta");
+    const token = await linkFor(await finalDoc(lead.id, "oferta_comerciala"));
+    const noReason = await respond(token, { decision: "decline", name: "Ion Popescu" });
+    expect(noReason.status).toBe(400);
+    expect(String(noReason.body.message)).toMatch(/de ce/);
+    expect((await respond(token, { decision: "accept", name: "Io" })).status).toBe(400);
+    expect((await respond(token, { decision: "decline", name: "Ion Popescu", reason: "Buget tăiat" })).status).toBe(200);
+    expect((await history(lead.id)).some((r) => /refuzată: Buget tăiat/.test(r.body ?? ""))).toBe(true);
+  });
+
+  it("[blocant] un link revocat nu primește răspunsuri", async () => {
+    const lead = await leadAt("oferta");
+    const id = await finalDoc(lead.id, "oferta_comerciala");
+    const token = await linkFor(id);
+    await call("DELETE", `/api/docs/${id}/share`);
+    expect((await respond(token, { decision: "accept", name: "Ion Popescu" })).status).toBe(404);
   });
 });
