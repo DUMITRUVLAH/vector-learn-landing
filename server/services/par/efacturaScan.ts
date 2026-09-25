@@ -22,6 +22,8 @@ import { db } from "../../db/client";
 import { parRequests, parPayments, parVendors, parPayers, parAttachments } from "../../db/schema/par";
 import { parEinvoices } from "../../db/schema/parEinvoices";
 import { finSfsSettings } from "../../db/schema/finEinvoices";
+import { loadAttachmentBytes } from "../../lib/par/attachmentStore";
+import { extractPdfText } from "../../lib/ai/pdfText";
 import { loadSfsConfig } from "../../lib/fin/sfsConfig";
 import { EfacturaMdClient, EFACTURA_MD_ACTOR } from "../../lib/efacturaMoldova";
 import {
@@ -31,6 +33,8 @@ import {
   invoiceKey,
   normalizeFiscalId,
   sameFiscalId,
+  sameCompanyName,
+  detectFiscalInvoice,
   efacturaRefsFromText,
   DEFAULT_DAYS_BEFORE_PAYMENT,
   type SfsInvoiceDetail,
@@ -78,6 +82,7 @@ interface CandidateRow {
   purpose: string;
   payeeType: string | null;
   payeeIdnp: string | null;
+  payeeName: string | null;
   vendorId: string | null;
   payerId: string | null;
   paidAt: Date | null;
@@ -100,6 +105,7 @@ async function loadCandidates(tenantId: string, parIds?: string[]): Promise<Cand
       purpose: parRequests.purpose,
       payeeType: parRequests.payeeType,
       payeeIdnp: parRequests.payeeIdnp,
+      payeeName: parRequests.payeeName,
       vendorId: parRequests.vendorId,
       payerId: parRequests.payerId,
       paidAt: parRequests.paidAt,
@@ -235,6 +241,14 @@ const SCAN_ARCHIVE_WINDOWS = 4;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Aceleași stări ca în matchInvoiceForPar: ciornă, refuzată, anulată nu dovedesc nimic. */
 const DEAD_STATUSES = new Set([0, 2, 5]);
+
+/** Câte PDF-uri atașate citim într-o scanare și cât de mari pot fi. */
+const PDF_READ_MAX = 40;
+const PDF_READ_MAX_BYTES = 8 * 1024 * 1024;
+
+function idnoWarning(sfsIdno: string | null, requestIdno: string | null): string {
+  return ` · ATENȚIE: în SFS furnizorul are codul fiscal ${sfsIdno ?? "?"}, în cerere e ${requestIdno ?? "?"} — corectează prestatorul.`;
+}
 
 function fmtDay(d: Date): string {
   return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Chisinau" });
@@ -385,6 +399,7 @@ export async function scanEfacturasForTenant(
 
   const now = new Date();
   let found = 0;
+  let receivedOutside = 0;
 
   // Ordine deterministă: cererile plătite cel mai devreme își aleg factura primele.
   const ordered = [...tracked].sort((a, b) => {
@@ -402,7 +417,15 @@ export async function scanEfacturasForTenant(
   // factura vine des ÎNAINTEA plății, uneori cu luni (audit: emisă 23.04, plătită 15.09) — în
   // afara oricărei ferestre rezonabile de potrivire.
   const attachments = await db
-    .select({ parId: parAttachments.parId, fileName: parAttachments.fileName, analysis: parAttachments.analysis })
+    .select({
+      parId: parAttachments.parId,
+      fileName: parAttachments.fileName,
+      analysis: parAttachments.analysis,
+      storagePath: parAttachments.storagePath,
+      fileUrl: parAttachments.fileUrl,
+      mimeType: parAttachments.mimeType,
+      sizeBytes: parAttachments.sizeBytes,
+    })
     .from(parAttachments)
     .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, ordered.map((t) => t.parId))));
   // …și descrierea cererii: PAR-0008 scrie „conform facturii cu nr. EBK000758854" fără s-o atașeze.
@@ -418,6 +441,27 @@ export async function scanEfacturasForTenant(
   };
   for (const a of attachments) addRefs(a.parId, [...efacturaRefsFromText(a.fileName), ...efacturaRefsFromText(a.analysis)]);
   for (const t of texts) addRefs(t.parId, [...efacturaRefsFromText(t.endUse), ...efacturaRefsFromText(t.note)]);
+
+  // Textul PDF-urilor atașate: seria e-Facturii tipărită pe document (când numele fișierului nu o
+  // poartă) și facturile fiscale emise în afara SFS (Moldcell „MM", Orange „AAX"). Doar PDF-uri cu
+  // strat de text, cu plafon — scanarea nu are voie să devină un OCR pe tot dosarul.
+  const fiscalByPar = new Map<string, { seria: string; number: string; fileName: string }>();
+  let pdfBudget = PDF_READ_MAX;
+  for (const a of attachments) {
+    if (pdfBudget <= 0) break;
+    const isPdf = (a.mimeType ?? "").includes("pdf") || /\.pdf$/i.test(a.fileName);
+    if (!isPdf || (a.sizeBytes ?? 0) > PDF_READ_MAX_BYTES) continue;
+    pdfBudget--;
+    let text = "";
+    try {
+      text = await extractPdfText((await loadAttachmentBytes(a)).bytes);
+    } catch {
+      continue; // un act care nu se poate citi nu schimbă nimic — rămâne ce știam
+    }
+    addRefs(a.parId, efacturaRefsFromText(text));
+    const fiscal = detectFiscalInvoice(text);
+    if (fiscal && !fiscalByPar.has(a.parId)) fiscalByPar.set(a.parId, { ...fiscal, fileName: a.fileName });
+  }
   const byKey = new Map<string, SfsInvoiceSummary>(invoices.map((inv) => [invoiceKey(inv), inv]));
   const unknownRefs = [...refsByPar.values()].flat().filter((r) => !byKey.has(invoiceKey(r)));
   let refNote: string | null = null;
@@ -450,9 +494,9 @@ export async function scanEfacturasForTenant(
         notes.push(`Factura ${label} indicată în cerere e emisă pe alt cumpărător (${inv.buyerIdno}).`);
         continue;
       }
-      if (!sameFiscalId(inv.supplierIdno, row.supplierIdno)) {
-        // Codul fiscal din cerere e greșit (ATIC: Deea House 1014600000674 vs 1014600006741 în SFS)
-        // sau actul e al altui furnizor. Nu confirmăm pe ghicite — spunem exact ce diferă.
+      const idnoDiffers = !sameFiscalId(inv.supplierIdno, row.supplierIdno);
+      if (idnoDiffers && !sameCompanyName(inv.supplierName, par?.payeeName)) {
+        // Actul e al altui furnizor. Nu confirmăm pe ghicite — spunem exact ce diferă.
         notes.push(
           `Factura ${label} indicată în cerere e în SFS, dar e emisă de ${inv.supplierIdno ?? "?"}, nu de ${row.supplierIdno ?? "?"} (codul fiscal din cerere) — verifică prestatorul.`
         );
@@ -478,7 +522,7 @@ export async function scanEfacturasForTenant(
           lastScanSource: "sfs",
           lastScanMessage: `Factura indicată în cerere, confirmată în SFS: ${inv.seria} ${inv.number} · ${inv.invoiceStatusLabel}${
             inv.invoiceDate ? ` · emisă ${fmtDay(inv.invoiceDate)}` : ""
-          }`,
+          }${idnoDiffers ? idnoWarning(inv.supplierIdno, row.supplierIdno) : ""}`,
           updatedAt: now,
         })
         .where(eq(parEinvoices.id, row.id));
@@ -497,16 +541,32 @@ export async function scanEfacturasForTenant(
       payment?.actualAmountCents ??
       (par.currency === "MDL" ? par.totalEstimatedCents : par.totalMdlCents ?? par.totalEstimatedCents);
 
-    const match = matchInvoiceForPar(
-      {
-        supplierIdno: row.supplierIdno,
-        buyerIdno: buyerFor(par),
-        paidAt: payment?.paymentDate ?? par.paidAt ?? null,
-        amountCents,
-      },
-      invoices,
-      { usedKeys, now }
-    );
+    const target = {
+      supplierIdno: row.supplierIdno,
+      buyerIdno: buyerFor(par),
+      paidAt: payment?.paymentDate ?? par.paidAt ?? null,
+      amountCents,
+    };
+    let match = matchInvoiceForPar(target, invoices, { usedKeys, now });
+    let idnoNote = "";
+    if (!match) {
+      // Codul fiscal din cerere poate fi greșit (Deea House: 1014600000674 în registru, 1014600006741
+      // în SFS). Căutăm aceeași firmă după DENUMIRE, dar acceptăm doar cu SUMA identică — denumirea
+      // singură nu e destulă dovadă.
+      const altIdnos = new Set(
+        invoices
+          .filter((inv) => sameCompanyName(inv.supplierName, par.payeeName) && !sameFiscalId(inv.supplierIdno, row.supplierIdno))
+          .map((inv) => inv.supplierIdno!)
+      );
+      for (const alt of altIdnos) {
+        const byName = matchInvoiceForPar({ ...target, supplierIdno: alt }, invoices, { usedKeys, now });
+        if (byName?.amountMatches) {
+          match = byName;
+          idnoNote = idnoWarning(alt, row.supplierIdno);
+          break;
+        }
+      }
+    }
 
     if (match) {
       usedKeys.add(invoiceKey(match.invoice));
@@ -522,7 +582,24 @@ export async function scanEfacturasForTenant(
           invoiceTotalCents: match.invoice.totalCents,
           lastScanAt: now,
           lastScanSource: "sfs",
-          lastScanMessage: `Găsită în SFS: ${match.invoice.seria} ${match.invoice.number} · ${match.note}`,
+          lastScanMessage: `Găsită în SFS: ${match.invoice.seria} ${match.invoice.number} · ${match.note}${idnoNote}`,
+          updatedAt: now,
+        })
+        .where(eq(parEinvoices.id, row.id));
+    } else if (fiscalByPar.has(row.parId)) {
+      // Nu e în SFS, dar la cerere e atașată o factură fiscală emisă prin sistemul propriu al
+      // furnizorului. Documentul fiscal există — „Lipsește" ar fi fals, iar un reminder, nedrept.
+      const fiscal = fiscalByPar.get(row.parId)!;
+      receivedOutside++;
+      const note = `Factură fiscală atașată, emisă în afara SFS: seria ${fiscal.seria} nr. ${fiscal.number} (${fiscal.fileName}).`;
+      await db
+        .update(parEinvoices)
+        .set({
+          status: "received_manual",
+          markedNote: note,
+          lastScanAt: now,
+          lastScanSource: "attachment",
+          lastScanMessage: note,
           updatedAt: now,
         })
         .where(eq(parEinvoices.id, row.id));
@@ -543,8 +620,10 @@ export async function scanEfacturasForTenant(
     }
   }
 
-  const missing = ordered.length - found;
-  const base = `Am comparat cu ${invoices.length} facturi relevante din SFS; ${found} potrivire/potriviri, ${missing} cereri rămân fără factură.`;
+  const missing = ordered.length - found - receivedOutside;
+  const base = `Am comparat cu ${invoices.length} facturi relevante din SFS; ${found} potrivire/potriviri${
+    receivedOutside ? `, ${receivedOutside} cu factură fiscală atașată emisă în afara SFS` : ""
+  }, ${missing} cereri rămân fără factură.`;
   return {
     available: true,
     source: "sfs",

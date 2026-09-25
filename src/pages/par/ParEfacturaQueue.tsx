@@ -448,8 +448,17 @@ export default function ParEfacturaQueuePage() {
                             unverified ? "text-sm text-muted-foreground" : missing ? "text-sm text-warning" : "text-sm text-success"
                           }
                         >
-                          {unverified ? "Neverificată" : state ? PAR_EFACTURA_STATUS_LABELS[state.status] : "—"}
+                          {unverified
+                            ? "Neverificată"
+                            : state?.status === "received_manual" && state.lastScanSource === "attachment"
+                              ? "Factură fiscală atașată"
+                              : state
+                                ? PAR_EFACTURA_STATUS_LABELS[state.status]
+                                : "—"}
                         </span>
+                        {state?.status === "received_manual" && state.markedNote && (
+                          <p className="max-w-[18rem] text-xs text-muted-foreground">{state.markedNote}</p>
+                        )}
                         {missing && state?.lastScanAt && state.lastScanMessage && (
                           <p className="max-w-[18rem] text-xs text-muted-foreground">{state.lastScanMessage}</p>
                         )}

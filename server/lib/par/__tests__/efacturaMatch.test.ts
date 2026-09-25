@@ -313,3 +313,31 @@ describe("expectsEfactura — plata către propria organizație", () => {
     expect(v.reason).toMatch(/organizației plătitoare/);
   });
 });
+
+describe("dovezi în afara SFS — cazurile ATIC", () => {
+  it("recunoaște facturile fiscale ale operatorilor, cu seria lor proprie", async () => {
+    const { detectFiscalInvoice } = await import("../efacturaMatch");
+    expect(detectFiscalInvoice("Factură fiscală Seria, Nr. MM 8705846 1 --2,729.18 Servicii comunicatii electronice")).toEqual({
+      seria: "MM",
+      number: "8705846",
+    });
+    expect(
+      detectFiscalInvoice("Factura fiscalÅ Seria AAX NumÅrul facturii 8298458 NumÅrul de referinĊÅ 150076445")
+    ).toEqual({ seria: "AAX", number: "8298458" });
+  });
+
+  it("nu ia un cont de plată drept factură fiscală", async () => {
+    const { detectFiscalInvoice } = await import("../efacturaMatch");
+    expect(detectFiscalInvoice("CONT DE PLATĂ nr. СЧЕТ-ФАКТУРА 00005996150 din 15 septembrie 2026")).toBeNull();
+    expect(detectFiscalInvoice("Factura Orange Numărul facturii 150076445")).toBeNull();
+    expect(detectFiscalInvoice("")).toBeNull();
+  });
+
+  it("compară denumirile fără formă juridică, ghilimele și diacritice", async () => {
+    const { sameCompanyName } = await import("../efacturaMatch");
+    expect(sameCompanyName('"DEEA HOUSE" S.R.L.', "Deea House SRL")).toBe(true);
+    expect(sameCompanyName("I.M. MOLDCELL S.A.", "Moldcell SA IM")).toBe(true);
+    expect(sameCompanyName("DEEA HOUSE SRL", "NEWS MAKER SRL")).toBe(false);
+    expect(sameCompanyName("S.R.L.", "SRL")).toBe(false);
+  });
+});

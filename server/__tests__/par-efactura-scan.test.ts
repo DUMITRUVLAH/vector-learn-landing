@@ -123,6 +123,30 @@ function brokenClient(): EfacturaMdClient {
   } as unknown as EfacturaMdClient;
 }
 
+
+/** Un PDF minim, dar real (cu strat de text), ca extragerea din scanare să ruleze pe bune. */
+function textPdfDataUrl(line: string): string {
+  const stream = `BT /F1 12 Tf 40 700 Td (${line}) Tj ET`;
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objs.forEach((o, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) pdf += `${String(off).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return `data:application/pdf;base64,${Buffer.from(pdf, "latin1").toString("base64")}`;
+}
+
 async function applyMigrations(pg: PGlite) {
   const drizzleDir = path.resolve(__dirname, "../../drizzle");
   const journal = JSON.parse(
@@ -572,6 +596,73 @@ describe("facturile din ultimul an — cazul ATIC (2026-09-25)", () => {
     const second = rows.find((r) => r.parId === aDoua)!;
     expect(second.status).toBe("expected");
     expect(second.lastScanMessage).toContain("deja legată de altă cerere");
+  });
+
+  it("găsește factura după DENUMIRE când codul fiscal din cerere e greșit, dar doar cu suma identică", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    // Deea House, PAR-0046: registrul are 1014600000674, SFS are 1014600006741; EBM000000354 = 3.795,00.
+    const exact = await paidPar({ requestNo: "PAR-DH2", idno: "1014600000674", amountCents: 379500, paidAt: "2026-09-17" });
+    const altaSuma = await paidPar({ requestNo: "PAR-DH3", idno: "1014600000674", amountCents: 50000, paidAt: "2026-09-17" });
+    await testDb.update(parRequests).set({ payeeName: "Deea House SRL" }).where(eq(parRequests.tenantId, tenantId));
+    const titled = (xml: string) => xml.replace('<Supplier IDNO="1014600006741"', '<Supplier IDNO="1014600006741" Title="&quot;DEEA HOUSE&quot; S.R.L."');
+
+    await scanEfacturasForTenant(
+      tenantId,
+      undefined,
+      stubClient([
+        {
+          seria: "EBM",
+          number: "000000354",
+          invoiceStatus: 8,
+          bucket: "signed",
+          xml: titled(invoiceXml({ supplier: "1014600006741", buyer: BUYER, date: "2026-09-08T00:00:00.000Z", total: "3795.00" })),
+        },
+      ])
+    );
+
+    const rows = await testDb.select().from(parEinvoices).where(eq(parEinvoices.tenantId, tenantId));
+    const ok = rows.find((r) => r.parId === exact)!;
+    expect(ok.status).toBe("found");
+    expect(ok.sfsNumber).toBe("000000354");
+    expect(ok.lastScanMessage).toContain("1014600006741");
+    expect(ok.lastScanMessage).toContain("corectează prestatorul");
+    expect(rows.find((r) => r.parId === altaSuma)!.status).toBe("expected");
+  });
+
+  it("factura fiscală atașată, emisă în afara SFS (Moldcell „MM”), nu mai apare „Lipsește”", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    const moldcell = await paidPar({ requestNo: "PAR-MC", idno: "1002600046027", amountCents: 9100, paidAt: "2026-09-18" });
+    const contDePlata = await paidPar({ requestNo: "PAR-BTS", idno: "1008600061565", amountCents: 430075, paidAt: "2026-09-17" });
+    await testDb.insert(parAttachments).values([
+      {
+        tenantId,
+        parId: moldcell,
+        fileName: "20260810066000349271006600034927_202608_MM8705846.signed.pdf",
+        fileUrl: textPdfDataUrl("Factura fiscala Seria, Nr. MM 8705846 Servicii comunicatii electronice 2729.18"),
+        mimeType: "application/pdf",
+        kind: "invoice",
+      },
+      {
+        tenantId,
+        parId: contDePlata,
+        fileName: "cont.pdf",
+        fileUrl: textPdfDataUrl("CONT DE PLATA nr. 00005996150 din 15 septembrie 2026 Factura fiscala va urma"),
+        mimeType: "application/pdf",
+        kind: "invoice",
+      },
+    ]);
+
+    const result = await scanEfacturasForTenant(tenantId, undefined, stubClient([]));
+
+    const rows = await testDb.select().from(parEinvoices).where(eq(parEinvoices.tenantId, tenantId));
+    const mc = rows.find((r) => r.parId === moldcell)!;
+    expect(mc.status).toBe("received_manual");
+    expect(mc.lastScanSource).toBe("attachment");
+    expect(mc.markedNote).toContain("MM");
+    expect(mc.markedNote).toContain("8705846");
+    // Un cont de plată nu e factură fiscală: rămâne de urmărit.
+    expect(rows.find((r) => r.parId === contDePlata)!.status).toBe("expected");
+    expect(result.message).toContain("în afara SFS");
   });
 
   it("nu așteaptă e-Factura când beneficiarul e chiar organizația plătitoare", async () => {

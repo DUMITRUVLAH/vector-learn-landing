@@ -525,3 +525,47 @@ export function parseSfsInvoiceDetail(xml: string | null | undefined): SfsInvoic
     signed: /<(?:[\w]+:)?Signatures>/i.test(xml),
   };
 }
+
+// ─── Dovezi în afara SFS-ului ─────────────────────────────────────────────────
+
+/**
+ * Cheia de comparație a unei denumiri de firmă: fără diacritice, ghilimele, punctuație și forma
+ * juridică. `"DEEA HOUSE" S.R.L.` și `Deea House SRL` dau amândouă `DEEA HOUSE`.
+ */
+export function companyNameKey(name: string | null | undefined): string {
+  if (!name) return "";
+  const LEGAL = new Set(["SRL", "SA", "IM", "ICS", "FPC", "SC", "II", "SOCIETATEA", "CU", "RASPUNDERE", "LIMITATA", "INTREPRINDEREA", "MIXTA"]);
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    // „S.R.L." / „S.A." / „I.M." devin „S R L" după punctuație — le lipim înapoi înainte de filtrare.
+    .replace(/\b(S R L|S A|I M|I C S|F P C|S C)\b/g, (m) => m.replace(/ /g, ""))
+    .split(" ")
+    .filter((t) => t && !LEGAL.has(t))
+    .join(" ");
+}
+
+/** Aceeași firmă după denumire (cheie de minim 4 caractere, ca să nu potrivim „SA" cu „SA"). */
+export function sameCompanyName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const ka = companyNameKey(a);
+  return ka.length >= 4 && ka === companyNameKey(b);
+}
+
+/**
+ * O factură fiscală emisă ÎN AFARA SIA „e-Factura", recunoscută din textul PDF-ului atașat.
+ *
+ * Operatorii mari o emit prin sistemul propriu, cu serie proprie: Moldcell „Factură fiscală Seria,
+ * Nr. MM 8705846", Orange „Factura fiscală Seria AAX Numărul facturii 8298458". Nu vor apărea
+ * niciodată în SFS, deci „Lipsește e-Factura" ar fi fals pentru ele. Un cont de plată / proformă
+ * („CONT DE PLATĂ", „СЧЕТ-ФАКТУРА") NU e factură fiscală — plata s-a făcut pe el, factura urmează.
+ */
+export function detectFiscalInvoice(text: string | null | undefined): { seria: string; number: string } | null {
+  if (!text) return null;
+  const flat = text.replace(/\s+/g, " ");
+  if (!/factur\S{0,3}\s+fiscal/i.test(flat)) return null;
+  if (/cont\s+de\s+pl[aă]t|proform|сч[её]т/i.test(flat)) return null;
+  const m = /Seria[\s,.:]*(?:Nr\.?[\s:]*)?([A-Z]{1,4})(?:\s*|\s+Num\S*\s+(?:facturii\s+)?)(\d{5,10})(?!\d)/.exec(flat);
+  return m ? { seria: m[1], number: m[2] } : null;
+}
