@@ -616,3 +616,18 @@ designul arată a AI slop — vrem ceva ca Google Drive". Testare, cercetare și
 | 2 | `CRM-G06` | Fișa leadului ca panou lateral Drive + bara de etape | pending | [roadmap](crm/ROADMAP-GOOGLE.md) |
 | 2 | `CRM-G07` | Trecerea GM3 pe paginile CRM rămase | pending | [roadmap](crm/ROADMAP-GOOGLE.md) |
 | 3 | `CRM-G08` | Data estimată de închidere + prognoză pe luni | pending | [roadmap](crm/ROADMAP-GOOGLE.md) |
+
+## Milestone CRM-D — Actele din CRM (lecții din VectorB2B), adăugat 2026-09-25
+
+Comparația și planul: [crm/DOCUMENTE-VS-VECTORB2B.md](crm/DOCUMENTE-VS-VECTORB2B.md).
+
+| Faza | ID | Titlu | Status |
+|---|---|---|---|
+| 1 | `CRM-D01` | Actul din CRM nu mai dispare la editare; se deschide în CRM; tip, TVA, seria OF- | done ✅ |
+| 1 | `CRM-D02` | Oferta pre-completată din lead; e-mailul clientului propus; retrimitere | done ✅ |
+| 1 | `CRM-D03` | Stil modern pentru actele către clienți + tabelul pozițiilor reparat în PDF + TVA | done ✅ |
+| 2 | `CRM-D04` | Datele firmei tale (IBAN, bancă, administrator) o singură dată | pending |
+| 2 | `CRM-D05` | Actul în viața leadului: etape automate, cronologie, notificare la vizualizare | pending |
+| 2 | `CRM-D06` | Clientul acceptă oferta online | pending |
+| 3 | `CRM-D07` | Șablon din Word-ul tău, cu AI care propune câmpurile | pending |
+| 3 | `CRM-D08` | Export .docx real | pending |

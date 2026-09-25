@@ -5144,6 +5144,107 @@
       "depends_on": [
         "CRM-G02"
       ]
+    },
+    "CRM-D01": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "done",
+      "title": "Actul din CRM nu mai dispare la editare; se deschide în CRM; tip, TVA, seria OF-",
+      "depends_on": [],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-D02": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "done",
+      "title": "Oferta pre-completată din lead; e-mailul clientului propus; retrimitere",
+      "depends_on": [
+        "CRM-D01"
+      ],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-D03": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "done",
+      "title": "Stil modern pentru actele către clienți + tabelul pozițiilor reparat în PDF + TVA",
+      "depends_on": [
+        "CRM-D01"
+      ],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-D04": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Datele firmei tale (IBAN, bancă, administrator) o singură dată",
+      "depends_on": [
+        "CRM-D03"
+      ]
+    },
+    "CRM-D05": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Actul în viața leadului: etape automate, cronologie, notificare la vizualizare",
+      "depends_on": [
+        "CRM-D01"
+      ]
+    },
+    "CRM-D06": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Clientul acceptă oferta online (pagina publică)",
+      "depends_on": [
+        "CRM-D05"
+      ]
+    },
+    "CRM-D07": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Șablon din Word-ul tău, cu AI care propune câmpurile",
+      "depends_on": []
+    },
+    "CRM-D08": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/DOCUMENTE-VS-VECTORB2B.md",
+      "milestone": "CRM-D",
+      "phase": "CRM-D-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Export .docx real",
+      "depends_on": []
     }
   }
 }
