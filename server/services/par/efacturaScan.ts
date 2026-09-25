@@ -405,12 +405,19 @@ export async function scanEfacturasForTenant(
     .select({ parId: parAttachments.parId, fileName: parAttachments.fileName, analysis: parAttachments.analysis })
     .from(parAttachments)
     .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, ordered.map((t) => t.parId))));
+  // …și descrierea cererii: PAR-0008 scrie „conform facturii cu nr. EBK000758854" fără s-o atașeze.
+  const texts = await db
+    .select({ parId: parRequests.id, endUse: parRequests.endUse, note: parRequests.attachmentsNote })
+    .from(parRequests)
+    .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, ordered.map((t) => t.parId))));
   const refsByPar = new Map<string, Array<{ seria: string; number: string }>>();
-  for (const a of attachments) {
-    const refs = [...efacturaRefsFromText(a.fileName), ...efacturaRefsFromText(a.analysis)];
-    if (refs.length === 0) continue;
-    refsByPar.set(a.parId, [...(refsByPar.get(a.parId) ?? []), ...refs]);
-  }
+  const addRefs = (parId: string, refs: Array<{ seria: string; number: string }>) => {
+    if (refs.length === 0) return;
+    const merged = new Map([...(refsByPar.get(parId) ?? []), ...refs].map((r) => [invoiceKey(r), r]));
+    refsByPar.set(parId, [...merged.values()]);
+  };
+  for (const a of attachments) addRefs(a.parId, [...efacturaRefsFromText(a.fileName), ...efacturaRefsFromText(a.analysis)]);
+  for (const t of texts) addRefs(t.parId, [...efacturaRefsFromText(t.endUse), ...efacturaRefsFromText(t.note)]);
   const byKey = new Map<string, SfsInvoiceSummary>(invoices.map((inv) => [invoiceKey(inv), inv]));
   const unknownRefs = [...refsByPar.values()].flat().filter((r) => !byKey.has(invoiceKey(r)));
   let refNote: string | null = null;
@@ -431,28 +438,28 @@ export async function scanEfacturasForTenant(
       const inv = byKey.get(key);
       const label = `${ref.seria} ${ref.number}`;
       if (!inv) {
-        notes.push(`Factura atașată ${label} nu a fost găsită în SFS.`);
+        notes.push(`Factura ${label} indicată în cerere nu a fost găsită în SFS.`);
         continue;
       }
       if (DEAD_STATUSES.has(inv.invoiceStatus)) {
-        notes.push(`Factura atașată ${label} e în SFS, dar are starea „${inv.invoiceStatusLabel}".`);
+        notes.push(`Factura ${label} indicată în cerere e în SFS, dar are starea „${inv.invoiceStatusLabel}".`);
         continue;
       }
       const buyer = buyerFor(par);
       if (buyer && inv.buyerIdno && !sameFiscalId(inv.buyerIdno, buyer)) {
-        notes.push(`Factura atașată ${label} e emisă pe alt cumpărător (${inv.buyerIdno}).`);
+        notes.push(`Factura ${label} indicată în cerere e emisă pe alt cumpărător (${inv.buyerIdno}).`);
         continue;
       }
       if (!sameFiscalId(inv.supplierIdno, row.supplierIdno)) {
         // Codul fiscal din cerere e greșit (ATIC: Deea House 1014600000674 vs 1014600006741 în SFS)
         // sau actul e al altui furnizor. Nu confirmăm pe ghicite — spunem exact ce diferă.
         notes.push(
-          `Factura atașată ${label} e în SFS, dar e emisă de ${inv.supplierIdno ?? "?"}, nu de ${row.supplierIdno ?? "?"} (codul fiscal din cerere) — verifică prestatorul.`
+          `Factura ${label} indicată în cerere e în SFS, dar e emisă de ${inv.supplierIdno ?? "?"}, nu de ${row.supplierIdno ?? "?"} (codul fiscal din cerere) — verifică prestatorul.`
         );
         continue;
       }
       if (usedKeys.has(key)) {
-        notes.push(`Factura atașată ${label} e deja legată de altă cerere plătită.`);
+        notes.push(`Factura ${label} indicată în cerere e deja legată de altă cerere plătită.`);
         continue;
       }
       usedKeys.add(key);
@@ -469,7 +476,7 @@ export async function scanEfacturasForTenant(
           invoiceTotalCents: inv.totalCents,
           lastScanAt: now,
           lastScanSource: "sfs",
-          lastScanMessage: `Factura atașată la cerere, confirmată în SFS: ${inv.seria} ${inv.number} · ${inv.invoiceStatusLabel}${
+          lastScanMessage: `Factura indicată în cerere, confirmată în SFS: ${inv.seria} ${inv.number} · ${inv.invoiceStatusLabel}${
             inv.invoiceDate ? ` · emisă ${fmtDay(inv.invoiceDate)}` : ""
           }`,
           updatedAt: now,

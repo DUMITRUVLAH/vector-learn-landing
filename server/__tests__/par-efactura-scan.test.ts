@@ -506,7 +506,7 @@ describe("facturile din ultimul an — cazul ATIC (2026-09-25)", () => {
     const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
     expect(row.status).toBe("found");
     expect(row.sfsSeria).toBe("EBH");
-    expect(row.lastScanMessage).toContain("atașată");
+    expect(row.lastScanMessage).toContain("indicată în cerere");
   });
 
   it("nu confirmă o factură atașată emisă de alt cod fiscal, dar spune exact ce diferă", async () => {
@@ -539,6 +539,39 @@ describe("facturile din ultimul an — cazul ATIC (2026-09-25)", () => {
     expect(row.status).toBe("expected");
     expect(row.lastScanMessage).toContain("1014600006741");
     expect(row.lastScanMessage).toContain("1014600000674");
+  });
+
+  it("citește factura și din descrierea cererii; aceeași factură nu acoperă două plăți", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    // NEWS MAKER: PAR-0003 are PDF-ul atașat, PAR-0008 scrie numărul doar în descriere — aceeași
+    // factură plătită de două ori. A doua trebuie să rămână deschisă, cu motivul spus.
+    const prima = await paidPar({ requestNo: "PAR-NM1", idno: SUPPLIER, amountCents: 150851, paidAt: "2026-09-02" });
+    const aDoua = await paidPar({ requestNo: "PAR-NM2", idno: SUPPLIER, amountCents: 125700, paidAt: "2026-09-03" });
+    await testDb.insert(parAttachments).values({ tenantId, parId: prima, fileName: "EBK000758854.pdf", kind: "invoice" });
+    await testDb
+      .update(parRequests)
+      .set({ endUse: "Servicii conform facturii cu nr. EBK000758854, emise pe 31.07.2026" })
+      .where(eq(parRequests.id, aDoua));
+
+    await scanEfacturasForTenant(
+      tenantId,
+      undefined,
+      stubClient([
+        {
+          seria: "EBK",
+          number: "000758854",
+          invoiceStatus: 8,
+          bucket: "hidden",
+          xml: invoiceXml({ supplier: SUPPLIER, buyer: BUYER, date: "2026-07-31T14:16:29.000Z", total: "1508.51" }),
+        },
+      ])
+    );
+
+    const rows = await testDb.select().from(parEinvoices).where(eq(parEinvoices.tenantId, tenantId));
+    expect(rows.find((r) => r.parId === prima)!.status).toBe("found");
+    const second = rows.find((r) => r.parId === aDoua)!;
+    expect(second.status).toBe("expected");
+    expect(second.lastScanMessage).toContain("deja legată de altă cerere");
   });
 
   it("nu așteaptă e-Factura când beneficiarul e chiar organizația plătitoare", async () => {
