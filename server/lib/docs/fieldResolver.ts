@@ -81,6 +81,16 @@ export async function resolveDocumentContext(
     if (!ctx["noi.denumire"]) put(ctx, "noi.denumire", org.legalName);
     put(ctx, "noi.idno", org.idno);
     put(ctx, "noi.adresa", org.address);
+    // CRM-D04: rechizitele bancare și semnatarul — până acum n-aveau nicio sursă, deci fiecare
+    // ofertă și fiecare contract ieșea cu „IBAN ______" chiar în blocul furnizorului.
+    put(ctx, "noi.iban", org.iban);
+    put(ctx, "noi.banca", org.bankName);
+    put(ctx, "noi.bic", org.bic);
+    put(ctx, "noi.administrator", org.administratorName);
+    put(ctx, "noi.functie", org.administratorTitle);
+    put(ctx, "noi.telefon", org.phone);
+    put(ctx, "noi.email", org.email);
+    put(ctx, "noi.cod_tva", org.vatNumber);
   }
 
   const payerFilter = input.payerId

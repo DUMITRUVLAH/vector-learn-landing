@@ -292,6 +292,8 @@ const CRM_NAV_GROUPS: NavGroup[] = [
     section: "Administrare",
     prefix: "/business/crm",
     items: [
+      // CRM-D04: rechizitele firmei — o dată, pe toate actele. Vizibil pentru cine face acte.
+      { label: "Datele firmei", href: "/business/crm/firma", icon: Landmark, tone: "sky", crmPermission: "documents.create" },
       { label: "Import", href: "/business/crm/import", icon: Upload, tone: "teal" },
       {
         label: "Repartizare",

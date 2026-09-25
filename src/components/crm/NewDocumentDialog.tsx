@@ -17,6 +17,7 @@ import { listCrmProducts, type CrmProduct } from "@/lib/api/crm";
 import { listDocTemplates, type DocTemplateListItem } from "@/lib/api/docs";
 import { createCrmDocument, CRM_DOC_KIND_LABELS, type CrmDocKind } from "@/lib/api/crmDocuments";
 import { crmDocPath } from "@/lib/docs/paths";
+import { CRM_COMPANY_PROFILE_PATH, getCrmCompanyProfile } from "@/lib/api/crmCompanyProfile";
 
 interface ChosenProduct {
   productId: string;
@@ -127,6 +128,8 @@ export function NewDocumentDialog({
   const [freeLines, setFreeLines] = useState<FreeLine[]>([]);
   const [basedOn, setBasedOn] = useState("");
   const [busy, setBusy] = useState(false);
+  /** CRM-D04: rechizitele firmei care ar ieși goale pe act — spuse ÎNAINTE de a crea actul. */
+  const [companyMissing, setCompanyMissing] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Pozițiile din lead se pun O DATĂ, după ce catalogul e aici (prețul de listă decide dacă
@@ -144,6 +147,10 @@ export function NewDocumentDialog({
         }
       })
       .catch(() => setProducts([]));
+    // O cerere picată nu blochează dialogul: nota e un ajutor, nu o condiție.
+    getCrmCompanyProfile()
+      .then((r) => setCompanyMissing(r.missing))
+      .catch(() => setCompanyMissing([]));
     // Lista cere `/api/docs/templates`, care instalează biblioteca standard la prima deschidere —
     // deci un workspace nou are din prima din ce alege.
     listDocTemplates()
@@ -224,6 +231,15 @@ export function NewDocumentDialog({
     <Dialog open onClose={onClose} title={`Act nou pentru ${leadName}`} size="lg">
       <div className="space-y-4">
         {error && <Alert variant="destructive">{error}</Alert>}
+        {companyMissing.length > 0 && (
+          <Alert variant="warning">
+            Pe act vor ieși goale datele firmei tale: {companyMissing.join(", ")}.{" "}
+            <a href={`#${CRM_COMPANY_PROFILE_PATH}`} className="font-medium underline">
+              Completează-le o dată
+            </a>
+            .
+          </Alert>
+        )}
 
         <div className="space-y-1">
           <Label htmlFor="doc-tip">Tipul actului</Label>

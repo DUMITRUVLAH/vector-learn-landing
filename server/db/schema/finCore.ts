@@ -75,6 +75,15 @@ export const finOrgProfile = pgTable(
     address: text("address"),
     /** URL to company logo (stored externally) */
     logoUrl: text("logo_url"),
+    // CRM-D04: rechizitele de pe acte (noi.iban, noi.banca, noi.administrator…). Scrise o dată,
+    // în CRM › Datele firmei sau în FinDesk — ofertele și contractele nu mai ies cu linii goale.
+    iban: varchar("iban", { length: 34 }),
+    bankName: varchar("bank_name", { length: 200 }),
+    bic: varchar("bic", { length: 11 }),
+    administratorName: varchar("administrator_name", { length: 200 }),
+    administratorTitle: varchar("administrator_title", { length: 100 }),
+    phone: varchar("phone", { length: 40 }),
+    email: varchar("email", { length: 255 }),
     /** Month number (1–12) fiscal year starts */
     fiscalYearStart: integer("fiscal_year_start").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

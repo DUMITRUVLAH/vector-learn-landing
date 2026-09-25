@@ -74,6 +74,7 @@ const CrmCommsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmComms
 const CrmPermissionsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmPermissionsPage").then((m) => ({ default: m.CrmPermissionsPage })));
 const CrmAuditPage = lazyWithTimeout(() => import("./pages/business/crm/CrmAuditPage").then((m) => ({ default: m.CrmAuditPage })));
 const CrmCadencesPage = lazyWithTimeout(() => import("./pages/business/crm/CrmCadencesPage").then((m) => ({ default: m.CrmCadencesPage })));
+const CrmCompanyProfilePage = lazyWithTimeout(() => import("./pages/business/crm/CrmCompanyProfilePage").then((m) => ({ default: m.CrmCompanyProfilePage })));
 const CrmApiPage = lazyWithTimeout(() => import("./pages/business/crm/CrmApiPage").then((m) => ({ default: m.CrmApiPage })));
 // PONTAJ-001: tabelul de pontaj self-service.
 const PontajPage = lazyWithTimeout(() => import("./pages/business/pontaj/PontajPage").then((m) => ({ default: m.PontajPage })));
@@ -354,6 +355,7 @@ function Routes() {
   if (path.startsWith("/business/crm/cadente")) return <BusinessGuardPage><CrmCadencesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/jurnal")) return <BusinessGuardPage><CrmAuditPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/drepturi")) return <BusinessGuardPage><CrmPermissionsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/firma")) return <BusinessGuardPage><CrmCompanyProfilePage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/api")) return <BusinessGuardPage><CrmApiPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm")) return <BusinessGuardPage><CrmHomePage /></BusinessGuardPage>;
   // PONTAJ-001: tabelul de pontaj self-service. Gardul de modul e pe server

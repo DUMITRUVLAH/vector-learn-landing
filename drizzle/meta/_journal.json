@@ -1324,6 +1324,13 @@
       "when": 1789000000012,
       "tag": "0189_par_verificator_solicitant",
       "breakpoints": true
+    },
+    {
+      "idx": 190,
+      "version": "7",
+      "when": 1789000000013,
+      "tag": "0190_crm_datele_firmei",
+      "breakpoints": true
     }
   ]
 }

@@ -42,6 +42,11 @@ export const FIELD_GROUPS: DocFieldGroup[] = [
       { name: "noi.iban", label: "IBAN-ul nostru", sample: "MD24AG000225100013104168" },
       { name: "noi.banca", label: "Banca noastră", sample: "BC Moldova-Agroindbank SA" },
       { name: "noi.administrator", label: "Administratorul nostru", sample: "Irina Oriol" },
+      { name: "noi.functie", label: "Funcția administratorului", sample: "Director general" },
+      { name: "noi.bic", label: "Codul bancar (BIC) al nostru", sample: "AGRNMD2X" },
+      { name: "noi.cod_tva", label: "Codul nostru TVA", sample: "0612345" },
+      { name: "noi.telefon", label: "Telefonul nostru", sample: "+373 22 000 000" },
+      { name: "noi.email", label: "E-mailul nostru", sample: "office@firma.md" },
     ],
   },
   {

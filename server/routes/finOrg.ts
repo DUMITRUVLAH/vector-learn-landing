@@ -40,6 +40,14 @@ const orgPatchSchema = z.object({
   address: z.string().max(500).optional().nullable(),
   logoUrl: z.string().url().optional().nullable(),
   fiscalYearStart: z.number().int().min(1).max(12).optional(),
+  // CRM-D04: aceleași câmpuri ca în CRM › Datele firmei — un singur profil al firmei.
+  iban: z.string().max(34).optional().nullable(),
+  bankName: z.string().max(200).optional().nullable(),
+  bic: z.string().max(11).optional().nullable(),
+  administratorName: z.string().max(200).optional().nullable(),
+  administratorTitle: z.string().max(100).optional().nullable(),
+  phone: z.string().max(40).optional().nullable(),
+  email: z.string().email().max(255).optional().nullable(),
 });
 
 const seriesCreateSchema = z.object({
