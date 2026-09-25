@@ -29,6 +29,11 @@ vi.mock("@/hooks/useBusinessSession", () => ({
   }),
 }));
 
+// Pe /business/crm/* shellul cere drepturile CRM; aici n-au ce testa, deci le dăm pe toate.
+vi.mock("@/hooks/useCrmPermissions", () => ({
+  useCrmPermissions: () => ({ can: () => true, permissions: [], role: "admin", loading: false }),
+}));
+
 vi.mock("@/router/HashRouter", () => ({
   useRouter: () => ({ path: currentPath, navigate }),
   Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode; [k: string]: unknown }) => (
@@ -844,5 +849,53 @@ describe("act nou pornit din fișa furnizorului", () => {
       expect(screen.getByLabelText(/Tipul actului/i)).toHaveValue("contract_servicii")
     );
     expect(screen.getByLabelText(/^Șablon/i)).toHaveValue("tpl-2");
+  });
+});
+
+describe("CRM-D01 — actul unui lead, deschis din CRM", () => {
+  const LEAD_DOC: DocDetail = {
+    ...FINAL_DOC,
+    id: "doc-lead",
+    kind: "oferta_comerciala",
+    status: "draft",
+    docNumber: null,
+    counterpartyKind: "crm_lead",
+    counterpartyId: "lead-1",
+    counterpartyName: "Medlife Clinic SRL",
+    counterpartySnapshot: { idno: "1015600034567", adresa: "bd. Dacia 47" },
+    lines: [{ ...FINAL_DOC.lines[0], description: "Training AI", vatPercent: 20 }],
+  };
+
+  beforeEach(() => {
+    currentPath = "/business/crm/documente/doc-lead";
+    getDocument.mockResolvedValue(LEAD_DOC);
+  });
+
+  it("[blocant] salvarea trimite `crm_lead` (nu vendor) și păstrează TVA-ul poziției", async () => {
+    render(<DocEditorPage />);
+    await userEvent.type(await screen.findByLabelText("Titlul actului"), "x");
+    await userEvent.click(screen.getByRole("button", { name: "Salvează ciorna" }));
+
+    await waitFor(() => expect(updateDocument).toHaveBeenCalled());
+    const payload = updateDocument.mock.calls.at(-1)?.[1] as {
+      counterparty: { kind: string; id: string };
+      lines: { vatPercent?: number }[];
+    };
+    expect(payload.counterparty).toMatchObject({ kind: "crm_lead", id: "lead-1" });
+    expect(payload.lines[0].vatPercent).toBe(20);
+  });
+
+  it("[blocant] tipul arată „Ofertă comercială”, nu primul din listă", async () => {
+    render(<DocEditorPage />);
+    expect(await screen.findByDisplayValue("Ofertă comercială")).toBeInTheDocument();
+  });
+
+  it("[blocant] vorbește despre client, nu despre furnizor, și duce înapoi la lead", async () => {
+    render(<DocEditorPage />);
+    expect(await screen.findByText("Clientul")).toBeInTheDocument();
+    expect(screen.queryByText(/Adu în registru toți beneficiarii/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Caută în registru/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Înapoi la lead/ }));
+    expect(navigate).toHaveBeenCalledWith("/business/crm/pipeline?lead=lead-1");
   });
 });

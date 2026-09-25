@@ -58,7 +58,8 @@ import { parseMoneyRo, formatMoneyRo } from "@/lib/docs/money";
 import { downloadDocumentPdf, ensureStoredPdf, fetchPrintable } from "@/lib/docs/documentPdfClient";
 import { DocPreviewDialog } from "./DocPreviewDialog";
 import { BlanksConfirmDialog } from "./BlanksConfirmDialog";
-import { docPath, docsListPath, documentIdFromPath } from "@/lib/docs/paths";
+import { docPathIn, docsListPath, documentIdFromPath } from "@/lib/docs/paths";
+import { pipelineHref } from "@/lib/crm/pipelineUrl";
 
 /**
  * Cantitatea și prețul se țin ca TEXT cât timp omul tastează.
@@ -71,6 +72,9 @@ interface LineDraft {
   unit: string;
   quantity: string;
   unitPrice: string;
+  /** CRM-D01: cota TVA venită din catalog. Editorul n-o afișa și n-o trimitea înapoi, deci prima
+   *  salvare automată o punea pe 0 — oferta pierdea TVA-ul produsului fără ca cineva s-o atingă. */
+  vatPercent?: number;
 }
 
 const EMPTY_LINE: LineDraft = { description: "", unit: "buc", quantity: "1", unitPrice: "" };
@@ -101,6 +105,8 @@ export function DocEditorPage() {
   // Citirea id-ului stă în `@/lib/docs/paths`, comună cu ruta veche și cu testele: un prefix
   // scris de mână aici s-ar rupe tăcut la următoarea mutare a modulului.
   const docId = useMemo(() => documentIdFromPath(path), [path]);
+  /** CRM-D01: deschis din CRM (`/business/crm/documente/:id`) — navigările rămân în CRM. */
+  const inCrm = path.startsWith("/business/crm");
 
   /**
    * Actul poate porni din fișa unui furnizor: `/business/docs/nou?vendor=<id>&kind=<tip>`.
@@ -123,6 +129,8 @@ export function DocEditorPage() {
   const [kind, setKind] = useState("act_primire_predare");
   const [templateId, setTemplateId] = useState("");
   const [vendorId, setVendorId] = useState("");
+  /** Contrapartea e un lead din CRM, nu un furnizor din registru: alt vocabular, altă salvare. */
+  const [isLeadDoc, setIsLeadDoc] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   /** Câmpurile furnizorului, mereu vizibile: se completează din căutare SAU se scriu direct. */
   const [party, setParty] = useState({
@@ -217,6 +225,7 @@ export function DocEditorPage() {
           setKind(d.kind);
           setTemplateId(d.templateId ?? "");
           setVendorId(d.counterpartyId ?? "");
+          setIsLeadDoc(d.counterpartyKind === "crm_lead");
           const snap = (d.counterpartySnapshot ?? {}) as Record<string, string>;
           setParty({
             name: d.counterpartyName ?? "",
@@ -237,6 +246,7 @@ export function DocEditorPage() {
                   unit: l.unit,
                   quantity: String(l.quantity),
                   unitPrice: money(l.unitPriceCents),
+                  vatPercent: l.vatPercent,
                 }))
               : [{ ...EMPTY_LINE }]
           );
@@ -290,7 +300,9 @@ export function DocEditorPage() {
       kind,
       title: title.trim() || "Act fără titlu",
       projectId: projectId || null,
-      counterparty: vendorId
+      counterparty: isLeadDoc
+        ? { kind: "crm_lead" as const, id: vendorId || null, name: party.name.trim() || null }
+        : vendorId
         ? { kind: "vendor" as const, id: vendorId }
         : {
             kind: "inline" as const,
@@ -304,7 +316,7 @@ export function DocEditorPage() {
             },
           },
       // Câmpurile scrise de mână intră și în contextul actului, ca șablonul să le poată tipări.
-      context: vendorId
+      context: vendorId && !isLeadDoc
         ? undefined
         : {
             "contraparte.denumire": party.name.trim(),
@@ -321,9 +333,10 @@ export function DocEditorPage() {
           unit: l.unit,
           quantity: lineQty(l),
           unitPriceCents: parseMoney(l.unitPrice),
+          ...(l.vatPercent !== undefined ? { vatPercent: l.vatPercent } : {}),
         })),
     }),
-    [templateId, kind, title, projectId, vendorId, party, lines]
+    [templateId, kind, title, projectId, vendorId, isLeadDoc, party, lines]
   );
 
   const save = useCallback(async () => {
@@ -355,7 +368,7 @@ export function DocEditorPage() {
       } else {
         const created = await createDocument(payload());
         setMissing((created as DocDetail).missing ?? []);
-        navigate(docPath(created.id));
+        navigate(docPathIn(created.id, inCrm));
       }
       setSavedAt(new Date());
       dirty.current = false;
@@ -450,7 +463,7 @@ export function DocEditorPage() {
       setError(null);
       try {
         const created = await deriveDocument(docId, kind);
-        navigate(docPath(created.id));
+        navigate(docPathIn(created.id, inCrm));
       } catch {
         setError("Actul derivat nu a putut fi creat.");
       }
@@ -560,7 +573,9 @@ export function DocEditorPage() {
           ? "Act finalizat și sigilat — conținutul nu se mai schimbă."
           : doc?.status === "cancelled"
             ? "Act anulat — rămâne în registru ca urmă."
-            : "Alege furnizorul — rechizitele vin din registru. Completează doar ce e specific actului."
+            : isLeadDoc
+              ? "Actul unui client din CRM — datele lui vin din fișa leadului și a firmei."
+              : "Alege furnizorul — rechizitele vin din registru. Completează doar ce e specific actului."
       }
       actions={
         <div className="flex flex-wrap gap-2">
@@ -611,11 +626,13 @@ export function DocEditorPage() {
           )}
         <button
           type="button"
-          onClick={() => navigate(docsListPath())}
+          onClick={() =>
+            navigate(isLeadDoc && doc?.counterpartyId ? pipelineHref(doc.counterpartyId) : inCrm ? "/business/crm/documente" : docsListPath())
+          }
           className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Înapoi la acte
+          {isLeadDoc ? "Înapoi la lead" : "Înapoi la acte"}
         </button>
         </div>
       }
@@ -749,7 +766,7 @@ export function DocEditorPage() {
                   {(trail.basedOn ?? []).map((d) => (
                     <li key={d.id}>
                       <span className="text-muted-foreground">În baza: </span>
-                      <a href={`#${docPath(d.id)}`} className="text-primary hover:underline">
+                      <a href={`#${docPathIn(d.id, inCrm)}`} className="text-primary hover:underline">
                         {d.docNumber ?? d.title}
                       </a>
                       <span className="text-muted-foreground"> · {DOC_STATUS_LABELS[d.status] ?? d.status}</span>
@@ -758,7 +775,7 @@ export function DocEditorPage() {
                   {(trail.derived ?? []).map((d) => (
                     <li key={d.id}>
                       <span className="text-muted-foreground">A născut: </span>
-                      <a href={`#${docPath(d.id)}`} className="text-primary hover:underline">
+                      <a href={`#${docPathIn(d.id, inCrm)}`} className="text-primary hover:underline">
                         {d.docNumber ?? d.title}
                       </a>
                       <span className="text-muted-foreground"> · {DOC_STATUS_LABELS[d.status] ?? d.status}</span>
@@ -815,12 +832,15 @@ export function DocEditorPage() {
             */}
             <section className="rounded-lg border border-border p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-sm font-medium text-foreground">Furnizorul / beneficiarul</h2>
+                <h2 className="text-sm font-medium text-foreground">{isLeadDoc ? "Clientul" : "Furnizorul / beneficiarul"}</h2>
                 <span className="text-xs text-muted-foreground">
-                  Rechizitele apar automat dacă îl alegi din listă; altfel le scrii aici.
+                  {isLeadDoc
+                    ? "Din fișa leadului și a firmei. Ce corectezi aici rămâne doar pe acest act."
+                    : "Rechizitele apar automat dacă îl alegi din listă; altfel le scrii aici."}
                 </span>
               </div>
 
+              {!isLeadDoc && (<>
               <label htmlFor="doc-vendor" className="mt-3 block text-sm font-medium text-foreground">
                 Caută în registru și în cererile de plată
               </label>
@@ -866,11 +886,12 @@ export function DocEditorPage() {
                   )}
                 </ul>
               )}
+              </>)}
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label htmlFor="party-name" className="block text-sm font-medium text-foreground">
-                    Denumirea furnizorului <span className="text-destructive">*</span>
+                    {isLeadDoc ? "Denumirea clientului" : "Denumirea furnizorului"} <span className="text-destructive">*</span>
                   </label>
                   <input
                     id="party-name"
@@ -970,7 +991,7 @@ export function DocEditorPage() {
                 </div>
               </div>
 
-              {!readOnly && (
+              {!readOnly && !isLeadDoc && (
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <input

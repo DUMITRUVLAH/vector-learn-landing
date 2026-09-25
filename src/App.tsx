@@ -346,6 +346,8 @@ function Routes() {
   if (path.startsWith("/business/crm/import")) return <BusinessGuardPage><CrmImportPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/palnie")) return <BusinessGuardPage><CrmFunnelPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/repartizare")) return <BusinessGuardPage><CrmDistributionPage /></BusinessGuardPage>;
+  // CRM-D01: fișa unui act al unui lead rămâne în CRM (același editor ca în registru).
+  if (/^\/business\/crm\/documente\/[0-9a-f-]{8,}/i.test(path)) return <BusinessGuardPage><DocEditorPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/documente")) return <BusinessGuardPage><CrmDocumentsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/automatizari")) return <BusinessGuardPage><CrmAutomationsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/comunicare")) return <BusinessGuardPage><CrmCommsPage /></BusinessGuardPage>;

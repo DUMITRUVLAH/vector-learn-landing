@@ -16,6 +16,8 @@ export interface DocListItem {
   projectId: string | null;
   counterpartyId: string | null;
   counterpartyName: string | null;
+  /** „vendor" | „inline" | „fin_party" | „crm_lead" — cine e contrapartea. */
+  counterpartyKind?: string | null;
   totalCents: number;
   currency: string;
   finalizedAt: string | null;
@@ -83,7 +85,7 @@ export interface CreateDocBody {
   kind: string;
   title: string;
   counterparty?: {
-    kind: "vendor" | "fin_party" | "inline";
+    kind: "vendor" | "fin_party" | "inline" | "crm_lead";
     id?: string | null;
     name?: string | null;
     snapshot?: Record<string, string> | null;
@@ -94,6 +96,7 @@ export interface CreateDocBody {
     unit?: string;
     quantity: number;
     unitPriceCents: number;
+    vatPercent?: number;
   }[];
   currency?: string;
 }
@@ -150,6 +153,8 @@ export function cancelDocument(id: string, reason: string): Promise<DocDetail> {
 /** Etichetele tipurilor de act, într-un singur loc (ecran + filtre + dialog de creare). */
 export const DOC_KIND_LABELS: Record<string, string> = {
   act_primire_predare: "Act de primire-predare",
+  // CRM-D01: fără ea, selectul arăta „Act de primire-predare" pe orice ofertă deschisă din CRM.
+  oferta_comerciala: "Ofertă comercială",
   contract_servicii: "Contract de prestări servicii",
   contract_vanzare: "Contract de vânzare-cumpărare",
   act_aditional: "Act adițional",

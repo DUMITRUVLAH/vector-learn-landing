@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ds";
 import { Link } from "@/router/HashRouter";
-import { docPath } from "@/lib/docs/paths";
+import { crmDocPath } from "@/lib/docs/paths";
 import {
   listCrmDocuments,
   createDocShareLink,
@@ -215,7 +215,7 @@ export function CrmDocumentsPage() {
                 {filtered.map((d) => (
                   <TableRow key={d.id}>
                     <TableCell className="font-medium">
-                      <Link to={docPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
+                      <Link to={crmDocPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
                         {d.docNumber ? `nr. ${d.docNumber}` : d.title}
                         <ExternalLink className="h-3 w-3" aria-hidden="true" />
                       </Link>

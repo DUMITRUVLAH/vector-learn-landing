@@ -16,7 +16,7 @@ import { Alert, Button, Dialog, Input, Label, Select } from "@/components/ds";
 import { listCrmProducts, type CrmProduct } from "@/lib/api/crm";
 import { listDocTemplates, type DocTemplateListItem } from "@/lib/api/docs";
 import { createCrmDocument, CRM_DOC_KIND_LABELS, type CrmDocKind } from "@/lib/api/crmDocuments";
-import { docPath } from "@/lib/docs/paths";
+import { crmDocPath } from "@/lib/docs/paths";
 
 interface ChosenProduct {
   productId: string;
@@ -148,7 +148,7 @@ export function NewDocumentDialog({
       });
       await onCreated?.();
       // Ciorna e făcută — omul continuă în editorul de acte, unde o finalizează.
-      window.location.hash = `#${docPath(doc.id)}`;
+      window.location.hash = `#${crmDocPath(doc.id)}`;
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Nu am putut crea actul.");
     } finally {

@@ -20,6 +20,17 @@ export const docsListPath = (): string => DOCS_BASE;
 export const docsNewPath = (): string => `${DOCS_BASE}/nou`;
 export const docsTemplatesPath = (): string => `${DOCS_BASE}/sabloane`;
 export const docPath = (id: string): string => `${DOCS_BASE}/${id}`;
+
+/**
+ * CRM-D01 — actul unui lead se deschide ÎN CRM. Pe `/business/par/documente/:id` shellul trecea pe
+ * meniul PAR („Administrator PAR", „Cereri de plată"), iar vânzătorul nu mai avea drum înapoi la
+ * lead. Același editor, altă adresă: prefixul `/business/crm` păstrează meniul și tema CRM-ului.
+ */
+export const CRM_DOCS_BASE = "/business/crm/documente";
+export const crmDocPath = (id: string): string => `${CRM_DOCS_BASE}/${id}`;
+
+/** Pe ce adresă se deschide un act, după locul din care îl deschizi. */
+export const docPathIn = (id: string, inCrm: boolean): string => (inCrm ? crmDocPath(id) : docPath(id));
 export const docsProjectDossierPath = (projectId: string): string => `${DOCS_BASE}/proiect/${projectId}`;
 export const docsCounterpartyDossierPath = (vendorId: string): string => `${DOCS_BASE}/contraparte/${vendorId}`;
 

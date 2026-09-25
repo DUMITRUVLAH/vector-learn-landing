@@ -55,7 +55,7 @@ import {
 } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { Link } from "@/router/HashRouter";
-import { docPath } from "@/lib/docs/paths";
+import { crmDocPath } from "@/lib/docs/paths";
 import { NewDocumentDialog } from "./NewDocumentDialog";
 import { SendEmailDialog } from "./SendEmailDialog";
 import { whatsappLink, logCrmTouch } from "@/lib/api/crmComms";
@@ -1647,7 +1647,7 @@ export function LeadDetailSheet({
                             >
                               <div className="flex items-center justify-between gap-2 text-sm">
                                 <Link
-                                  to={docPath(d.id)}
+                                  to={crmDocPath(d.id)}
                                   className="inline-flex items-center gap-1 hover:underline"
                                 >
                                   {d.docNumber

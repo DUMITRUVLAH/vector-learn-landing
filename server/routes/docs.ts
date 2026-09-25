@@ -72,6 +72,9 @@ const KIND_PREFIX: Record<string, string> = {
   act_aditional: "ADI",
   proces_verbal: "PV",
   act_compensare: "COMP",
+  // CRM-D01: oferta cădea pe „DOC", deci OF nr. 1 și un „alt document" nr. 1 purtau amândouă
+  // DOC-2026-0001 — două acte diferite cu același număr în registru.
+  oferta_comerciala: "OF",
   other: "DOC",
 };
 
@@ -528,8 +531,21 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
     }
   }
 
-  const nextVendorId =
-    body.counterparty === undefined
+  /**
+   * CRM-D01: un act pornit din CRM rămâne AL LEADULUI. Editorul generic trata orice id ca pe un
+   * furnizor și trimitea `{kind:"vendor", id:<leadId>}` la fiecare salvare automată — un singur
+   * caracter tastat în titlu muta actul din CRM (listele filtrează pe `crm_lead`), lua cu el
+   * butoanele Semnat/Refuzat și căuta un furnizor inexistent. Reclasificarea se face doar explicit
+   * (alt tip de contraparte cu alt id), niciodată din ecoul aceluiași id.
+   */
+  const keepsCrmLead =
+    doc.counterpartyKind === "crm_lead" &&
+    (body.counterparty === undefined ||
+      body.counterparty.kind === "crm_lead" ||
+      (body.counterparty.id ?? null) === doc.counterpartyId);
+  const nextVendorId = keepsCrmLead
+    ? null
+    : body.counterparty === undefined
       ? doc.counterpartyId
       : body.counterparty.kind === "vendor"
         ? body.counterparty.id ?? null
@@ -567,9 +583,12 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
       projectId: body.projectId === undefined ? doc.projectId : body.projectId,
       eventId: body.eventId === undefined ? doc.eventId : body.eventId,
       payerId: body.payerId === undefined ? doc.payerId : body.payerId,
-      counterpartyKind: body.counterparty?.kind ?? doc.counterpartyKind,
-      counterpartyId:
-        body.counterparty === undefined ? doc.counterpartyId : body.counterparty.id ?? null,
+      counterpartyKind: keepsCrmLead ? "crm_lead" : body.counterparty?.kind ?? doc.counterpartyKind,
+      counterpartyId: keepsCrmLead
+        ? doc.counterpartyId
+        : body.counterparty === undefined
+          ? doc.counterpartyId
+          : body.counterparty.id ?? null,
       counterpartyName:
         context["contraparte.denumire"] ??
         (body.counterparty === undefined ? doc.counterpartyName : body.counterparty.name ?? null),

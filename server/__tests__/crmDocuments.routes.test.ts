@@ -78,8 +78,11 @@ beforeAll(async () => {
   testDb = drizzle(pglite, { schema });
 
   const { crmDocumentsRoutes } = await import("../routes/crmDocuments");
+  const { docsRoutes } = await import("../routes/docs");
   app = new Hono();
   app.route("/api/crm/documents", crmDocumentsRoutes);
+  // Editorul de acte (DocEditorPage) salvează prin ruta generică — acolo s-a rupt legătura cu CRM.
+  app.route("/api/docs", docsRoutes);
 
   const [tA] = await testDb.insert(tenants).values({ name: "Alfa", slug: "alfa-docs" }).returning();
   const [tB] = await testDb.insert(tenants).values({ name: "Beta", slug: "beta-docs" }).returning();
@@ -455,5 +458,91 @@ describe("alegerea șablonului (funcție pură)", () => {
     expect(pickTemplate("contract_servicii", [candidates[0], candidates[2]])).toBe("own-1");
     // Fără niciun șablon, actul se creează oricum — dar fără text.
     expect(pickTemplate("contract_servicii", [])).toBeNull();
+  });
+});
+
+// ─── CRM-D01: editorul nu scoate actul din CRM ───────────────────────────────
+
+async function put(url: string, body: unknown) {
+  const res = await app.request(url, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+describe("CRM-D01 — actul unui lead rămâne al lead-ului după editare", () => {
+  it("[blocant] salvarea din editor (ecoul vechi {kind:vendor, id:<lead>}) NU mută actul din CRM", async () => {
+    const lead = await makeLead(tenantA, { company: "Medlife Clinic SRL" });
+    const created = await post("/api/crm/documents", { leadId: lead.id, kind: "oferta_comerciala" });
+    const id = created.body.id as string;
+
+    // Exact payload-ul pe care îl trimitea editorul la prima tastă din titlu.
+    const saved = await put(`/api/docs/documents/${id}`, {
+      title: "Ofertă comercială — Medlife Clinic SRL ",
+      kind: "oferta_comerciala",
+      counterparty: { kind: "vendor", id: lead.id },
+    });
+    expect(saved.status).toBe(200);
+
+    const [row] = await testDb.select().from(docDocuments).where(eq(docDocuments.id, id));
+    expect(row.counterpartyKind).toBe("crm_lead");
+    expect(row.counterpartyId).toBe(lead.id);
+
+    const list = await (await app.request(`/api/crm/documents?leadId=${lead.id}`)).json();
+    expect((list.items as Array<{ id: string }>).map((d) => d.id)).toContain(id);
+  });
+
+  it("[blocant] editorul nou trimite `crm_lead` și clientul corectat de mână rămâne pe act", async () => {
+    const lead = await makeLead(tenantA, { company: "Medlife Clinic SRL" });
+    const created = await post("/api/crm/documents", { leadId: lead.id, kind: "oferta_comerciala" });
+    const id = created.body.id as string;
+
+    await put(`/api/docs/documents/${id}`, {
+      title: "Ofertă",
+      kind: "oferta_comerciala",
+      counterparty: { kind: "crm_lead", id: lead.id, name: "Medlife Clinic SRL" },
+      context: { "contraparte.denumire": "Medlife Clinic SRL", "contraparte.adresa": "bd. Dacia 47" },
+    });
+    const [row] = await testDb.select().from(docDocuments).where(eq(docDocuments.id, id));
+    expect(row.counterpartyKind).toBe("crm_lead");
+    expect(row.counterpartyName).toBe("Medlife Clinic SRL");
+    expect(JSON.parse(row.context ?? "{}")["contraparte.adresa"]).toBe("bd. Dacia 47");
+  });
+
+  it("[blocant] TVA-ul din catalog supraviețuiește salvării din editor", async () => {
+    const lead = await makeLead(tenantA);
+    const product = await makeProduct(tenantA);
+    const created = await post("/api/crm/documents", { leadId: lead.id, items: [{ productId: product.id, quantity: 1 }] });
+    const id = created.body.id as string;
+
+    await put(`/api/docs/documents/${id}`, {
+      title: "Ofertă",
+      kind: "oferta_comerciala",
+      counterparty: { kind: "crm_lead", id: lead.id },
+      lines: [{ description: "Instalare panouri 10 kW", unit: "buc", quantity: 1, unitPriceCents: 15_000_00, vatPercent: 20 }],
+    });
+    const [line] = await testDb.select().from(docDocumentLines).where(eq(docDocumentLines.documentId, id));
+    expect(line.vatPercent).toBe(20);
+  });
+
+  it("[blocant] oferta primește seria ei (OF-), nu „DOC-” comun cu alte acte", async () => {
+    const lead = await makeLead(tenantA, { company: "Alfa SRL" });
+    const product = await makeProduct(tenantA);
+    const created = await post("/api/crm/documents", {
+      leadId: lead.id,
+      kind: "oferta_comerciala",
+      items: [{ productId: product.id, quantity: 1 }],
+    });
+    const res = await app.request(`/api/docs/documents/${created.body.id as string}/finalize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      // `confirm`: rechizitele lipsă (IBAN-ul clientului) sunt întrebate, nu blocante.
+      body: JSON.stringify({ confirm: true }),
+    });
+    const body = (await res.json()) as { docNumber?: string };
+    expect(res.status).toBe(200);
+    expect(body.docNumber).toMatch(/^OF-/);
   });
 });
