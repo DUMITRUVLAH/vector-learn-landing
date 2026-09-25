@@ -324,6 +324,12 @@ describe("dovezi în afara SFS — cazurile ATIC", () => {
     expect(
       detectFiscalInvoice("Factura fiscalÅ Seria AAX NumÅrul facturii 8298458 NumÅrul de referinĊÅ 150076445")
     ).toEqual({ seria: "AAX", number: "8298458" });
+    // Factura Orange reală conține „Cont de plati:" — eticheta contului bancar, nu un cont de plată.
+    expect(
+      detectFiscalInvoice(
+        "Factura fiscalÅ Seria AAX NumÅrul facturii 8298458 Cod fiscal: 1006600034927 Cod TVA: Cont de plati: MD94ML000000022519093582"
+      )
+    ).toEqual({ seria: "AAX", number: "8298458" });
   });
 
   it("nu ia un cont de plată drept factură fiscală", async () => {

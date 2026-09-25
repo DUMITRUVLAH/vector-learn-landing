@@ -565,7 +565,9 @@ export function detectFiscalInvoice(text: string | null | undefined): { seria: s
   if (!text) return null;
   const flat = text.replace(/\s+/g, " ");
   if (!/factur\S{0,3}\s+fiscal/i.test(flat)) return null;
-  if (/cont\s+de\s+pl[aă]t|proform|сч[её]т/i.test(flat)) return null;
+  // Antetul unui cont de plată, NU orice „cont de plăți": factura Orange are eticheta
+  // „Cont de plati: MD94…" (contul bancar al cumpărătorului) și era respinsă din cauza ei.
+  if (/cont\s+de\s+pl[aă]t[aă]?\s*(?:nr|№)|proform|сч[её]т[\s-]*(?:фактур|на\s+оплат)/i.test(flat)) return null;
   const m = /Seria[\s,.:]*(?:Nr\.?[\s:]*)?([A-Z]{1,4})(?:\s*|\s+Num\S*\s+(?:facturii\s+)?)(\d{5,10})(?!\d)/.exec(flat);
   return m ? { seria: m[1], number: m[2] } : null;
 }
