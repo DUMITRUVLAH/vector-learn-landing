@@ -50,6 +50,12 @@ export interface TableBlock {
   rows: TableCell[][];
   /** Numărul de rânduri de antet — se repetă pe fiecare pagină. */
   headerRows: number;
+  /**
+   * CRM-D03: rolul tabelului în act (`data-role`): „meta" = fișa-rezumat de sub titlu (etichetă →
+   * valoare), „signatures" = blocul de semnături. Stilul modern le desenează diferit de tabelul
+   * pozițiilor; stilul clasic le ignoră.
+   */
+  role?: "meta" | "signatures";
 }
 
 export interface RuleBlock {
@@ -298,7 +304,15 @@ function tableFrom(node: ElementNode): DocBlock[] {
   walk(node, false);
   if (rows.length === 0) return [];
   // Antetul se repetă pe pagini doar dacă e chiar primul rând — altfel pdfmake ar repeta greșit.
-  return [{ type: "table", rows, headerRows: headerRows === 1 ? 1 : 0 }];
+  const role = node.attrs["data-role"];
+  return [
+    {
+      type: "table",
+      rows,
+      headerRows: headerRows === 1 ? 1 : 0,
+      ...(role === "meta" || role === "signatures" ? { role } : {}),
+    },
+  ];
 }
 
 function listFrom(node: ElementNode, ordered: boolean): DocBlock[] {
@@ -322,7 +336,11 @@ function blockFromElement(node: ElementNode): DocBlock[] {
       return paragraphFrom(node, "heading", Number(node.tag.slice(1)));
     case "p":
     case "blockquote":
-      return paragraphFrom(node, "paragraph");
+      // CRM-D03: șabloanele pun tabelul pozițiilor ÎNTR-UN paragraf (`<p>{{tabel.pozitii}}</p>`).
+      // Tratat ca paragraf, tabelul se turtea într-un singur rând de text în PDF („Nr.Denumirea…
+      // 1 Laptop…") — în toate cele 13 șabloane de sistem, de la PAR la ofertă. Un bloc în bloc se
+      // citește ca blocuri, exact cum ar face un browser.
+      return hasBlockChild(node) ? blocksFrom(node) : paragraphFrom(node, "paragraph");
     case "hr":
       return [{ type: "rule" }];
     case "ul":

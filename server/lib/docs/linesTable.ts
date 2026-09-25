@@ -15,6 +15,13 @@ export interface TableLine {
   quantity: number;
   unitPriceCents: number;
   lineTotalCents: number;
+  /** CRM-D03: cota TVA a poziției (din catalog). 0 / lipsă = fără TVA. */
+  vatPercent?: number;
+}
+
+/** TVA-ul unei poziții, rotunjit la ban. */
+export function lineVatCents(l: Pick<TableLine, "lineTotalCents" | "vatPercent">): number {
+  return Math.round((l.lineTotalCents * (l.vatPercent ?? 0)) / 100);
 }
 
 function esc(value: string): string {
@@ -39,6 +46,14 @@ export function buildLinesTable(lines: TableLine[], currency = "MDL"): string {
   if (lines.length === 0) {
     return "<p><em>Fără poziții.</em></p>";
   }
+  const total = lines.reduce((s, l) => s + l.lineTotalCents, 0);
+  // CRM-D03: oferta spunea „regimul TVA este cel indicat în tabel", dar tabelul n-avea TVA.
+  // Coloana și totalurile cu TVA apar DOAR când o poziție chiar are TVA — actele PAR (fără TVA)
+  // rămân exact cum erau, rând cu rând.
+  const withVat = lines.some((l) => (l.vatPercent ?? 0) > 0);
+  const vat = lines.reduce((s, l) => s + lineVatCents(l), 0);
+  const cols = withVat ? 7 : 6;
+
   const rows = lines
     .map(
       (l, i) => `<tr>
@@ -46,24 +61,30 @@ export function buildLinesTable(lines: TableLine[], currency = "MDL"): string {
       <td>${esc(l.description)}</td>
       <td style="text-align:center">${esc(l.unit)}</td>
       <td style="text-align:right">${l.quantity}</td>
-      <td style="text-align:right">${money(l.unitPriceCents)}</td>
+      <td style="text-align:right">${money(l.unitPriceCents)}</td>${
+        withVat ? `\n      <td style="text-align:right">${l.vatPercent ?? 0}%</td>` : ""
+      }
       <td style="text-align:right">${money(l.lineTotalCents)}</td>
     </tr>`
     )
     .join("");
-  const total = lines.reduce((s, l) => s + l.lineTotalCents, 0);
+
+  const footRow = (label: string, cents: number) => `<tr>
+      <td colspan="${cols - 1}" style="text-align:right"><strong>${label}</strong></td>
+      <td style="text-align:right"><strong>${money(cents)}</strong></td>
+    </tr>`;
+  const foot = withVat
+    ? footRow("Total fără TVA", total) + footRow("TVA", vat) + footRow("Total cu TVA", total + vat)
+    : footRow("Total", total);
 
   return `<table>
     <thead><tr>
       <th style="width:6%">Nr.</th><th>Denumirea bunurilor / serviciilor</th>
       <th style="width:8%">UM</th><th style="width:10%">Cant.</th>
-      <th style="width:14%">Preț unitar</th><th style="width:16%">Sumă, ${esc(currency)}</th>
+      <th style="width:14%">Preț unitar</th>${withVat ? '<th style="width:8%">TVA</th>' : ""}<th style="width:16%">Sumă, ${esc(currency)}</th>
     </tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr>
-      <td colspan="5" style="text-align:right"><strong>Total</strong></td>
-      <td style="text-align:right"><strong>${money(total)}</strong></td>
-    </tr></tfoot>
+    <tfoot>${foot}</tfoot>
   </table>`;
 }
 

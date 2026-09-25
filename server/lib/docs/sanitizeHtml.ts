@@ -33,6 +33,8 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   h3: new Set(["data-align"]),
   h4: new Set(["data-align"]),
   div: new Set(["data-align", "data-page-break"]),
+  // CRM-D03: fișa-rezumat și blocul de semnături — un șablon clonat își păstrează aspectul.
+  table: new Set(["data-role"]),
 };
 
 /** Etichete al căror CONȚINUT trebuie aruncat, nu doar eticheta. */

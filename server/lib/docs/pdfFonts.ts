@@ -50,9 +50,23 @@ export function fontPath(style: FontStyle): string {
   return join(dir, `Tinos-${style}.ttf`);
 }
 
-/** Descrierea familiei pentru pdfmake. */
+/**
+ * CRM-D03 — familia actelor „moderne" (oferte, contracte cu clienții CRM): Onest, fontul întregului
+ * FinFlow. OFL, acoperă diacriticele românești și chirilica (testat în pdfFontCoverage). N-are
+ * cursive: pdfmake primește regularul/boldul în locul lor, deci un <em> rămâne lizibil, nu pătrat.
+ */
+export const MODERN_FONT_FAMILY = "Onest";
+
+function onestPath(weight: "Regular" | "Bold"): string | null {
+  const dir = fontDir();
+  if (!dir) return null;
+  const file = join(dir, `Onest-${weight}.ttf`);
+  return existsSync(file) ? file : null;
+}
+
+/** Descrierea familiilor pentru pdfmake. Onest lipsă = actul modern cade pe Tinos, nu pică. */
 export function pdfFonts(): Record<string, Record<string, string>> {
-  return {
+  const fonts: Record<string, Record<string, string>> = {
     [DOC_FONT_FAMILY]: {
       normal: fontPath("Regular"),
       bold: fontPath("Bold"),
@@ -60,4 +74,14 @@ export function pdfFonts(): Record<string, Record<string, string>> {
       bolditalics: fontPath("BoldItalic"),
     },
   };
+  const regular = onestPath("Regular");
+  const bold = onestPath("Bold");
+  if (regular && bold) {
+    fonts[MODERN_FONT_FAMILY] = { normal: regular, bold, italics: regular, bolditalics: bold };
+  }
+  return fonts;
+}
+
+export function hasModernFont(): boolean {
+  return !!onestPath("Regular") && !!onestPath("Bold");
 }

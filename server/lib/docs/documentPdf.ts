@@ -14,7 +14,7 @@
  * HTML-ul tipăribil rămâne — previzualizarea și exportul pentru Word îl folosesc.
  */
 import { logoDataUrl } from "../par/orgLogo";
-import { renderDocumentPdfBuffer } from "./pdfDocument";
+import { MODERN_PALETTE, renderDocumentPdfBuffer, type DocStyle } from "./pdfDocument";
 import { blankUnresolved } from "./blanks";
 
 export interface PrintableLine {
@@ -39,6 +39,8 @@ export interface PrintableDocument {
   totalCents?: number;
   /** Folosite doar când actul nu are șablon — vezi `fallbackBody`. */
   lines?: PrintableLine[];
+  /** CRM-D03: „modern" pentru actele către clienții CRM; implicit „classic". */
+  style?: DocStyle;
 }
 
 export interface PrintableOrg {
@@ -74,6 +76,41 @@ const STYLES = `
               padding-bottom: 5pt; margin-bottom: 10pt; }
   .doc-head img { height: 34px; width: auto; }
   .doc-head span { font-size: 9pt; color: #555; }
+`;
+
+/**
+ * CRM-D03 — stilul modern, în HTML (previzualizare + fișierul Word). Aceleași culori ca PDF-ul
+ * (`MODERN_PALETTE`), ca cele trei fișiere să arate ca același act.
+ */
+const P = MODERN_PALETTE;
+const MODERN_STYLES = `
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Onest, Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.5;
+         color: ${P.ink}; margin: 0; }
+  h1 { font-size: 20pt; color: ${P.accent}; margin: 0 0 6pt; padding-bottom: 6pt;
+       border-bottom: 2.5pt solid ${P.accent}; }
+  h2 { font-size: 12.5pt; color: ${P.accent}; margin: 14pt 0 6pt; padding-bottom: 3pt;
+       border-bottom: .6pt solid ${P.grid}; }
+  h3 { font-size: 11pt; color: ${P.headFill}; margin: 10pt 0 4pt; }
+  p { margin: 0 0 6pt; text-align: justify; }
+  ul, ol { margin: 0 0 7pt 18pt; }
+  hr { border: none; border-top: 1px solid ${P.grid}; margin: 12pt 0; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  td, th { border-bottom: .5pt solid ${P.grid}; padding: 5pt 6pt; vertical-align: top; text-align: left; }
+  thead th { background: ${P.headFill}; color: ${P.headText}; }
+  tbody tr:nth-child(even) td { background: ${P.zebra}; }
+  table[data-role="meta"] td { padding: 5pt 8pt; }
+  table[data-role="meta"] td:first-child { width: 32%; background: ${P.metaFill}; color: ${P.headFill}; font-weight: 700; }
+  table[data-role="meta"] tr:nth-child(even) td:not(:first-child) { background: none; }
+  table[data-role="signatures"] { margin-top: 18pt; page-break-inside: avoid; }
+  table[data-role="signatures"] td { border: none; background: none !important; width: 50%; padding: 4pt 12pt 4pt 0; }
+  .doc-meta { font-size: 8.5pt; color: ${P.muted}; text-align: right; margin-bottom: 8pt; }
+  .doc-head { display: flex; align-items: center; gap: 8pt; padding-bottom: 5pt; margin-bottom: 12pt; }
+  .doc-head img { height: 34px; width: auto; }
+  .doc-head span { font-size: 9pt; color: ${P.accent}; font-weight: 700; }
 `;
 
 export function escapeHtml(value: string): string {
@@ -132,7 +169,7 @@ export function buildPrintableHtml(doc: PrintableDocument, org: PrintableOrg): s
   const body = printableBody(doc);
   return `<!doctype html>
 <html lang="ro"><head><meta charset="utf-8"><title>${escapeHtml(doc.docNumber ?? doc.title)}</title>
-<style>${STYLES}</style></head>
+<style>${doc.style === "modern" ? MODERN_STYLES : STYLES}</style></head>
 <body>${orgHead(org)}${seal}${body}</body></html>`;
 }
 
@@ -172,6 +209,7 @@ export async function renderPrintablePdf(doc: PrintableDocument, org: PrintableO
     bodyHash: doc.bodyHash,
     orgName: org.name,
     orgLogo: await logoDataUrl(org.logoUrl),
+    style: doc.style,
   });
 }
 

@@ -395,7 +395,7 @@ describe("actul se naște CU TEXT, nu cu pagina albă", () => {
     expect(oferta.bodyHtml.length).toBeGreaterThan(300);
     expect(act.bodyHtml.length).toBeGreaterThan(300);
     expect(oferta.templateId).not.toBe(act.templateId);
-    expect(oferta.bodyHtml).toContain("OFERT");
+    expect(oferta.bodyHtml).toMatch(/ofert/i);
     expect(act.bodyHtml).toContain("PRIMIRE-PREDARE");
   });
 

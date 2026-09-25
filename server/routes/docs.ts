@@ -78,6 +78,15 @@ const KIND_PREFIX: Record<string, string> = {
   other: "DOC",
 };
 
+/**
+ * CRM-D03: aspectul actului pe hârtie. Ce pleacă la un CLIENT din CRM (ofertă, contract) iese în
+ * stilul modern — Onest, titlu albastru, fișă-rezumat, semnături pe două coloane. Actele juridice
+ * ale registrului (PAR, primire-predare cu furnizori) rămân clasice, neschimbate.
+ */
+function docStyleFor(doc: { counterpartyKind: string | null }): "classic" | "modern" {
+  return doc.counterpartyKind === "crm_lead" ? "modern" : "classic";
+}
+
 /** Antetul actului (denumirea și logoul organizației) — aceleași date în PDF, ZIP și e-mail. */
 async function loadOrg(tenantId: string): Promise<{ name: string | null; logoUrl: string | null }> {
   const [settings] = await db
@@ -1089,6 +1098,7 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
     bodyHtml: doc.bodyHtml,
     bodyHash: doc.bodyHash,
     status: doc.status,
+    style: docStyleFor(doc),
     counterpartyName: doc.counterpartyName,
     counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
     currency: doc.currency,
@@ -1847,6 +1857,7 @@ docsRoutes.post("/documents/:id/email", async (c) => {
     bodyHtml: doc.bodyHtml,
     bodyHash: doc.bodyHash,
     status: doc.status,
+    style: docStyleFor(doc),
   };
   const fileName = pdfFileName(printable, doc.counterpartyName);
   const org = await loadOrg(user.tenantId);
@@ -2006,6 +2017,7 @@ docsRoutes.get("/documents/:id/word", async (c) => {
       bodyHtml: doc.bodyHtml,
       bodyHash: doc.bodyHash,
       status: doc.status,
+      style: docStyleFor(doc),
       counterpartyName: doc.counterpartyName,
       counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
       currency: doc.currency,
@@ -2175,6 +2187,7 @@ docsRoutes.post("/export/zip", async (c) => {
         bodyHtml: doc.bodyHtml,
         bodyHash: doc.bodyHash,
         status: doc.status,
+        style: docStyleFor(doc),
         counterpartyName: doc.counterpartyName,
         counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
         currency: doc.currency,
@@ -2246,6 +2259,7 @@ docsRoutes.get("/documents/:id/print", async (c) => {
       bodyHtml: blankUnresolved(doc.bodyHtml),
       bodyHash: doc.bodyHash,
       status: doc.status,
+      style: docStyleFor(doc),
       counterpartyName: doc.counterpartyName,
       counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
       currency: doc.currency,
@@ -2306,6 +2320,7 @@ docsRoutes.post("/documents/:id/pdf/ensure", async (c) => {
       bodyHtml: doc.bodyHtml,
       bodyHash: doc.bodyHash,
       status: doc.status,
+      style: docStyleFor(doc),
       counterpartyName: doc.counterpartyName,
       counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
       currency: doc.currency,

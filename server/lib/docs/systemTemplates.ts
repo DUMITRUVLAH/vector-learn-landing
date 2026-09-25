@@ -48,7 +48,7 @@ const PARTIES_CONTRACT = `
 
 const SIGNATURES_DELIVERY = `
 <hr>
-<table><tbody><tr>
+<table data-role="signatures"><tbody><tr>
 <td><p><strong>Predător</strong></p><p>{{noi.denumire}}</p><p>{{noi.administrator}}</p><p>_______________________</p><p>L.Ș.</p></td>
 <td><p><strong>Primitor</strong></p><p>{{contraparte.denumire}}</p><p>{{contraparte.administrator}}</p><p>_______________________</p><p>L.Ș.</p></td>
 </tr></tbody></table>
@@ -57,7 +57,7 @@ const SIGNATURES_DELIVERY = `
 const SIGNATURES_CONTRACT = `
 <hr>
 <h3>Rechizitele și semnăturile Părților</h3>
-<table><tbody><tr>
+<table data-role="signatures"><tbody><tr>
 <td><p><strong>PRESTATOR</strong></p><p>{{noi.denumire}}</p><p>IDNO: {{noi.idno}}</p><p>Adresa: {{noi.adresa}}</p><p>IBAN: {{noi.iban}}</p><p>Banca: {{noi.banca}}</p><p>&nbsp;</p><p>{{noi.administrator}}</p><p>_______________________</p><p>L.Ș.</p></td>
 <td><p><strong>BENEFICIAR</strong></p><p>{{contraparte.denumire}}</p><p>IDNO: {{contraparte.idno}}</p><p>Adresa: {{contraparte.adresa}}</p><p>IBAN: {{contraparte.iban}}</p><p>Banca: {{contraparte.banca}}</p><p>&nbsp;</p><p>{{contraparte.administrator}}</p><p>_______________________</p><p>L.Ș.</p></td>
 </tr></tbody></table>
@@ -408,66 +408,81 @@ ${SIGNATURES_CONTRACT}`.trim(),
 <p>{{utilizator.nume}} _______________________ data __________</p>`.trim(),
   },
   {
+    // CRM-D03: oferta arată ca documentul unei firme, nu ca o scrisoare tipărită — fișă-rezumat sub
+    // titlu (cine, cui, cât, până când), secțiuni numerotate și loc de acceptare pentru client,
+    // după modelul contractelor Vector Academy. Tabelul pozițiilor are TVA când produsele au.
     kind: "oferta_comerciala",
     name: "Ofertă comercială",
     category: "Vânzări",
     bodyHtml: `
-<h1>OFERTĂ COMERCIALĂ nr. {{document.numar}}</h1>
+<h1>Ofertă comercială nr. {{document.numar}}</h1>
 <p>{{document.loc}}, {{document.data}}</p>
-<p>Către: <strong>{{contraparte.denumire}}</strong></p>
-<p>În atenția: {{contraparte.administrator}}</p>
+<table data-role="meta"><tbody>
+<tr><td>Furnizor</td><td>{{noi.denumire}}, IDNO {{noi.idno}}</td></tr>
+<tr><td>Client</td><td>{{contraparte.denumire}}</td></tr>
+<tr><td>În atenția</td><td>{{contraparte.administrator}}</td></tr>
+<tr><td>Valoarea ofertei</td><td><strong>{{total.suma}} {{total.valuta}}</strong>, fără TVA</td></tr>
+<tr><td>Valabilă</td><td>15 zile calendaristice de la emitere</td></tr>
+</tbody></table>
 <p>Stimate domn/Stimată doamnă,</p>
 <p>Vă mulțumim pentru interesul acordat. În urma discuției noastre, vă prezentăm oferta pentru serviciile solicitate.</p>
-<h3>1. Ce include oferta</h3>
+<h2>1. Ce include oferta</h2>
 <p>{{tabel.pozitii}}</p>
-<p>Valoarea totală: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}).</p>
-<h3>2. Condiții comerciale</h3>
-<p>2.1. Prețurile sunt exprimate în {{total.valuta}}; regimul TVA este cel indicat în tabelul de mai sus.</p>
+<p>Valoarea totală: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}), fără TVA. Unde se aplică, TVA-ul și totalul cu TVA sunt indicate în tabel.</p>
+<h2>2. Condiții comerciale</h2>
+<p>2.1. Prețurile sunt exprimate în {{total.valuta}}.</p>
 <p>2.2. Termenul de valabilitate a ofertei: 15 (cincisprezece) zile calendaristice de la data emiterii.</p>
 <p>2.3. Termenul de prestare/livrare se convine la semnarea contractului, în funcție de disponibilitatea ambelor părți.</p>
 <p>2.4. Plata: prin transfer bancar, în termen de 10 (zece) zile lucrătoare de la semnarea actului de primire-predare, dacă nu se convine altfel.</p>
-<h3>3. Ce nu include oferta</h3>
-<p>3.1. Cheltuielile de deplasare în afara municipiului {{document.loc}}, dacă acestea sunt necesare.</p>
+<h2>3. Ce nu include oferta</h2>
+<p>3.1. Cheltuielile de deplasare în afara localității furnizorului ({{document.loc}}), dacă acestea sunt necesare.</p>
 <p>3.2. Serviciile suplimentare solicitate ulterior, care se ofertează separat.</p>
-<h3>4. Pașii următori</h3>
-<p>4.1. Confirmarea ofertei prin e-mail sau semnarea ei este suficientă pentru a trece la contract.</p>
+<h2>4. Pașii următori</h2>
+<p>4.1. Confirmarea ofertei prin e-mail sau semnarea ei mai jos este suficientă pentru a trece la contract.</p>
 <p>4.2. După confirmare, transmitem contractul și stabilim calendarul de lucru.</p>
-<p>4.3. Persoana de contact: {{utilizator.nume}}, {{utilizator.functie}}.</p>
+<p>4.3. Persoana de contact: {{utilizator.nume}}.</p>
 <p>Vă stăm la dispoziție pentru orice precizare.</p>
-<p>Cu respect,</p>
-<p>{{noi.administrator}}<br>{{noi.denumire}}<br>IDNO {{noi.idno}} · {{noi.adresa}}</p>`.trim(),
+<table data-role="signatures"><tbody><tr>
+<td><p><strong>Furnizor</strong></p><p>{{noi.denumire}}</p><p>{{noi.administrator}}</p><p>&nbsp;</p><p>Semnătura _______________________</p></td>
+<td><p><strong>Acceptat de client</strong></p><p>{{contraparte.denumire}}</p><p>{{contraparte.administrator}}</p><p>&nbsp;</p><p>Semnătura _______________________</p><p>Data ______________</p></td>
+</tr></tbody></table>`.trim(),
   },
   {
     kind: "contract_servicii",
     name: "Contract în baza ofertei acceptate",
     category: "Vânzări",
     bodyHtml: `
-<h1>CONTRACT nr. {{document.numar}}</h1>
-<p>încheiat în baza ofertei acceptate {{document.baza}}</p>
+<h1>Contract de prestări servicii nr. {{document.numar}}</h1>
 <p>{{document.loc}}, {{document.data}}</p>
+<table data-role="meta"><tbody>
+<tr><td>Prestator</td><td>{{noi.denumire}}, IDNO {{noi.idno}}</td></tr>
+<tr><td>Beneficiar</td><td>{{contraparte.denumire}}, cod fiscal {{contraparte.idno}}</td></tr>
+<tr><td>În baza</td><td>ofertei acceptate {{document.baza}}</td></tr>
+<tr><td>Valoarea contractului</td><td><strong>{{total.suma}} {{total.valuta}}</strong>, fără TVA</td></tr>
+</tbody></table>
 ${PARTIES_CONTRACT}
-<h3>1. Obiectul contractului</h3>
+<h2>1. Obiectul contractului</h2>
 <p>1.1. Prestatorul se obligă să presteze serviciile acceptate de Beneficiar prin oferta indicată mai sus:</p>
 <p>{{tabel.pozitii}}</p>
 <p>1.2. Oferta acceptată face parte integrantă din prezentul contract. În caz de neconcordanță între ofertă și contract, prevalează contractul.</p>
-<h3>2. Prețul și plata</h3>
+<h2>2. Prețul și plata</h2>
 <p>2.1. Valoarea contractului: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}), conform prețurilor din oferta acceptată.</p>
 <p>2.2. Plata se efectuează prin transfer bancar, în termen de 10 (zece) zile lucrătoare de la semnarea actului de primire-predare și primirea facturii.</p>
 <p>2.3. Pentru întârzierea plății se aplică o penalitate de 0,1% din suma restantă pentru fiecare zi de întârziere, fără a depăși valoarea contractului.</p>
-<h3>3. Termene și recepție</h3>
+<h2>3. Termene și recepție</h2>
 <p>3.1. Calendarul de prestare se convine în scris de Părți în termen de 5 (cinci) zile lucrătoare de la semnarea contractului.</p>
 <p>3.2. La finalizare, Prestatorul prezintă actul de primire-predare, pe care Beneficiarul îl semnează sau la care formulează obiecții motivate în 5 (cinci) zile lucrătoare. Lipsa răspunsului în acest termen echivalează cu acceptarea.</p>
-<h3>4. Obligațiile Părților</h3>
+<h2>4. Obligațiile Părților</h2>
 <p>4.1. Prestatorul prestează serviciile cu competență profesională și informează Beneficiarul despre orice împrejurare care afectează termenul sau calitatea.</p>
 <p>4.2. Beneficiarul asigură accesul, informațiile și persoana de contact necesare, iar întârzierea acestora prelungește corespunzător termenele Prestatorului.</p>
-<h3>5. Confidențialitate și date cu caracter personal</h3>
+<h2>5. Confidențialitate și date cu caracter personal</h2>
 <p>5.1. Părțile păstrează confidențialitatea informațiilor obținute în executarea contractului, pe durata acestuia și 3 (trei) ani după încetarea lui.</p>
 ${GDPR_CLAUSE}
-<h3>6. Forța majoră</h3>
+<h2>6. Forța majoră</h2>
 ${FORCE_MAJEURE}
-<h3>7. Încetarea contractului</h3>
+<h2>7. Încetarea contractului</h2>
 <p>7.1. Contractul încetează prin executarea integrală a obligațiilor, prin acordul Părților sau prin reziliere, cu preaviz scris de 15 (cincisprezece) zile calendaristice și decontarea serviciilor prestate.</p>
-<h3>8. Dispoziții finale</h3>
+<h2>8. Dispoziții finale</h2>
 <p>8.1. Litigiile se soluționează pe cale amiabilă, iar în lipsa unei înțelegeri — de instanțele judecătorești competente din Republica Moldova.</p>
 <p>8.2. Contractul intră în vigoare la data semnării de către ambele Părți, se modifică doar prin act adițional scris și este întocmit în 2 (două) exemplare originale.</p>
 ${SIGNATURES_CONTRACT}`.trim(),
