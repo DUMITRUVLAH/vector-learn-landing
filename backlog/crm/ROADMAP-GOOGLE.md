@@ -46,7 +46,7 @@ Gradient Problem", Medium „AI Design Slop" (aug. 2026), github.com/funboy322/a
 - trei straturi: fundal de pagină nuanțat `#F8FAFD` → conținut pe suprafață albă rotunjită
   (16px) → rândul activ din meniu umplut cu `#C2E7FF`; fără umbre colorate;
 - albastrul Google `#0B57D0` (nu violetul de bază M3 `#6750A4`); text `#1F1F1F` / `#444746`;
-- Google Sans Flex (OFL, pe Google Fonts din nov. 2025), greutate normală la titluri;
+- fontul rămâne **Onest** (al întregului FinFlow, decizia ownerului 2026-09-25), cu greutate normală la titluri;
 - forme pe rol: butoane pastilă 40px, cipuri de filtru 32px cu colț de 8px, carduri 12px,
   dialoguri 28px; rânduri de tabel 48px cu hover tonal;
 - iconițe simple de 20px, fără fundal; căutare-pastilă mare în bara de sus; buton „Nou" ridicat

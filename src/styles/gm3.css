@@ -77,7 +77,9 @@
   --shadow-xl: 0 2px 3px 0 hsl(0 0% 0% / 0.3), 0 6px 10px 4px hsl(0 0% 0% / 0.15);
   --shadow-primary: none;
 
-  font-family: "Google Sans Flex", "Google Sans", Roboto, system-ui, sans-serif;
+  /* Fontul rămâne Onest — cel al întregului FinFlow (cerința ownerului, 2026-09-25). Tema GM3
+     preia de la Google culorile, formele și ritmul, nu și litera. */
+  font-family: "Onest", system-ui, sans-serif;
   letter-spacing: 0.01em;
 }
 
