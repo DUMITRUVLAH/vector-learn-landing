@@ -280,3 +280,36 @@ describe("conținutul complet al facturii (ce scrie în document)", () => {
     expect(parseSfsInvoiceDetail("   ")).toBeNull();
   });
 });
+
+describe("efacturaRefsFromText — e-Factura atașată la cerere", () => {
+  it("scoate seria și numărul din numele PDF-ului și din text liber", async () => {
+    const { efacturaRefsFromText } = await import("../efacturaMatch");
+    expect(efacturaRefsFromText("EBM000267772.pdf")).toEqual([{ seria: "EBM", number: "000267772" }]);
+    expect(efacturaRefsFromText("Factura EBK 000758854 și EBL-000116890")).toEqual([
+      { seria: "EBK", number: "000758854" },
+      { seria: "EBL", number: "000116890" },
+    ]);
+  });
+
+  it("ignoră IDNO-uri, IBAN-uri și numere care doar seamănă", async () => {
+    const { efacturaRefsFromText } = await import("../efacturaMatch");
+    expect(efacturaRefsFromText("IDNO 1006600034927, IBAN MD87AG000000022516065719")).toEqual([]);
+    expect(efacturaRefsFromText("REBM0002677721")).toEqual([]);
+    expect(efacturaRefsFromText(null)).toEqual([]);
+  });
+});
+
+describe("expectsEfactura — plata către propria organizație", () => {
+  it("nu așteaptă e-Factura când beneficiarul are IDNO-ul cumpărătorului", async () => {
+    const { expectsEfactura } = await import("../efacturaMatch");
+    const v = expectsEfactura({
+      status: "paid",
+      purpose: "execute_payment",
+      payeeType: "juridic",
+      payeeIdnp: "1006600034927",
+      buyerIdno: "1006 6000 34927",
+    });
+    expect(v.expected).toBe(false);
+    expect(v.reason).toMatch(/organizației plătitoare/);
+  });
+});

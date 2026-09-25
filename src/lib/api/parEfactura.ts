@@ -61,7 +61,9 @@ export interface ParEfacturaQueueItem {
 
 export interface ParEfacturaQueue {
   items: ParEfacturaQueueItem[];
-  counts: { missing: number; found: number; receivedManual: number; notApplicable: number };
+  counts: { missing: number; unverified?: number; found: number; receivedManual: number; notApplicable: number };
+  /** Prima cerere PAR a organizației — facturile mai vechi nu se compară. */
+  trackingSince?: string | null;
   filter: string;
   sfs: ParSfsSummary;
 }

@@ -19,8 +19,9 @@
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
-import { parRequests, parPayments, parVendors, parPayers } from "../../db/schema/par";
+import { parRequests, parPayments, parVendors, parPayers, parAttachments } from "../../db/schema/par";
 import { parEinvoices } from "../../db/schema/parEinvoices";
+import { finSfsSettings } from "../../db/schema/finEinvoices";
 import { loadSfsConfig } from "../../lib/fin/sfsConfig";
 import { EfacturaMdClient, EFACTURA_MD_ACTOR } from "../../lib/efacturaMoldova";
 import {
@@ -29,7 +30,11 @@ import {
   parseSfsInvoiceDetail,
   invoiceKey,
   normalizeFiscalId,
+  sameFiscalId,
+  efacturaRefsFromText,
+  DEFAULT_DAYS_BEFORE_PAYMENT,
   type SfsInvoiceDetail,
+  type SfsInvoiceSummary,
 } from "../../lib/par/efacturaMatch";
 import {
   syncBuyerInvoices,
@@ -38,6 +43,8 @@ import {
   listSupplierFacets,
   cachedDateRange,
   getSyncProgress,
+  trackingStartFor,
+  fetchInvoicesBySeriaNumber,
   type InvoiceFilters,
   type SupplierFacet,
   type SyncProgress,
@@ -144,6 +151,16 @@ export async function syncEfacturaCandidates(
   if (rows.length === 0) return { expected: 0, notApplicable: 0 };
 
   const identity = await resolvePayeeIdentity(tenantId, rows);
+  const [settings] = await db
+    .select({ idno: finSfsSettings.idno })
+    .from(finSfsSettings)
+    .where(eq(finSfsSettings.tenantId, tenantId))
+    .limit(1);
+  const buyerIdnos = await resolveBuyerIdnos(
+    tenantId,
+    [...new Set(rows.map((r) => r.payerId).filter((v): v is string => !!v))],
+    settings?.idno ?? ""
+  );
   const existing = await db
     .select()
     .from(parEinvoices)
@@ -161,6 +178,7 @@ export async function syncEfacturaCandidates(
       payeeType: row.payeeType,
       payeeIdnp: who.idno,
       vendorKind: who.kind,
+      buyerIdno: (row.payerId ? buyerIdnos.get(row.payerId) : null) ?? buyerIdnos.get("__default__") ?? null,
     });
     const nextStatus = verdict.expected ? "expected" : "not_applicable";
     if (verdict.expected) expected++;
@@ -187,6 +205,8 @@ export async function syncEfacturaCandidates(
       .set({
         status: nextStatus,
         supplierIdno: who.idno ? normalizeFiscalId(who.idno) : null,
+        // Când cererea iese din așteptare, motivul nou înlocuiește mesajul vechi de scanare.
+        ...(nextStatus === "not_applicable" ? { lastScanMessage: verdict.reason } : {}),
         updatedAt: new Date(),
       })
       .where(eq(parEinvoices.id, current.id));
@@ -211,6 +231,14 @@ export async function syncEfacturaCandidates(
 const SCAN_SYNC_BUDGET_MS = 6_000;
 /** Câte ferestre de arhivă sapă o scanare (restul istoricului vine din bucla ecranului). */
 const SCAN_ARCHIVE_WINDOWS = 4;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Aceleași stări ca în matchInvoiceForPar: ciornă, refuzată, anulată nu dovedesc nimic. */
+const DEAD_STATUSES = new Set([0, 2, 5]);
+
+function fmtDay(d: Date): string {
+  return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Chisinau" });
+}
 
 
 /** IDNO-ul organizației plătitoare a cererii (noi, cumpărătorul), cu rezervă pe setările SFS. */
@@ -271,7 +299,15 @@ export async function scanEfacturasForTenant(
     // treaba buclei din ecranul de facturi, nu a unui click pe „Scanează".
     maxArchiveWindows: SCAN_ARCHIVE_WINDOWS,
   });
-  const invoices = await cachedInvoiceSummaries(tenantId);
+  // Comparăm doar facturile emise de când se folosește platforma (minus fereastra dinaintea
+  // plății). Arhiva mai veche nu are cereri PAR cu care să se potrivească — a o compara ar fi
+  // muncă degeaba, iar mesajul „am comparat cu 2.691 de facturi" ar induce în eroare.
+  const start = await trackingStartFor(tenantId);
+  const since = start ? new Date(start.getTime() - DEFAULT_DAYS_BEFORE_PAYMENT * DAY_MS) : null;
+  const invoices = await cachedInvoiceSummaries(tenantId, since);
+  const scopeNote = since
+    ? `Comparăm doar facturile emise din ${fmtDay(since)} — platforma e folosită din ${fmtDay(start!)}; arhiva mai veche nu intră în comparație.`
+    : null;
 
   // SFS a refuzat TOATE apelurile (credențiale expirate, serviciu picat, drepturi retrase) ȘI nu
   // avem nici copie locală. A scrie acum „am verificat, nu există factură" ar fi o minciună care
@@ -290,7 +326,7 @@ export async function scanEfacturasForTenant(
   const partialNote = sync.progress.lastError;
   // Cât timp istoricul nu e recuperat complet, potrivirea se face pe o parte din facturi. Omul
   // trebuie să știe asta ÎNAINTE de a trimite un reminder unui prestator care și-a făcut treaba.
-  const historyNote = sync.progress.archiveDone
+  const historyNote = sync.progress.archiveDone || since
     ? null
     : `Istoricul din SFS încă se recuperează (${sync.progress.total} facturi citite până acum) — deschide tabul „Toate e-Facturile" ca să continue.`;
 
@@ -315,7 +351,6 @@ export async function scanEfacturasForTenant(
       message: [
         "Nicio cerere în așteptare.",
         partialNote ? `SFS a răspuns parțial: ${partialNote}` : null,
-        historyNote,
       ]
         .filter(Boolean)
         .join(" "),
@@ -340,6 +375,8 @@ export async function scanEfacturasForTenant(
     .select({ seria: parEinvoices.sfsSeria, number: parEinvoices.sfsNumber })
     .from(parEinvoices)
     .where(and(eq(parEinvoices.tenantId, tenantId), eq(parEinvoices.status, "found")));
+  /** De ce nu s-a putut confirma factura atașată — ajunge în mesajul rândului, nu se pierde. */
+  const attachmentNotes = new Map<string, string>();
   const usedKeys = new Set(
     alreadyUsed
       .filter((u) => u.seria && u.number)
@@ -356,7 +393,96 @@ export async function scanEfacturasForTenant(
     return pa - pb;
   });
 
+  const buyerFor = (par: CandidateRow | undefined): string | null =>
+    (par?.payerId ? buyerIdnos.get(par.payerId) : null) ?? buyerIdnos.get("__default__") ?? null;
+
+  // ── Pasul 1: e-Factura ATAȘATĂ la cerere ──────────────────────────────────────
+  // Solicitanții ATIC atașează chiar PDF-ul e-Facturii („EBM000267772.pdf"). E dovada cea mai
+  // directă: o verificăm în SFS după serie+număr, fără ghicit după dată și sumă. Contează fiindcă
+  // factura vine des ÎNAINTEA plății, uneori cu luni (audit: emisă 23.04, plătită 15.09) — în
+  // afara oricărei ferestre rezonabile de potrivire.
+  const attachments = await db
+    .select({ parId: parAttachments.parId, fileName: parAttachments.fileName, analysis: parAttachments.analysis })
+    .from(parAttachments)
+    .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, ordered.map((t) => t.parId))));
+  const refsByPar = new Map<string, Array<{ seria: string; number: string }>>();
+  for (const a of attachments) {
+    const refs = [...efacturaRefsFromText(a.fileName), ...efacturaRefsFromText(a.analysis)];
+    if (refs.length === 0) continue;
+    refsByPar.set(a.parId, [...(refsByPar.get(a.parId) ?? []), ...refs]);
+  }
+  const byKey = new Map<string, SfsInvoiceSummary>(invoices.map((inv) => [invoiceKey(inv), inv]));
+  const unknownRefs = [...refsByPar.values()].flat().filter((r) => !byKey.has(invoiceKey(r)));
+  let refNote: string | null = null;
+  if (unknownRefs.length > 0) {
+    const fetched = await fetchInvoicesBySeriaNumber(tenantId, client, unknownRefs);
+    for (const [k, v] of fetched.summaries) byKey.set(k, v);
+    if (fetched.errors.length > 0) refNote = `Unele facturi atașate nu au putut fi citite din SFS: ${fetched.errors[0]}`;
+  }
+
+  const settled = new Set<string>();
   for (const row of ordered) {
+    const refs = refsByPar.get(row.parId);
+    if (!refs) continue;
+    const par = parById.get(row.parId);
+    const notes: string[] = [];
+    for (const ref of refs) {
+      const key = invoiceKey(ref);
+      const inv = byKey.get(key);
+      const label = `${ref.seria} ${ref.number}`;
+      if (!inv) {
+        notes.push(`Factura atașată ${label} nu a fost găsită în SFS.`);
+        continue;
+      }
+      if (DEAD_STATUSES.has(inv.invoiceStatus)) {
+        notes.push(`Factura atașată ${label} e în SFS, dar are starea „${inv.invoiceStatusLabel}".`);
+        continue;
+      }
+      const buyer = buyerFor(par);
+      if (buyer && inv.buyerIdno && !sameFiscalId(inv.buyerIdno, buyer)) {
+        notes.push(`Factura atașată ${label} e emisă pe alt cumpărător (${inv.buyerIdno}).`);
+        continue;
+      }
+      if (!sameFiscalId(inv.supplierIdno, row.supplierIdno)) {
+        // Codul fiscal din cerere e greșit (ATIC: Deea House 1014600000674 vs 1014600006741 în SFS)
+        // sau actul e al altui furnizor. Nu confirmăm pe ghicite — spunem exact ce diferă.
+        notes.push(
+          `Factura atașată ${label} e în SFS, dar e emisă de ${inv.supplierIdno ?? "?"}, nu de ${row.supplierIdno ?? "?"} (codul fiscal din cerere) — verifică prestatorul.`
+        );
+        continue;
+      }
+      if (usedKeys.has(key)) {
+        notes.push(`Factura atașată ${label} e deja legată de altă cerere plătită.`);
+        continue;
+      }
+      usedKeys.add(key);
+      settled.add(row.parId);
+      found++;
+      await db
+        .update(parEinvoices)
+        .set({
+          status: "found",
+          sfsSeria: inv.seria,
+          sfsNumber: inv.number,
+          sfsInvoiceStatus: inv.invoiceStatus,
+          invoiceDate: inv.invoiceDate,
+          invoiceTotalCents: inv.totalCents,
+          lastScanAt: now,
+          lastScanSource: "sfs",
+          lastScanMessage: `Factura atașată la cerere, confirmată în SFS: ${inv.seria} ${inv.number} · ${inv.invoiceStatusLabel}${
+            inv.invoiceDate ? ` · emisă ${fmtDay(inv.invoiceDate)}` : ""
+          }`,
+          updatedAt: now,
+        })
+        .where(eq(parEinvoices.id, row.id));
+      break;
+    }
+    if (!settled.has(row.parId) && notes.length > 0) attachmentNotes.set(row.parId, notes.join(" "));
+  }
+
+  // ── Pasul 2: potrivirea după furnizor, dată și sumă ───────────────────────────
+  for (const row of ordered) {
+    if (settled.has(row.parId)) continue;
     const par = parById.get(row.parId);
     if (!par) continue;
     const payment = paymentByPar.get(row.parId);
@@ -367,7 +493,7 @@ export async function scanEfacturasForTenant(
     const match = matchInvoiceForPar(
       {
         supplierIdno: row.supplierIdno,
-        buyerIdno: (par.payerId ? buyerIdnos.get(par.payerId) : null) ?? buyerIdnos.get("__default__") ?? null,
+        buyerIdno: buyerFor(par),
         paidAt: payment?.paymentDate ?? par.paidAt ?? null,
         amountCents,
       },
@@ -399,9 +525,11 @@ export async function scanEfacturasForTenant(
         .set({
           lastScanAt: now,
           lastScanSource: "sfs",
-          lastScanMessage: row.supplierIdno
-            ? `Nicio factură de la ${row.supplierIdno} în SFS pentru această plată.`
-            : "Beneficiarul nu are cod fiscal — nu avem după ce căuta.",
+          lastScanMessage:
+            attachmentNotes.get(row.parId) ??
+            (row.supplierIdno
+              ? `Nicio factură de la ${row.supplierIdno} în SFS pentru această plată.`
+              : "Beneficiarul nu are cod fiscal — nu avem după ce căuta."),
           updatedAt: now,
         })
         .where(eq(parEinvoices.id, row.id));
@@ -409,7 +537,7 @@ export async function scanEfacturasForTenant(
   }
 
   const missing = ordered.length - found;
-  const base = `Am comparat cu ${invoices.length} facturi din arhiva locală; ${found} potrivire/potriviri, ${missing} cereri rămân fără factură.`;
+  const base = `Am comparat cu ${invoices.length} facturi relevante din SFS; ${found} potrivire/potriviri, ${missing} cereri rămân fără factură.`;
   return {
     available: true,
     source: "sfs",
@@ -417,7 +545,7 @@ export async function scanEfacturasForTenant(
     found,
     missing,
     invoicesFetched: invoices.length,
-    message: [base, partialNote ? `SFS a răspuns parțial: ${partialNote}` : null, historyNote]
+    message: [base, scopeNote, partialNote ? `SFS a răspuns parțial: ${partialNote}` : null, refNote, historyNote]
       .filter(Boolean)
       .join(" "),
   };

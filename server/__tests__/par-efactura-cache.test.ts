@@ -97,6 +97,10 @@ function recordingClient(invoices: Fake[], opts: { delayMs?: number; pageSize?: 
       await wait();
       return [];
     },
+    searchInvoices: async () => {
+      await wait();
+      return [];
+    },
     getArchivedInvoices: async (_r: string, _a: number, from: Date, to: Date, page: number) => {
       rec.archiveWindows.push(`${from.toISOString()}→${to.toISOString()}#${page}`);
       await wait();
@@ -140,6 +144,7 @@ function brokenClient(): EfacturaMdClient {
     getAcceptedInvoices: boom,
     getRejectedInvoices: boom,
     getArchivedInvoices: boom,
+    searchInvoices: boom,
     getInvoicesBySeriaNumber: boom,
     getInvoiceQrTexts: boom,
     getTaxpayersInfo: boom,

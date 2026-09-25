@@ -17,7 +17,7 @@
  *
  * Design system: doar tokeni HR365, light + dark, ținte de click ≥ 44px.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ReceiptText,
   Loader2,
@@ -251,6 +251,18 @@ export default function ParEfacturaQueuePage() {
     void load(filter);
   }, [filter, load]);
 
+  // „Lipsește" fără o interogare SFS în spate nu e un rezultat. Dacă există cereri neverificate și
+  // integrarea e activă, verificăm o dată la deschidere — altfel ecranul afirmă ceva ce nu știe
+  // (pe ATIC, 27 de cereri stăteau pe „Lipsește" fără să fi fost scanate vreodată).
+  const autoScanned = useRef(false);
+  useEffect(() => {
+    if (autoScanned.current || !queue?.sfs.configured || !queue.counts.unverified) return;
+    autoScanned.current = true;
+    void scanAll();
+    // scanAll e recreat la fiecare randare; declanșatorul real e sosirea primei liste.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue]);
+
   const scanAll = async () => {
     setScanning(true);
     setNotice(null);
@@ -358,10 +370,18 @@ export default function ParEfacturaQueuePage() {
               ))}
             </div>
             <p className="ml-auto text-xs text-muted-foreground">
-              Lipsă: <strong className="text-warning">{queue.counts.missing}</strong> · Găsite:{" "}
+              Lipsă: <strong className="text-warning">{queue.counts.missing}</strong>
+              {queue.counts.unverified ? ` (${queue.counts.unverified} neverificate încă în SFS)` : ""} · Găsite:{" "}
               <strong className="text-success">{queue.counts.found + queue.counts.receivedManual}</strong> · Fără
               obligație: {queue.counts.notApplicable}
             </p>
+            {queue.trackingSince && (
+              <p className="w-full text-xs text-muted-foreground">
+                Platforma e folosită din {fmtDate(queue.trackingSince)}: comparăm cu plățile doar facturile emise de
+                atunci (plus 30 de zile înainte). Arhiva SFS mai veche nu intră în comparație. O e-Factura atașată
+                la cerere se verifică oricum, indiferent de dată.
+              </p>
+            )}
           </Card>
         )}
 
@@ -400,6 +420,8 @@ export default function ParEfacturaQueuePage() {
                 {queue.items.map((item) => {
                   const state = item.state;
                   const missing = state?.status === "expected";
+                  // Nicio interogare SFS încă: nu știm dacă lipsește, deci nu scriem „Lipsește".
+                  const unverified = missing && !state?.lastScanAt;
                   return (
                     <TableRow key={item.parId}>
                       <TableCell>
@@ -421,9 +443,16 @@ export default function ParEfacturaQueuePage() {
                       <TableCell className="whitespace-nowrap text-sm">{fmtAmount(item.amountCents, item.currency)}</TableCell>
                       <TableCell className="whitespace-nowrap text-sm">{fmtDate(item.paidAt)}</TableCell>
                       <TableCell>
-                        <span className={missing ? "text-sm text-warning" : "text-sm text-success"}>
-                          {state ? PAR_EFACTURA_STATUS_LABELS[state.status] : "—"}
+                        <span
+                          className={
+                            unverified ? "text-sm text-muted-foreground" : missing ? "text-sm text-warning" : "text-sm text-success"
+                          }
+                        >
+                          {unverified ? "Neverificată" : state ? PAR_EFACTURA_STATUS_LABELS[state.status] : "—"}
                         </span>
+                        {missing && state?.lastScanAt && state.lastScanMessage && (
+                          <p className="max-w-[18rem] text-xs text-muted-foreground">{state.lastScanMessage}</p>
+                        )}
                         {state?.sfsSeria && (
                           <p className="text-xs text-muted-foreground">
                             {state.sfsSeria} {state.sfsNumber}

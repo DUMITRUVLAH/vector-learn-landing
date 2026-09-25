@@ -778,6 +778,40 @@ export class EfacturaMdClient {
   }
 
   /**
+   * §5.15 SearchInvoices după STARE și perioada de emitere — singura cale spre facturile
+   * „Semnat de Cumpărător" (8).
+   *
+   * De ce există: pe contul real ATIC, toate facturile procesate din ultimul an stau în starea 8
+   * și NU apar în nicio listă (de semnat / acceptate / respinse / arhivate) — SFS le arhivează abia
+   * după circa un an. Fără metoda asta, 12 luni de facturi erau invizibile (verificat live
+   * 2026-09-25: EBM000267772, EBK000758854 etc. → InvoiceStatus 8, absente din toate listele).
+   *
+   * `InvoiceStatus` e un `xs:int` fără `nillable`: omis, serverul îl ia 0 (Draft) și întoarce tăcut
+   * zero rezultate — de aici impresia veche că „SearchInvoices nu merge". Îl trimitem mereu explicit.
+   * Ordinea elementelor = `xs:sequence` din SearchParameters (alfabetică): BuyerIDNO, InvoiceStatus,
+   * IssuedOn{EndDate,StartDate}.
+   */
+  async searchInvoices(
+    requestId: string,
+    actorRole: number,
+    params: { invoiceStatus: number; buyerIdno?: string | null; issuedFrom: Date; issuedTo: Date }
+  ): Promise<InvoiceListItem[]> {
+    const inner =
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${actorRole}</d:ActorRole>` +
+      `<d:Parameters>` +
+      (params.buyerIdno ? `<d:BuyerIDNO>${escapeXml(params.buyerIdno)}</d:BuyerIDNO>` : "") +
+      `<d:InvoiceStatus>${params.invoiceStatus}</d:InvoiceStatus>` +
+      `<d:IssuedOn>` +
+      `<d:EndDate>${params.issuedTo.toISOString()}</d:EndDate>` +
+      `<d:StartDate>${params.issuedFrom.toISOString()}</d:StartDate>` +
+      `</d:IssuedOn>` +
+      `</d:Parameters>`;
+    const xml = await this.call("SearchInvoices", inner);
+    return this.parseInvoiceList(xml);
+  }
+
+  /**
    * §5.4 GetInvoicesContentForPrint — PDF-ul facturii (Base64) pentru tipărire.
    * Returnează conținutul decodat ca Buffer.
    */

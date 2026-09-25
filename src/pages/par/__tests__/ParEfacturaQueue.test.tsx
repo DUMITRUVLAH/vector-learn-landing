@@ -300,3 +300,29 @@ describe("ParEfacturaQueue — taburi", () => {
     expect(screen.getByRole("button", { name: /Salvează/i })).toBeEnabled();
   });
 });
+
+describe("ParEfacturaQueue — „Lipsește” doar după o verificare reală (ATIC, 2026-09-25)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(api, "syncParEfacturaInvoices").mockResolvedValue(syncDone());
+  });
+
+  it("o cerere nescanată apare „Neverificată”, iar pagina pornește singură verificarea în SFS", async () => {
+    const q = queue();
+    q.counts = { ...q.counts, unverified: 1 };
+    q.trackingSince = "2026-09-02T09:00:16.541Z";
+    vi.spyOn(api, "getParEfacturaQueue").mockResolvedValue(q);
+    const scanSpy = vi.spyOn(api, "scanParEfacturas").mockResolvedValue({
+      result: { available: true, source: "sfs", checked: 1, found: 0, missing: 1, invoicesFetched: 0, message: "Am comparat." },
+      sfs: SFS_OK,
+    });
+
+    render(<ParEfacturaQueuePage />);
+
+    await waitFor(() => expect(screen.getByText("PAR-2026-0025")).toBeInTheDocument());
+    expect(screen.getByText("Neverificată")).toBeInTheDocument();
+    expect(screen.queryByText("Lipsește")).not.toBeInTheDocument();
+    expect(screen.getByText(/Arhiva SFS mai veche nu intră în comparație/)).toBeInTheDocument();
+    await waitFor(() => expect(scanSpy).toHaveBeenCalledTimes(1));
+  });
+});

@@ -64,6 +64,23 @@ export function invoiceKey(inv: { seria: string; number: string }): string {
   return `${inv.seria.trim().toUpperCase()}|${inv.number.trim()}`;
 }
 
+/**
+ * Seria și numărul e-Facturilor pomenite într-un text (numele actului atașat, analiza lui).
+ *
+ * Seria SFS are 3 litere care încep cu E („EBM"), numărul are 9 cifre; portalul le tipărește
+ * lipite în numele PDF-ului („EBM000267772.pdf") sau separate („EBM 000267772"). Pe ATIC, actul
+ * atașat la cerere E chiar e-Factura — cea mai directă dovadă, fără ghicit după dată și sumă.
+ */
+export function efacturaRefsFromText(text: string | null | undefined): Array<{ seria: string; number: string }> {
+  if (!text) return [];
+  const out = new Map<string, { seria: string; number: string }>();
+  for (const m of text.matchAll(/(?<![A-Za-z])(E[A-Z]{2})[\s-]?(\d{9})(?!\d)/g)) {
+    const ref = { seria: m[1], number: m[2] };
+    out.set(invoiceKey(ref), ref);
+  }
+  return [...out.values()];
+}
+
 // ─── Parsarea XML-ului de factură SFS ─────────────────────────────────────────
 
 /**
@@ -242,6 +259,8 @@ export interface ParEfacturaCandidate {
   payeeIdnp: string | null;
   /** „company" / „individual" — din registrul de prestatori, când cererea are vendor. */
   vendorKind?: string | null;
+  /** IDNO-ul organizației plătitoare (noi). O plată către noi înșine nu aduce e-Factura. */
+  buyerIdno?: string | null;
 }
 
 export interface ExpectationVerdict {
@@ -275,6 +294,15 @@ export function expectsEfactura(par: ParEfacturaCandidate): ExpectationVerdict {
     return {
       expected: false,
       reason: "Beneficiarul nu are cod fiscal completat — nu avem după ce căuta în SFS.",
+    };
+  }
+  // Pe ATIC, plățile cu cardul propriu („card ATIC") și abonamentele la furnizori străini (Google)
+  // au ajuns cu beneficiarul = organizația însăși. Nimeni nu-și emite e-Factura sieși, deci
+  // așteptarea ar produce un „Lipsește" veșnic și remindere fără obiect.
+  if (sameFiscalId(par.payeeIdnp, par.buyerIdno)) {
+    return {
+      expected: false,
+      reason: "Beneficiarul are codul fiscal al organizației plătitoare — nu se emite e-Factura către tine însuți.",
     };
   }
   if (type !== "juridic" && kind !== "company") {

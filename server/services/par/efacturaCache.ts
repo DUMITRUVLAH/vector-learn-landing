@@ -31,7 +31,7 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { parSfsInvoices, parSfsSyncState } from "../../db/schema/parSfsInvoices";
-import { parVendors } from "../../db/schema/par";
+import { parVendors, parRequests } from "../../db/schema/par";
 import {
   EfacturaMdClient,
   EFACTURA_MD_ACTOR,
@@ -72,6 +72,18 @@ const LOCK_TTL_MS = 2 * 60_000;
 const SOAP_PAUSE_MS = 150;
 /** Câte coduri fiscale întrebăm odată registrul SFS pentru denumiri. */
 const TAXPAYER_LOOKUP_MAX = 40;
+/**
+ * Facturile „Semnat de Cumpărător" (8) nu stau în nicio listă SFS — se caută pe perioadă. Căutăm
+ * doar de la începutul folosirii platformei încoace (minus atâtea zile, pentru facturile emise
+ * înainte de plată): arhiva de ani de zile nu are cereri PAR cu care să fie comparată.
+ */
+const SIGNED_LOOKBACK_DAYS = 60;
+/** Lățimea unei căutări după stare — mică, fiindcă SearchInvoices nu are paginare. */
+const SIGNED_WINDOW_DAYS = 30;
+/** Plafon de ferestre pe lot, ca un workspace vechi să nu plimbe ani de căutări într-un click. */
+const SIGNED_MAX_WINDOWS = 13;
+/** Starea SFS „Semnat de Cumpărător" — factura procesată, încă nearhivată. */
+const STATUS_SIGNED_BY_BUYER = 8;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -172,6 +184,30 @@ export async function getSyncProgress(tenantId: string): Promise<SyncProgress> {
     lastError: state.lastError,
     done: archiveDone && pending === 0,
   };
+}
+
+/**
+ * De când folosește organizația platforma: prima cerere PAR creată sau plătită (null = niciuna).
+ *
+ * Facturile emise mult înainte de asta nu pot aparține vreunei cereri, deci nu se caută și nu se
+ * compară — le arătăm doar în lista brută. ATIC, de exemplu, lucrează în platformă din 02.09.2026,
+ * dar arhiva SFS are ~2.700 de facturi din 2016 încoace.
+ */
+export async function trackingStartFor(tenantId: string): Promise<Date | null> {
+  const [row] = await db
+    .select({
+      created: sql<Date | string | null>`min(${parRequests.createdAt})`,
+      paid: sql<Date | string | null>`min(${parRequests.paidAt})`,
+    })
+    .from(parRequests)
+    .where(eq(parRequests.tenantId, tenantId));
+  // Agregatele vin ca text pe unele drivere (PGlite vs postgres-js) — normalizăm la Date.
+  const dates = [row?.created, row?.paid]
+    .filter((v): v is Date | string => v != null)
+    .map((v) => (v instanceof Date ? v : new Date(v)))
+    .filter((d) => !isNaN(d.getTime()));
+  if (dates.length === 0) return null;
+  return new Date(Math.min(...dates.map((d) => d.getTime())));
 }
 
 // ─── Scrierea în copia locală ─────────────────────────────────────────────────
@@ -300,6 +336,47 @@ async function fetchArchiveWindow(
       errors.push(`facturi arhivate: ${e instanceof Error ? e.message : String(e)}`);
       break;
     }
+    await sleep(pauseMs);
+  }
+  return { heads, errors, ok };
+}
+
+/**
+ * Facturile „Semnat de Cumpărător" (8), căutate pe perioada de emitere, cele mai noi întâi.
+ *
+ * Sunt facturile procesate în ultimul an: SFS nu le pune în nicio listă și le arhivează abia mai
+ * târziu, așa că fără căutarea asta copia locală se oprea brusc cu un an în urmă (ATIC: ultima
+ * factură arhivată 19.09.2025, deși furnizorii au emis zeci de facturi în 2026).
+ */
+async function fetchSignedByBuyer(
+  client: EfacturaMdClient,
+  requestId: string,
+  from: Date,
+  to: Date,
+  deadline: number,
+  pauseMs: number
+): Promise<FetchOutcome> {
+  const heads: InvoiceListItem[] = [];
+  const errors: string[] = [];
+  let ok = false;
+  let cursor = to;
+  for (let w = 0; w < SIGNED_MAX_WINDOWS && cursor > from; w++) {
+    if (Date.now() > deadline) break;
+    const start = new Date(Math.max(cursor.getTime() - SIGNED_WINDOW_DAYS * DAY_MS, from.getTime()));
+    try {
+      heads.push(
+        ...(await client.searchInvoices(`${requestId}-signed-${w}`, EFACTURA_MD_ACTOR.CUMPARATOR, {
+          invoiceStatus: STATUS_SIGNED_BY_BUYER,
+          issuedFrom: start,
+          issuedTo: cursor,
+        }))
+      );
+      ok = true;
+    } catch (e) {
+      errors.push(`facturi semnate de cumpărător: ${e instanceof Error ? e.message : String(e)}`);
+      break;
+    }
+    cursor = start;
     await sleep(pauseMs);
   }
   return { heads, errors, ok };
@@ -554,6 +631,16 @@ export async function syncBuyerInvoices(
         anyCallOk = true;
         discovered += await upsertHeads(tenantId, live.heads);
         await patchState(tenantId, { headsSyncedAt: now });
+      }
+
+      // 1b. Facturile semnate de noi (starea 8) — nu sunt în nicio listă, se caută pe perioadă.
+      const start = await trackingStartFor(tenantId);
+      const signedFrom = new Date((start ?? now).getTime() - SIGNED_LOOKBACK_DAYS * DAY_MS);
+      const signed = await fetchSignedByBuyer(client, requestId, signedFrom, now, deadline, pauseMs);
+      errors.push(...signed.errors);
+      if (signed.ok) {
+        anyCallOk = true;
+        discovered += await upsertHeads(tenantId, signed.heads);
       }
     }
 
@@ -897,7 +984,7 @@ export async function cachedDateRange(
  * Doar cele cu detalii citite: o factură din care nu știm nici furnizorul, nici data, nu poate
  * confirma nimic — a o trata ca potrivire ar însemna să inventăm.
  */
-export async function cachedInvoiceSummaries(tenantId: string): Promise<SfsInvoiceSummary[]> {
+export async function cachedInvoiceSummaries(tenantId: string, since?: Date | null): Promise<SfsInvoiceSummary[]> {
   const rows = await db
     .select()
     .from(parSfsInvoices)
@@ -905,7 +992,9 @@ export async function cachedInvoiceSummaries(tenantId: string): Promise<SfsInvoi
       and(
         eq(parSfsInvoices.tenantId, tenantId),
         sql`${parSfsInvoices.detailsFetchedAt} is not null`,
-        sql`${parSfsInvoices.supplierIdno} is not null`
+        sql`${parSfsInvoices.supplierIdno} is not null`,
+        // Fără dată nu putem exclude — rămâne candidată, ca în matchInvoiceForPar.
+        since ? or(isNull(parSfsInvoices.invoiceDate), gte(parSfsInvoices.invoiceDate, since)) : undefined
       )
     );
   return rows.map((r) => ({
@@ -920,6 +1009,64 @@ export async function cachedInvoiceSummaries(tenantId: string): Promise<SfsInvoi
     totalCents: r.totalCents,
     portalUrl: r.portalUrl,
   }));
+}
+
+/**
+ * Citește din SFS facturile date prin serie+număr și le păstrează în copia locală (cu detalii).
+ *
+ * Folosit pentru e-Facturile atașate la cereri: `GetInvoicesBySeriaNumber` le dă indiferent de
+ * stare și de dată (verificat live pe facturi în starea 8), deci dovada nu depinde de ce liste
+ * expune SFS și nici de fereastra de potrivire.
+ */
+export async function fetchInvoicesBySeriaNumber(
+  tenantId: string,
+  client: EfacturaMdClient,
+  ids: Array<{ seria: string; number: string }>,
+  pauseMs = SOAP_PAUSE_MS
+): Promise<{ summaries: Map<string, SfsInvoiceSummary>; errors: string[] }> {
+  const summaries = new Map<string, SfsInvoiceSummary>();
+  const errors: string[] = [];
+  const unique = [...new Map(ids.map((i) => [invoiceKey(i), i])).values()];
+  for (let i = 0; i < unique.length; i += DETAIL_CHUNK) {
+    const chunk = unique.slice(i, i + DETAIL_CHUNK);
+    const got = await fetchDetailsFor(client, chunk, `par-efp-ref-${Date.now()}-${i}`, pauseMs);
+    errors.push(...got.errors);
+    if (got.summaries.size === 0) continue;
+    await upsertHeads(
+      tenantId,
+      [...got.summaries.values()].map((s) => ({
+        seria: s.seria,
+        number: s.number,
+        invoiceStatus: s.invoiceStatus,
+        invoiceStatusLabel: s.invoiceStatusLabel,
+        message: null,
+      }))
+    );
+    const rows = await db
+      .select({
+        id: parSfsInvoices.id,
+        seria: parSfsInvoices.seria,
+        number: parSfsInvoices.number,
+        detailAttempts: parSfsInvoices.detailAttempts,
+      })
+      .from(parSfsInvoices)
+      .where(
+        and(
+          eq(parSfsInvoices.tenantId, tenantId),
+          inArray(
+            parSfsInvoices.number,
+            chunk.map((c) => c.number)
+          )
+        )
+      );
+    await applyDetails(
+      tenantId,
+      rows.filter((r) => got.summaries.has(invoiceKey(r))),
+      got.summaries
+    );
+    for (const [k, v] of got.summaries) summaries.set(k, v);
+  }
+  return { summaries, errors };
 }
 
 /** Șterge copia locală a unui workspace (folosit de „Citește din nou tot istoricul"). */

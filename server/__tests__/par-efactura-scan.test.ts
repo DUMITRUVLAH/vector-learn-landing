@@ -16,7 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { tenants, users } from "../db/schema";
-import { parRequests, parPayments, parPayers } from "../db/schema/par";
+import { parRequests, parPayments, parPayers, parAttachments } from "../db/schema/par";
 import { parEinvoices } from "../db/schema/parEinvoices";
 import type { EfacturaMdClient, InvoiceListItem } from "../lib/efacturaMoldova";
 
@@ -51,8 +51,8 @@ interface StubInvoice {
   xml?: string;
   /** Textul QR — singura sursă de furnizor/sumă pentru arhivate. */
   qrText?: string;
-  /** În ce listă SFS apare factura. */
-  bucket?: "signing" | "archived";
+  /** În ce listă SFS apare factura. „signed" = starea 8, vizibilă DOAR prin SearchInvoices. */
+  bucket?: "signing" | "archived" | "signed" | "hidden";
 }
 
 /** Client SFS simulat: întoarce facturile date pe listele reale + XML/QR pe serie/număr. */
@@ -74,6 +74,20 @@ function stubClient(invoices: StubInvoice[]): EfacturaMdClient {
     getRejectedInvoices: async () => [],
     getArchivedInvoices: async (_r: string, _a: number, _f: Date, _t: Date, page: number) =>
       page === 1 ? invoices.filter((i) => i.bucket === "archived").map(head) : [],
+    // Ca SFS-ul real: căutarea întoarce ceva doar cu starea cerută explicit și în perioada cerută.
+    searchInvoices: async (
+      _r: string,
+      _a: number,
+      p: { invoiceStatus: number; issuedFrom: Date; issuedTo: Date }
+    ) =>
+      invoices
+        .filter((i) => i.bucket === "signed" && i.invoiceStatus === p.invoiceStatus)
+        .filter((i) => {
+          const d = /<DeliveryDate>([^<]+)</.exec(i.xml ?? "")?.[1];
+          const t = d ? new Date(d).getTime() : NaN;
+          return t >= p.issuedFrom.getTime() && t < p.issuedTo.getTime();
+        })
+        .map(head),
     getInvoicesBySeriaNumber: async (ids: Array<{ seria: string; number: string }>) =>
       find(ids).map((i) => ({ ...head(i), xml: i.xml ?? "" })),
     getInvoiceQrTexts: async (ids: Array<{ seria: string; number: string }>) =>
@@ -103,6 +117,7 @@ function brokenClient(): EfacturaMdClient {
     getAcceptedInvoices: boom,
     getRejectedInvoices: boom,
     getArchivedInvoices: boom,
+    searchInvoices: boom,
     getInvoicesBySeriaNumber: boom,
     getInvoiceQrTexts: boom,
   } as unknown as EfacturaMdClient;
@@ -428,5 +443,111 @@ describe("mesajul de eroare când SFS e picat", () => {
     expect(out).toBe(
       "facturi de semnat: HTTP 500 — serviciul SFS nu răspunde; facturi arhivate: drepturi insuficiente"
     );
+  });
+});
+
+describe("facturile din ultimul an — cazul ATIC (2026-09-25)", () => {
+  // Pe contul real, facturile procesate în ultimele ~12 luni stau în starea 8 „Semnat de Cumpărător"
+  // și NU apar în nicio listă SFS. Ecranul arăta 27 de cereri pe „Lipsește", deși furnizorii
+  // emiseseră facturile (EBM000267772, EBK000758854 … toate în starea 8).
+
+  it("găsește factura în starea 8, vizibilă doar prin căutarea după stare", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    const parId = await paidPar({ requestNo: "PAR-S8", idno: SUPPLIER, amountCents: 59400, paidAt: "2026-09-23" });
+
+    const result = await scanEfacturasForTenant(
+      tenantId,
+      undefined,
+      stubClient([
+        {
+          seria: "EBM",
+          number: "000267772",
+          invoiceStatus: 8,
+          bucket: "signed",
+          xml: invoiceXml({ supplier: SUPPLIER, buyer: BUYER, date: "2026-09-16T16:32:07.000Z", total: "594.00" }),
+        },
+      ])
+    );
+
+    expect(result.found).toBe(1);
+    const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
+    expect(row.status).toBe("found");
+    expect(row.sfsNumber).toBe("000267772");
+    expect(row.sfsInvoiceStatus).toBe(8);
+  });
+
+  it("confirmă e-Factura ATAȘATĂ la cerere, chiar emisă cu luni înainte de plată", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    // Auditul ATIC: factura EBH000518484 din 23.04, plătită pe 15.09 — în afara ferestrei de potrivire.
+    const parId = await paidPar({ requestNo: "PAR-AT", idno: SUPPLIER, amountCents: 7000000, paidAt: "2026-09-15" });
+    await testDb.insert(parAttachments).values({
+      tenantId,
+      parId,
+      fileName: "EBH000518484.pdf",
+      fileUrl: "storage://par-attachments/x/EBH000518484.pdf",
+      kind: "invoice",
+    });
+
+    const result = await scanEfacturasForTenant(
+      tenantId,
+      undefined,
+      stubClient([
+        {
+          seria: "EBH",
+          number: "000518484",
+          invoiceStatus: 8,
+          bucket: "hidden", // nu apare în nicio listă și e în afara perioadei căutate
+          xml: invoiceXml({ supplier: SUPPLIER, buyer: BUYER, date: "2026-04-23T08:42:44.000Z", total: "70000.00" }),
+        },
+      ])
+    );
+
+    expect(result.found).toBe(1);
+    const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
+    expect(row.status).toBe("found");
+    expect(row.sfsSeria).toBe("EBH");
+    expect(row.lastScanMessage).toContain("atașată");
+  });
+
+  it("nu confirmă o factură atașată emisă de alt cod fiscal, dar spune exact ce diferă", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    // Deea House: registrul are 1014600000674, SFS are 1014600006741.
+    const parId = await paidPar({ requestNo: "PAR-DH", idno: "1014600000674", amountCents: 340000, paidAt: "2026-09-17" });
+    await testDb.insert(parAttachments).values({
+      tenantId,
+      parId,
+      fileName: "EBL000116890.pdf",
+      fileUrl: "storage://par-attachments/x/EBL000116890.pdf",
+      kind: "invoice",
+    });
+
+    await scanEfacturasForTenant(
+      tenantId,
+      undefined,
+      stubClient([
+        {
+          seria: "EBL",
+          number: "000116890",
+          invoiceStatus: 8,
+          bucket: "hidden",
+          xml: invoiceXml({ supplier: "1014600006741", buyer: BUYER, date: "2026-08-11T23:01:01.000Z", total: "3400.00" }),
+        },
+      ])
+    );
+
+    const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
+    expect(row.status).toBe("expected");
+    expect(row.lastScanMessage).toContain("1014600006741");
+    expect(row.lastScanMessage).toContain("1014600000674");
+  });
+
+  it("nu așteaptă e-Factura când beneficiarul e chiar organizația plătitoare", async () => {
+    const { syncEfacturaCandidates } = await import("../services/par/efacturaScan");
+    const parId = await paidPar({ requestNo: "PAR-CARD", idno: BUYER, amountCents: 10000, paidAt: "2026-09-15" });
+
+    await syncEfacturaCandidates(tenantId);
+
+    const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
+    expect(row.status).toBe("not_applicable");
   });
 });

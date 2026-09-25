@@ -56,6 +56,7 @@ import {
   syncBuyerInvoices,
   getSyncProgress,
   resetInvoiceCache,
+  trackingStartFor,
   type InvoiceFilters,
   type InvoiceSort,
 } from "../services/par/efacturaCache";
@@ -230,12 +231,22 @@ parEfacturaRoutes.get("/", async (c) => {
 
   const counts = {
     missing: visible.filter(({ state }) => state.status === "expected").length,
+    // „Lipsește" fără nicio interogare SFS în spate e o presupunere, nu un rezultat — le numărăm aparte.
+    unverified: visible.filter(({ state }) => state.status === "expected" && !state.lastScanAt).length,
     found: visible.filter(({ state }) => state.status === "found").length,
     receivedManual: visible.filter(({ state }) => state.status === "received_manual").length,
     notApplicable: visible.filter(({ state }) => state.status === "not_applicable").length,
   };
 
-  return c.json({ items, counts, filter, sfs: await sfsSummary(tenantId) });
+  // De când se folosește platforma: ecranul spune explicit că arhiva mai veche nu se compară.
+  const trackingSince = await trackingStartFor(tenantId);
+  return c.json({
+    items,
+    counts,
+    filter,
+    trackingSince: trackingSince?.toISOString() ?? null,
+    sfs: await sfsSummary(tenantId),
+  });
 });
 
 // ─── POST /api/par/efactura/scan — scanare pe tot workspace-ul ────────────────
