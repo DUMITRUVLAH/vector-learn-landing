@@ -352,8 +352,10 @@ describe("CRM (Faza 1) — CrmPipelinePage", () => {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
     // Etapele implicite NU mai apar — board-ul nu are voie să cadă pe o listă hardcodată.
-    expect(screen.queryByText("Lead nou")).not.toBeInTheDocument();
-    expect(screen.queryByText("Trial/Demo")).not.toBeInTheDocument();
+    // Scopat pe <main>: butonul „Lead nou" din meniul CRM (CRM-G01) nu e o coloană a tablei.
+    const board = within(screen.getByRole("main"));
+    expect(board.queryByText("Lead nou")).not.toBeInTheDocument();
+    expect(board.queryByText("Trial/Demo")).not.toBeInTheDocument();
   });
 
   it("mutarea într-o etapă marcată „pierdut” cere motivul, chiar dacă etapa nu se numește „lost”", async () => {

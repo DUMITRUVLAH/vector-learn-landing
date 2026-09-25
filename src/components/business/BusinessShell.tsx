@@ -267,7 +267,9 @@ const CRM_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    section: "Vânzări",
+    // Nu „Vânzări": e și numele pâlniei implicite, iar două controale cu același nume pe
+    // aceeași pagină se confundă (și pentru cititoarele de ecran).
+    section: "Instrumente",
     prefix: "/business/crm",
     items: [
       { label: "Documente", href: "/business/crm/documente", icon: FileText, tone: "orange" },
