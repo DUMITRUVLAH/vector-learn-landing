@@ -18,6 +18,7 @@ import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { tenants, users, leads, leadInteractions } from "../db/schema";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
+import { crmPipelines } from "../db/schema/crmPipelines";
 import { crmLeadTasks } from "../db/schema/crmTasks";
 
 let pglite: PGlite;
@@ -389,5 +390,108 @@ describe("Evoluția în timp", () => {
 
     expect(puncte.reduce((s, p) => s + p.contractsSigned, 0)).toBe(body.kpis.contractsSigned);
     expect(puncte.reduce((s, p) => s + p.salesValueCents, 0)).toBe(body.kpis.salesValueCents);
+  });
+});
+
+describe("CRM-G02 — raportul e al unei pâlnii", () => {
+  /** Workspace propriu: pâlniile nu se șterg între teste, iar A trebuie să rămână cu una singură. */
+  let tenantC: string;
+  let userC: string;
+  let vanzari: string;
+  let cursuri: string;
+
+  beforeAll(async () => {
+    const [t] = await testDb.insert(tenants).values({ name: "Gama", slug: "gama-rap" }).returning();
+    tenantC = t.id;
+    const [u] = await testDb
+      .insert(users)
+      .values({ tenantId: tenantC, email: "gina@gama.md", passwordHash: "x", name: "Gina", role: "admin" })
+      .returning();
+    userC = u.id;
+    const [p1] = await testDb.insert(crmPipelines).values({ tenantId: tenantC, name: "Vânzări", orderIndex: 0, isDefault: true }).returning();
+    const [p2] = await testDb.insert(crmPipelines).values({ tenantId: tenantC, name: "Cursuri", orderIndex: 1 }).returning();
+    vanzari = p1.id;
+    cursuri = p2.id;
+    await testDb.insert(crmPipelineStages).values([
+      { tenantId: tenantC, pipelineId: vanzari, key: "new", label: "Lead nou", orderIndex: 0, probabilityPct: 10 },
+      { tenantId: tenantC, pipelineId: vanzari, key: "oferta", label: "Ofertă", orderIndex: 1, probabilityPct: 50 },
+      { tenantId: tenantC, pipelineId: vanzari, key: "client", label: "Client", orderIndex: 2, isWon: true, probabilityPct: 100 },
+      { tenantId: tenantC, pipelineId: vanzari, key: "pierdut", label: "Pierdut", orderIndex: 3, isLost: true, probabilityPct: 0 },
+      // A doua pâlnie are etape cu orderIndex care se INTERCALEAZĂ cu primele — exact situația
+      // în care vechiul raport lega „Lead nou" de „Cerere" și ieșea un lanț fără sens.
+      { tenantId: tenantC, pipelineId: cursuri, key: "cerere", label: "Cerere", orderIndex: 0, probabilityPct: 10 },
+      { tenantId: tenantC, pipelineId: cursuri, key: "inscris", label: "Înscris", orderIndex: 1, isWon: true, probabilityPct: 100 },
+    ]);
+  });
+
+  beforeEach(() => {
+    currentUser = { id: userC, tenantId: tenantC, role: "admin", email: "gina@gama.md" };
+  });
+
+  async function lead(pipelineId: string, stage: string, valueCents: number, to?: string) {
+    const [l] = await testDb
+      .insert(leads)
+      .values({ tenantId: tenantC, pipelineId, fullName: "X", stage, valueCents, assignedTo: userC, source: "referral" })
+      .returning();
+    if (to) {
+      await testDb.insert(leadInteractions).values({
+        tenantId: tenantC,
+        leadId: l.id,
+        type: "stage_change",
+        direction: "internal",
+        metadata: { from: "new", to },
+        occurredAt: new Date(),
+      });
+    }
+    return l;
+  }
+
+  it("[blocant] implicit, etapele și conversia sunt DOAR ale pâlniei implicite", async () => {
+    await lead(vanzari, "client", 300_00, "client");
+    await lead(cursuri, "inscris", 999_00, "inscris");
+
+    const body = await (await app.request("/api/crm/reports")).json();
+    expect(body.pipelineId).toBe(vanzari);
+    const keys = (body.stages as Array<{ key: string }>).map((st) => st.key);
+    expect(keys).toEqual(["new", "oferta", "client", "pierdut"]);
+    const pairs = (body.conversion as Array<{ fromKey: string; toKey: string }>).map((r) => `${r.fromKey}>${r.toKey}`);
+    expect(pairs).toEqual(["new>oferta", "oferta>client"]);
+    // Vânzarea din cealaltă pâlnie nu umflă cifrele pâlniei de vânzări.
+    expect(body.kpis.salesValueCents).toBe(300_00);
+    expect(body.outcomes.wonCount).toBe(1);
+  });
+
+  it("[blocant] pâlnia cerută explicit îi dă propriile cifre; `all` = toată baza", async () => {
+    await lead(vanzari, "client", 300_00, "client");
+    await lead(cursuri, "inscris", 999_00, "inscris");
+    const cur = await (await app.request(`/api/crm/reports?pipelineId=${cursuri}`)).json();
+    expect(cur.pipelineId).toBe(cursuri);
+    expect(cur.kpis.salesValueCents).toBe(999_00);
+    expect(cur.funnel.map((r: { key: string }) => r.key)).toEqual(["cerere", "inscris"]);
+
+    const all = await (await app.request("/api/crm/reports?pipelineId=all")).json();
+    expect(all.pipelineId).toBeNull();
+    expect(all.kpis.salesValueCents).toBe(1_299_00);
+    // Pe toată baza nu există un lanț de etape — pâlnia nu se desenează.
+    expect(all.funnel).toEqual([]);
+  });
+
+  it("[blocant] o pâlnie a ALTUI workspace nu deschide datele lui — cade pe implicita ta", async () => {
+    const [straina] = await testDb.insert(crmPipelines).values({ tenantId: tenantA, name: "Străină", orderIndex: 5 }).returning();
+    const body = await (await app.request(`/api/crm/reports?pipelineId=${straina.id}`)).json();
+    expect(body.pipelineId).toBe(vanzari);
+    await testDb.delete(crmPipelines).where(eq(crmPipelines.id, straina.id));
+  });
+
+  it("[normal] răspunsul are rezultatele, perioada precedentă, sursele și afacerile care stagnează", async () => {
+    await lead(vanzari, "client", 300_00, "client");
+    const from = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const body = await (await app.request(`/api/crm/reports?from=${encodeURIComponent(from)}`)).json();
+    expect(body.outcomes).toMatchObject({ wonCount: 1, winRatePct: 100, avgDealCents: 300_00 });
+    expect(body.previous?.outcomes).toMatchObject({ wonCount: 0 });
+    expect(body.sources[0]).toMatchObject({ source: "referral" });
+    expect(Array.isArray(body.aging.buckets)).toBe(true);
+    expect(body.leaderboard.find((r: { ownerKey: string }) => r.ownerKey === userC)).toMatchObject({ wonCount: 1 });
+    expect(body.timeline.every((b: { lostCount: number }) => typeof b.lostCount === "number")).toBe(true);
   });
 });

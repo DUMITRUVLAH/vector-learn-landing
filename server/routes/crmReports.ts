@@ -51,8 +51,20 @@ import {
   type DateRange,
   timeline,
   bucketSizeFor,
+  bucketKey,
   inRange,
 } from "../lib/crm/reports";
+import {
+  dealOutcomes,
+  previousRange,
+  sourceBreakdown,
+  openDealAging,
+  stageVelocity,
+  ownerOutcomes,
+  lostTimeline,
+  type InsightLead,
+} from "../lib/crm/salesInsights";
+import { crmPipelines } from "../db/schema/crmPipelines";
 
 export const crmReportsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmReportsRoutes.use("/*", requireAuth);
@@ -72,17 +84,47 @@ crmReportsRoutes.get("/", async (c) => {
   const from = c.req.query("from") ?? null;
   const to = c.req.query("to") ?? null;
   const owner = c.req.query("owner");
+  /**
+   * CRM-G02 — raportul e AL UNEI PÂLNII. Până acum amesteca etapele tuturor pâlniilor ordonate
+   * după `orderIndex`, deci „conversia" lega „Lead nou" din Vânzări de „A cerut detalii" din
+   * Cursuri deschise — un lanț de 23 de treceri fără sens, cu „au avansat" 0 aproape peste tot.
+   * Implicit: pâlnia implicită. `pipelineId=all` = toată baza (fără secțiunea de pâlnie).
+   */
+  const pipelineParam = c.req.query("pipelineId") ?? null;
   const range: DateRange = { from, to };
   // Cât de fin se taie graficul de evoluție: zi / săptămână / lună, după lungimea perioadei.
   const bucketSize = bucketSizeFor(range);
 
   try {
     await ensureTenantStages(tenantId);
+    const defaultPipeline = await ensureTenantPipeline(tenantId);
+    let pipelineRows: { id: string; name: string; isDefault: boolean }[] = [];
+    try {
+      pipelineRows = await db
+        .select({ id: crmPipelines.id, name: crmPipelines.name, isDefault: crmPipelines.isDefault })
+        .from(crmPipelines)
+        .where(eq(crmPipelines.tenantId, tenantId))
+        .orderBy(crmPipelines.orderIndex);
+    } catch (err) {
+      console.error("[crm/reports] pâlniile nu s-au putut citi:", err instanceof Error ? err.message : err);
+    }
+    // Un id străin (alt workspace, pâlnie ștearsă) cade pe implicita, nu pe „toată baza".
+    const pipelineId =
+      pipelineParam === "all"
+        ? null
+        : pipelineRows.some((p) => p.id === pipelineParam)
+          ? pipelineParam
+          : defaultPipeline?.id ?? null;
+    const isDefaultPipeline = !!pipelineId && pipelineId === defaultPipeline?.id;
 
     const stageRows = await db
       .select()
       .from(crmPipelineStages)
-      .where(eq(crmPipelineStages.tenantId, tenantId))
+      .where(
+        pipelineId
+          ? and(eq(crmPipelineStages.tenantId, tenantId), eq(crmPipelineStages.pipelineId, pipelineId))
+          : eq(crmPipelineStages.tenantId, tenantId)
+      )
       .orderBy(crmPipelineStages.orderIndex);
 
     const leadRows = await db
@@ -95,9 +137,18 @@ crmReportsRoutes.get("/", async (c) => {
         lostReason: leads.lostReason,
         interestCourse: leads.interestCourse,
         productId: leads.productId,
+        source: leads.source,
+        fullName: leads.fullName,
+        company: leads.company,
+        dealName: leads.dealName,
+        probabilityPct: leads.probabilityPct,
       })
       .from(leads)
-      .where(eq(leads.tenantId, tenantId))
+      .where(
+        pipelineId
+          ? and(eq(leads.tenantId, tenantId), leadsInPipeline(pipelineId, isDefaultPipeline))
+          : eq(leads.tenantId, tenantId)
+      )
       .orderBy(desc(leads.createdAt))
       .limit(MAX_ROWS);
 
@@ -192,7 +243,13 @@ crmReportsRoutes.get("/", async (c) => {
 
     const reportInteractions: ReportInteraction[] = [];
     const stageChanges: StageChange[] = [];
+    /** Ultimul semn de viață al fiecărui lead — orice interacțiune, nu doar apelurile. */
+    const lastActivityAt = new Map<string, string>();
     for (const row of interactionRows) {
+      const at = iso(row.occurredAt);
+      if (at && (!lastActivityAt.has(row.leadId) || at > (lastActivityAt.get(row.leadId) as string))) {
+        lastActivityAt.set(row.leadId, at);
+      }
       const meta = (row.metadata ?? {}) as Record<string, unknown>;
       if (row.type === "call" || row.type === "meeting") {
         reportInteractions.push({
@@ -242,12 +299,102 @@ crmReportsRoutes.get("/", async (c) => {
     const scopedChanges = stageChanges.filter((ch) => inRange(ch.occurredAt, range) && ownedLead(ch.leadId));
     const scopedTasks = reportTasks.filter((t) => !owner || t.assignedTo === owner);
 
+    // ── CRM-G02: rezultate, comparație, surse, stagnare, viteză ──────────────
+    const insightLeads: InsightLead[] = leadRows.map((l) => ({
+      id: l.id,
+      stage: l.stage,
+      assignedTo: l.assignedTo,
+      valueCents: l.valueCents ?? 0,
+      createdAt: iso(l.createdAt) ?? new Date(0).toISOString(),
+      source: l.source,
+      fullName: l.fullName,
+      company: l.company,
+      dealName: l.dealName,
+    }));
+    const ownedInsightLeads = owner ? insightLeads.filter((l) => l.assignedTo === owner) : insightLeads;
+    const ownedChanges = stageChanges.filter((ch) => ownedLead(ch.leadId));
+    const prevRange = previousRange(range);
+    const outcomes = dealOutcomes(insightLeads, stageChanges, reportStages, range, owner || undefined);
+    const previous = prevRange
+      ? {
+          range: prevRange,
+          kpis: salesKpis(reportLeads, reportInteractions, reportTasks, stageChanges, reportStages, prevRange, owner || undefined),
+          outcomes: dealOutcomes(insightLeads, stageChanges, reportStages, prevRange, owner || undefined),
+          cycleDays: averageCycleDays(
+            reportLeads,
+            stageChanges.filter((ch) => inRange(ch.occurredAt, prevRange) && ownedLead(ch.leadId)),
+            reportStages
+          ),
+        }
+      : null;
+
+    const ownedReportLeads = owner ? reportLeads.filter((l) => l.assignedTo === owner) : reportLeads;
+    const lostPerBucket = lostTimeline(ownedChanges, reportStages, range, (at) => bucketKey(at, bucketSize));
+    const currentTimeline = timeline(ownedReportLeads, scopedChanges, reportStages, range, bucketSize);
+    // Zilele fără nicio pierdere n-au găleată în `timeline`; le adăugăm, altfel graficul ar sări
+    // peste exact zilele în care s-a pierdut ceva fără să se câștige.
+    const tlByKey = new Map(currentTimeline.map((b) => [b.bucket, { ...b, lostCount: 0 }]));
+    for (const [key, n] of lostPerBucket) {
+      const b = tlByKey.get(key) ?? { bucket: key, leadsCreated: 0, offersSent: 0, contractsSigned: 0, salesValueCents: 0, lostCount: 0 };
+      b.lostCount = n;
+      tlByKey.set(key, b);
+    }
+    const fullTimeline = [...tlByKey.values()].sort((a, b) => (a.bucket < b.bucket ? -1 : 1));
+    const previousTimeline = prevRange
+      ? timeline(
+          ownedReportLeads,
+          stageChanges.filter((ch) => inRange(ch.occurredAt, prevRange) && ownedLead(ch.leadId)),
+          reportStages,
+          prevRange,
+          bucketSize
+        )
+      : [];
+
+    // Pâlnia are sens doar pe O pâlnie: pe „toată baza" etapele a patru procese nu formează lanț.
+    const funnel = pipelineId
+      ? funnelBreakdown(
+          leadRows
+            .filter((l) => !owner || l.assignedTo === owner)
+            .map((l) => ({
+              id: l.id,
+              stage: l.stage,
+              assignedTo: l.assignedTo,
+              valueCents: l.valueCents ?? 0,
+              createdAt: iso(l.createdAt) ?? new Date(0).toISOString(),
+              lostReason: l.lostReason,
+              interestCourse: l.interestCourse,
+              probabilityPct: l.probabilityPct,
+            })),
+          stageRows.map((st) => ({
+            key: st.key,
+            label: st.label,
+            orderIndex: st.orderIndex,
+            isWon: st.isWon,
+            isLost: st.isLost,
+            color: st.color,
+            probabilityPct: st.probabilityPct,
+          })),
+          ownedChanges
+        )
+      : [];
+    const velocity = pipelineId ? stageVelocity(ownedInsightLeads, ownedChanges, reportStages) : [];
+
     return c.json({
       range,
       owner: owner ?? null,
+      pipelineId,
+      pipelines: pipelineRows,
       stages: reportStages,
       owners,
       kpis: kpiValues,
+      outcomes,
+      previous,
+      funnel,
+      velocity,
+      sources: sourceBreakdown(ownedInsightLeads, reportStages, range),
+      aging: openDealAging(ownedInsightLeads, reportStages, lastActivityAt),
+      leaderboard: ownerOutcomes(insightLeads, stageChanges, reportStages, range, owners),
+      previousTimeline,
       // Gradul de realizare față de normă (CC-5). Gol = fără normă setată SAU perioadă
       // nedefinită — interfața arată atunci cifra simplă, nu un 0% care ar acuza degeaba.
       attainment: kpiAttainment(kpiValues, targetRows, range, owner || undefined),
@@ -271,15 +418,9 @@ crmReportsRoutes.get("/", async (c) => {
           .filter((i) => i.type === "call" && inRange(i.occurredAt, range) && ownedLead(i.leadId))
           .map((i) => ({ leadId: i.leadId, outcome: i.outcome }))
       ),
-      timeline: timeline(
-        // Evoluția are nevoie de TOATE leadurile agentului (ca să lege o vânzare de valoarea ei),
-        // dar numără doar ce cade în perioadă — filtrarea e înăuntru.
-        owner ? reportLeads.filter((l) => l.assignedTo === owner) : reportLeads,
-        scopedChanges,
-        reportStages,
-        range,
-        bucketSize
-      ),
+      // Evoluția are nevoie de TOATE leadurile agentului (ca să lege o vânzare de valoarea ei),
+      // dar numără doar ce cade în perioadă — filtrarea e înăuntru. Plus pierderile, pe aceeași axă.
+      timeline: fullTimeline,
       bucketSize,
     });
   } catch (e) {

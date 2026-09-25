@@ -1,155 +1,156 @@
 /**
- * CRM — graficele din ecranul de rapoarte (cerința 50: „dashboard", nu tabel).
+ * CRM-G02 — graficele rapoartelor, în stilul Google Analytics / Looker Studio.
  *
- * Trei imagini care răspund la trei întrebări: cum a evoluat perioada, unde se pierd leadurile
- * între etape, și din ce motive. Restul rămâne în tabele — un grafic pentru date pe care oricum
- * le citești rând cu rând e decor.
- *
- * Recharts e deja în dependențe (folosit de FIN și PAR); culorile vin din tokenii design
- * system-ului, nu din hex scris în componentă.
+ * Ce s-a schimbat față de versiunea veche și de ce:
+ *  · Un grafic combinat cu trei serii de bare, o linie și două axe devine UN grafic pe metrica
+ *    aleasă din plăcuțele de sus (exact ca în Analytics: dai click pe „Vânzări", graficul arată
+ *    vânzările). Două unități pe două axe nu se pot compara cu ochiul.
+ *  · Perioada precedentă apare ca linie gri punctată pe aceeași axă — răspunsul la „urcăm sau
+ *    coborâm?" fără să calculezi nimic.
+ *  · Linie dreaptă între puncte, nu curbă „monotone": curba netezită cobora SUB zero între două
+ *    zile cu vânzări, adică desena bani negativi.
+ *  · Plat: fără gradient, fără colțuri rotunjite pe bare, grilă orizontală fină. Culorile vin din
+ *    tokenii `--chart-*` (definiți în tema GM3), niciodată hex în componentă.
  */
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Legend,
   Line,
-  ComposedChart,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { CrmConversionRow, CrmLostReasonRow, CrmTimelineBucket } from "@/lib/api/crmReports";
 
-/** Paleta pastel a produsului, în ordinea în care se consumă. */
-const SERIES = ["hsl(var(--chart-1, 217 91% 60%))", "hsl(var(--chart-2, 152 55% 45%))", "hsl(var(--chart-3, 32 95% 55%))"];
-const LOST_COLORS = [
-  "hsl(var(--chart-3, 32 95% 55%))",
-  "hsl(var(--chart-4, 350 75% 60%))",
-  "hsl(var(--chart-5, 262 60% 60%))",
-  "hsl(var(--chart-1, 217 91% 60%))",
-  "hsl(var(--chart-2, 152 55% 45%))",
-];
+export type TrendSize = "day" | "week" | "month";
 
-function money(cents: number): string {
-  const v = (cents ?? 0) / 100;
-  return v >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
+export interface TrendPoint {
+  /** Începutul intervalului, ISO. */
+  bucket: string;
+  value: number | null;
+  /** Valoarea din intervalul corespunzător al perioadei precedente (aliniat pe poziție). */
+  previous?: number | null;
 }
 
-/** „2026-09-14" → „14 sept." / „sept. 2026", după cât de fin e tăiat graficul. */
-function bucketLabel(iso: string, size: "day" | "week" | "month"): string {
+const PRIMARY = "hsl(var(--chart-1, 217 90% 43%))";
+const WON = "hsl(var(--chart-2, 138 69% 25%))";
+const LOST = "hsl(var(--chart-3, 3 71% 41%))";
+const MUTED = "hsl(var(--muted-foreground))";
+const GRID = "hsl(var(--chart-grid, var(--border)))";
+
+/** „2026-09-14" → „14 sept." / „sept. 26", după cât de fin e tăiat graficul. */
+export function bucketLabel(iso: string, size: TrendSize): string {
   const d = new Date(iso);
   if (size === "month") return d.toLocaleDateString("ro-MD", { month: "short", year: "2-digit" });
   return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "short" });
 }
 
-export function TimelineChart({
-  data,
+const AXIS_TICK = { fontSize: 12, fill: MUTED };
+
+export function TrendChart({
+  points,
   size,
+  format,
+  label,
+  showPrevious,
 }: {
-  data: CrmTimelineBucket[];
-  size: "day" | "week" | "month";
+  points: TrendPoint[];
+  size: TrendSize;
+  format: (v: number) => string;
+  /** Numele metricii — pentru tooltip și pentru cititoarele de ecran. */
+  label: string;
+  showPrevious: boolean;
 }) {
-  if (data.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">Nicio mișcare în perioada aleasă.</p>;
+  if (points.length === 0) {
+    return <p className="py-16 text-center text-sm text-muted-foreground">Nicio mișcare în perioada aleasă.</p>;
   }
-  const rows = data.map((b) => ({
-    label: bucketLabel(b.bucket, size),
-    Leaduri: b.leadsCreated,
-    Oferte: b.offersSent,
-    Contracte: b.contractsSigned,
-    valoare: b.salesValueCents / 100,
-  }));
+  const rows = points.map((p) => ({ label: bucketLabel(p.bucket, size), value: p.value, previous: p.previous ?? null }));
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      {/* Barele numără evenimente, linia arată banii — două unități diferite, deci două axe.
-          Pe o singură axă, valoarea în lei ar strivi barele până la invizibil. */}
-      <ComposedChart data={rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-        <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} className="fill-muted-foreground" />
-        <YAxis
-          yAxisId="right"
-          orientation="right"
-          tick={{ fontSize: 11 }}
-          tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-          className="fill-muted-foreground"
-        />
-        <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8 }}
-          formatter={((value: number, name: string) =>
-            name === "valoare" ? [value.toLocaleString("ro-MD"), "Valoare (MDL)"] : [value, name]) as never}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Bar yAxisId="left" dataKey="Leaduri" fill={SERIES[0]} radius={[3, 3, 0, 0]} />
-        <Bar yAxisId="left" dataKey="Oferte" fill={SERIES[2]} radius={[3, 3, 0, 0]} />
-        <Bar yAxisId="left" dataKey="Contracte" fill={SERIES[1]} radius={[3, 3, 0, 0]} />
-        <Line yAxisId="right" type="monotone" dataKey="valoare" stroke={SERIES[1]} strokeWidth={2} dot={false} />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div role="img" aria-label={`Evoluția: ${label}`}>
+      <ResponsiveContainer width="100%" height={260}>
+        <LineChart data={rows} margin={{ top: 12, right: 12, left: 4, bottom: 0 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={16} />
+          <YAxis
+            tick={AXIS_TICK}
+            tickLine={false}
+            axisLine={false}
+            width={56}
+            allowDecimals={false}
+            tickFormatter={(v: number) => compact(v)}
+          />
+          <Tooltip
+            contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "var(--shadow-md)" }}
+            formatter={((value: number, name: string) => [
+              value == null ? "—" : format(value),
+              name === "previous" ? "Perioada precedentă" : label,
+            ]) as never}
+          />
+          {showPrevious && (
+            <Line
+              type="linear"
+              dataKey="previous"
+              stroke={MUTED}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              connectNulls
+              isAnimationActive={false}
+            />
+          )}
+          <Line
+            type="linear"
+            dataKey="value"
+            stroke={PRIMARY}
+            strokeWidth={2}
+            dot={rows.length <= 12 ? { r: 3, fill: PRIMARY, strokeWidth: 0 } : false}
+            connectNulls
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
-export function ConversionChart({ rows }: { rows: CrmConversionRow[] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Nicio tranziție între etape în perioada aleasă.
-      </p>
-    );
-  }
-  const data = rows.map((r) => ({
-    label: `${r.fromLabel} → ${r.toLabel}`,
-    Ajunse: r.reached,
-    Avansate: r.advanced,
-    pct: r.conversionPct,
-  }));
+export interface WonLostPoint {
+  bucket: string;
+  won: number;
+  lost: number;
+}
 
+/** Câștigat față de pierdut, pe intervale — ce raport lipsea cu totul (pierderile n-aveau serie). */
+export function WonLostChart({ points, size }: { points: WonLostPoint[]; size: TrendSize }) {
+  if (points.every((p) => p.won === 0 && p.lost === 0)) {
+    return <p className="py-12 text-center text-sm text-muted-foreground">Nicio afacere închisă în perioada aleasă.</p>;
+  }
+  const rows = points.map((p) => ({ label: bucketLabel(p.bucket, size), Câștigate: p.won, Pierdute: p.lost }));
   return (
-    <ResponsiveContainer width="100%" height={Math.max(180, data.length * 52)}>
-      {/* Orizontal: etichetele de etapă sunt fraze („Ofertă transmisă → Negociere"), iar pe
-          verticală s-ar suprapune. */}
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} className="fill-muted-foreground" />
-        <YAxis type="category" dataKey="label" width={170} tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Bar dataKey="Ajunse" fill={SERIES[0]} radius={[0, 3, 3, 0]} />
-        <Bar dataKey="Avansate" fill={SERIES[1]} radius={[0, 3, 3, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
+    <div role="img" aria-label="Afaceri câștigate și pierdute în timp">
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={rows} margin={{ top: 8, right: 12, left: 4, bottom: 0 }} barGap={2}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={16} />
+          <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={32} allowDecimals={false} />
+          <Tooltip
+            cursor={{ fill: "hsl(var(--muted))" }}
+            contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "var(--shadow-md)" }}
+          />
+          <Bar dataKey="Câștigate" fill={WON} maxBarSize={18} isAnimationActive={false} />
+          <Bar dataKey="Pierdute" fill={LOST} maxBarSize={18} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
-export function LostReasonsChart({ rows }: { rows: CrmLostReasonRow[] }) {
-  if (rows.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">Niciun lead pierdut în perioada aleasă.</p>;
-  }
-  const data = rows.slice(0, 6).map((r) => ({ label: r.reason, Leaduri: r.count, valoare: r.valueCents }));
-
-  return (
-    <ResponsiveContainer width="100%" height={Math.max(180, data.length * 46)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} className="fill-muted-foreground" />
-        <YAxis type="category" dataKey="label" width={170} tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-        <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8 }}
-          formatter={((value: number, name: string, item: { payload?: { valoare?: number } }) =>
-            name === "Leaduri"
-              ? [`${value} · ${money(item.payload?.valoare ?? 0)} MDL pierduți`, "Leaduri"]
-              : [value, name]) as never}
-        />
-        <Bar dataKey="Leaduri" radius={[0, 3, 3, 0]}>
-          {data.map((_, i) => (
-            <Cell key={i} fill={LOST_COLORS[i % LOST_COLORS.length]} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
+/** 1.250.000 → „1,3 mil.", 48.000 → „48k" — pentru axe, unde contează ordinul de mărime. */
+function compact(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toLocaleString("ro-MD", { maximumFractionDigits: 1 })} mil.`;
+  if (abs >= 1_000) return `${Math.round(v / 1_000)}k`;
+  return String(Math.round(v * 10) / 10);
 }

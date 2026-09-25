@@ -80,11 +80,80 @@ export interface CrmTimelineBucket {
   offersSent: number;
   contractsSigned: number;
   salesValueCents: number;
+  /** CRM-G02 — afacerile pierdute în interval (lipsește pe seria perioadei precedente). */
+  lostCount?: number;
+}
+
+/** CRM-G02 — câștigat / pierdut / rată / valoare medie, pentru o perioadă. */
+export interface CrmDealOutcomes {
+  newLeads: number;
+  wonCount: number;
+  wonValueCents: number;
+  lostCount: number;
+  lostValueCents: number;
+  /** `null` = nimic decis în perioadă (nu 0%). */
+  winRatePct: number | null;
+  avgDealCents: number | null;
+}
+
+export interface CrmFunnelRow {
+  key: string;
+  label: string;
+  color: string | null;
+  isWon: boolean;
+  isLost: boolean;
+  currentCount: number;
+  currentValueCents: number;
+  weightedValueCents: number;
+  reached: number;
+  advanced: number;
+  dropped: number;
+  dropRatePct: number;
+  conversionPct: number;
+}
+
+export interface CrmSourceRow {
+  source: string;
+  leads: number;
+  won: number;
+  lost: number;
+  open: number;
+  wonValueCents: number;
+  winRatePct: number | null;
+}
+
+export interface CrmAging {
+  buckets: { key: string; label: string; count: number; valueCents: number }[];
+  stale: { id: string; title: string; stage: string; valueCents: number; daysIdle: number; assignedTo: string | null }[];
+  staleCount: number;
+}
+
+export interface CrmLeaderboardRow {
+  ownerKey: string;
+  wonCount: number;
+  wonValueCents: number;
+  lostCount: number;
+  winRatePct: number | null;
+  avgDealCents: number | null;
+  openCount: number;
+  openValueCents: number;
 }
 
 export interface CrmReportsResponse {
   range: { from: string | null; to: string | null };
   owner: string | null;
+  /** CRM-G02 — pâlnia raportului; `null` = toată baza. */
+  pipelineId?: string | null;
+  pipelines?: { id: string; name: string; isDefault: boolean }[];
+  outcomes?: CrmDealOutcomes;
+  /** Aceleași cifre pentru perioada de aceeași lungime dinainte; `null` pe „tot timpul". */
+  previous?: { range: { from: string; to: string }; kpis: CrmSalesKpis; outcomes: CrmDealOutcomes; cycleDays: number } | null;
+  funnel?: CrmFunnelRow[];
+  velocity?: { key: string; avgDays: number | null; samples: number }[];
+  sources?: CrmSourceRow[];
+  aging?: CrmAging;
+  leaderboard?: CrmLeaderboardRow[];
+  previousTimeline?: CrmTimelineBucket[];
   stages: { key: string; label: string; isWon: boolean; isLost: boolean }[];
   owners: { id: string; name: string }[];
   kpis: CrmSalesKpis;
@@ -120,8 +189,11 @@ export function getCrmReports(params: {
   from?: string | null;
   to?: string | null;
   owner?: string | null;
+  /** Id de pâlnie, `"all"` pentru toată baza, sau lipsă pentru pâlnia implicită. */
+  pipelineId?: string | null;
 }): Promise<CrmReportsResponse> {
   const qs = new URLSearchParams();
+  if (params.pipelineId) qs.set("pipelineId", params.pipelineId);
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);
   if (params.owner) qs.set("owner", params.owner);
