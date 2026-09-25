@@ -43,7 +43,6 @@ vi.mock("@/lib/api/crm", () => ({
   listCrmAudit: (...a: unknown[]) => listCrmAudit(...a),
 }));
 
-const { CrmHomePage } = await import("@/pages/business/crm/CrmHomePage");
 const { CrmAuditPage, describeCrmAction } = await import("@/pages/business/crm/CrmAuditPage");
 
 function makeEntry(overrides: Partial<CrmAuditEntry> = {}): CrmAuditEntry {
@@ -61,24 +60,9 @@ function makeEntry(overrides: Partial<CrmAuditEntry> = {}): CrmAuditEntry {
   };
 }
 
-describe("Ce vede fiecare rol", () => {
-  it("[blocant] „Jurnal” apare doar pentru cine are dreptul", async () => {
-    getCrmPermissions.mockResolvedValue({ role: "teacher", permissions: ["leads.edit"] });
-
-    render(<CrmHomePage />);
-
-    await screen.findByRole("listitem", { name: /Accesează Pipeline/i });
-    expect(screen.queryByRole("listitem", { name: /Accesează Jurnal/i })).not.toBeInTheDocument();
-  });
-
-  it("[normal] adminul îl vede", async () => {
-    getCrmPermissions.mockResolvedValue({ role: "admin", permissions: ["leads.edit", "audit.view"] });
-
-    render(<CrmHomePage />);
-
-    expect(await screen.findByRole("listitem", { name: /Accesează Jurnal/i })).toBeInTheDocument();
-  });
-});
+// „Ce vede fiecare rol" pe Acasă a dispărut odată cu grila de carduri (CRM-G03): Acasă nu mai
+// listează submodulele. Ascunderea „Jurnal"/„Drepturi" fără `audit.view` e testată acum acolo
+// unde stau rândurile — în meniu: business-shell-crm-focus.test.tsx.
 
 describe("Jurnalul", () => {
   it("[normal] codurile devin propoziții", () => {

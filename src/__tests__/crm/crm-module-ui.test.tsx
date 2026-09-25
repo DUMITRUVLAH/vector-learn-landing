@@ -156,7 +156,6 @@ vi.mock("@/lib/api/crm", () => ({
   listCrmLeads: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
 }));
 
-const { CrmHomePage } = await import("@/pages/business/crm/CrmHomePage");
 const { CrmPipelinePage } = await import("@/pages/business/crm/CrmPipelinePage");
 const { CrmProductsPage } = await import("@/pages/business/crm/CrmProductsPage");
 
@@ -238,57 +237,6 @@ function makeProduct(overrides: Partial<CrmProduct>): CrmProduct {
 }
 
 // ─── Teste ────────────────────────────────────────────────────────────────────
-
-describe("CRM (Faza 1) — CrmHomePage", () => {
-  it("pagina CRM arată Pipeline, Produse, Rapoarte și Astăzi ca active", () => {
-    render(<CrmHomePage />);
-
-    // Tile-urile active sunt randate ca `<Link>` (tag `<a>`), cu `role="listitem"` pentru grila
-    // „Module CRM" — la fel ca în `FinHome.tsx`, sursa de adevăr pentru acest pattern.
-    const pipeline = screen.getByRole("listitem", { name: /Accesează Pipeline/i });
-    expect(pipeline.tagName).toBe("A");
-    expect(pipeline).toHaveAttribute("href", "#/business/crm/pipeline");
-
-    const produse = screen.getByRole("listitem", { name: /Accesează Produse/i });
-    expect(produse.tagName).toBe("A");
-    expect(produse).toHaveAttribute("href", "#/business/crm/produse");
-
-    // Rapoartele au fost livrate (port paralel, vezi CrmReportsPage) — tile-ul nu mai e blocat.
-    const rapoarte = screen.getByRole("listitem", { name: /Accesează Rapoarte/i });
-    expect(rapoarte.tagName).toBe("A");
-    expect(rapoarte).toHaveAttribute("href", "#/business/crm/rapoarte");
-
-    // „Astăzi" a fost conectat (rută + nav) odată cu modulul de taskuri.
-    const astazi = screen.getByRole("listitem", { name: /Accesează Astăzi/i });
-    expect(astazi.tagName).toBe("A");
-    expect(astazi).toHaveAttribute("href", "#/business/crm/astazi");
-
-    // Clienți & firme și Importul au venit cu Faza 4.
-    const clienti = screen.getByRole("listitem", { name: /Accesează Clienți/i });
-    expect(clienti.tagName).toBe("A");
-    expect(clienti).toHaveAttribute("href", "#/business/crm/clienti");
-
-    const importTile = screen.getByRole("listitem", { name: /Accesează Import/i });
-    expect(importTile.tagName).toBe("A");
-    expect(importTile).toHaveAttribute("href", "#/business/crm/import");
-
-    // Documentele folosesc motorul de acte al FinFlow (Faza 5) — tile activ.
-    const documente = screen.getByRole("listitem", { name: /Accesează Documente/i });
-    expect(documente.tagName).toBe("A");
-    expect(documente).toHaveAttribute("href", "#/business/crm/documente");
-  });
-
-  it("niciun submodul nu mai e blocat — tot ce se vede pe ecran funcționează", () => {
-    // Testul ăsta a fost, rând pe rând, lista modulelor neterminate. Acum e
-    // invers: un tile „în curând" peste o pagină care merge ar fi o funcție
-    // ascunsă degeaba, iar unul peste o pagină care NU merge ar fi o minciună.
-    render(<CrmHomePage />);
-    expect(screen.queryAllByText("În curând")).toHaveLength(0);
-    for (const m of [/Rapoarte/, /Astăzi/, /Clienți/, /Import/, /Documente/, /Automatizări/, /Comunicare/]) {
-      expect(screen.queryByLabelText(new RegExp(`${m.source}.*— în curând`, "i"))).not.toBeInTheDocument();
-    }
-  });
-});
 
 describe("CRM (Faza 1) — CrmPipelinePage", () => {
   it("kanbanul afișează cele 5 etape cu numărul de leaduri", async () => {
