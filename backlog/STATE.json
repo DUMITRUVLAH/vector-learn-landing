@@ -5039,6 +5039,111 @@
       "priority": "medium",
       "title": "Generare în masă din Excel salvată în registru (reuse generateBatch/zipPdfs)",
       "branch": "feat/DOCGEN-faza-1-registru-acte"
+    },
+    "CRM-G01": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "branch": "feat/CRM-google-redesign",
+      "status": "done",
+      "title": "Temă GM3 (Google Drive) pe CRM + meniu, căutare, ?lead= pe Pipeline",
+      "depends_on": []
+    },
+    "CRM-G02": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "branch": "feat/CRM-google-redesign",
+      "status": "done",
+      "title": "Rapoarte refăcute: pe pâlnie, rată de câștig, perioada precedentă, stagnare, surse",
+      "depends_on": [
+        "CRM-G01"
+      ]
+    },
+    "CRM-G03": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "branch": "feat/CRM-google-redesign",
+      "status": "done",
+      "title": "Acasă: De făcut + Afaceri recente în locul grilei de carduri",
+      "depends_on": [
+        "CRM-G01"
+      ]
+    },
+    "CRM-G04": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Fișa firmei: afaceri, oameni, cronologie, totaluri",
+      "depends_on": [
+        "CRM-G01"
+      ]
+    },
+    "CRM-G05": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Pipeline: un singur rând de lucru, acțiuni secundare în „⋯”",
+      "depends_on": [
+        "CRM-G01"
+      ]
+    },
+    "CRM-G06": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Fișa leadului ca panou lateral Drive + bara de etape",
+      "depends_on": [
+        "CRM-G01"
+      ]
+    },
+    "CRM-G07": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Trecerea GM3 pe paginile CRM rămase (fără pastel/KPI-tiles)",
+      "depends_on": [
+        "CRM-G01"
+      ]
+    },
+    "CRM-G08": {
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/crm/ROADMAP-GOOGLE.md",
+      "milestone": "CRM-G",
+      "phase": "CRM-G-faza-1",
+      "priority": "high",
+      "status": "pending",
+      "title": "Data estimată de închidere + prognoză pe luni",
+      "depends_on": [
+        "CRM-G02"
+      ]
     }
   }
 }

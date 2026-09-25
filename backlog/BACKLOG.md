@@ -599,3 +599,20 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | 6 | `DG-122` | Registrul actelor: export XLSX + ZIP pe filtre | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 6 | `DG-123` | Permisiuni pe proiect + jurnal în limbaj omenesc | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 6 | `DG-124` | Generare în masă din Excel, salvată în registru (reuse DOCMERGE) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
+
+## Milestone CRM-G — CRM cu fața Google + rapoarte de vânzări reale, adăugat 2026-09-25
+
+Cererea ownerului: CRM-ul „nu e prietenos, nu are tot ce trebuie, rapoartele sunt proaste,
+designul arată a AI slop — vrem ceva ca Google Drive". Testare, cercetare și plan în
+[crm/ROADMAP-GOOGLE.md](crm/ROADMAP-GOOGLE.md).
+
+| Faza | ID | Titlu | Status | Spec |
+|---|---|---|---|---|
+| 1 | `CRM-G01` | Temă GM3 (Google Drive) pe CRM + meniu, căutare, `?lead=` pe Pipeline | done ✅ | [roadmap](crm/ROADMAP-GOOGLE.md) |
+| 1 | `CRM-G02` | Rapoarte: pe pâlnie, rată de câștig, perioada precedentă, stagnare, surse, echipă | done ✅ | [roadmap](crm/ROADMAP-GOOGLE.md) |
+| 1 | `CRM-G03` | Acasă: De făcut + Afaceri recente în locul grilei de carduri | done ✅ | [roadmap](crm/ROADMAP-GOOGLE.md) |
+| 2 | `CRM-G04` | Fișa firmei: afaceri, oameni, cronologie, totaluri | pending | [roadmap](crm/ROADMAP-GOOGLE.md#crm-g04--fișa-firmei) |
+| 2 | `CRM-G05` | Pipeline: un singur rând de lucru, acțiuni secundare în „⋯" | pending | [roadmap](crm/ROADMAP-GOOGLE.md) |
+| 2 | `CRM-G06` | Fișa leadului ca panou lateral Drive + bara de etape | pending | [roadmap](crm/ROADMAP-GOOGLE.md) |
+| 2 | `CRM-G07` | Trecerea GM3 pe paginile CRM rămase | pending | [roadmap](crm/ROADMAP-GOOGLE.md) |
+| 3 | `CRM-G08` | Data estimată de închidere + prognoză pe luni | pending | [roadmap](crm/ROADMAP-GOOGLE.md) |
