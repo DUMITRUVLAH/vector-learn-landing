@@ -55,8 +55,8 @@ export interface CrmDocument {
 export function setCrmDocumentOutcome(
   documentId: string,
   body: { status: "signed" | "rejected"; reason?: string }
-): Promise<CrmDocument> {
-  return api<CrmDocument>(`/api/docs/documents/${documentId}/outcome`, {
+): Promise<CrmDocument & { leadMovedTo?: string | null }> {
+  return api<CrmDocument & { leadMovedTo?: string | null }>(`/api/docs/documents/${documentId}/outcome`, {
     method: "POST",
     body: JSON.stringify(body),
   });

@@ -40,6 +40,7 @@ import { validateIban, validateFiscalId } from "../../src/lib/par/iban";
 import { fieldLabelRo } from "../lib/docs/fieldLabels";
 import { renderPrintablePdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
 import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
+import { recordLeadDocumentEvent } from "../lib/crm/documentEvents";
 import { blankUnresolved, unresolvedFields } from "../lib/docs/blanks";
 import {
   parVendors,
@@ -1908,7 +1909,10 @@ docsRoutes.post("/documents/:id/email", async (c) => {
     await writeAudit(user.tenantId, doc.id, user.id, "status:sent", { to });
   }
 
-  return c.json({ sent: true, to });
+  // CRM-D05: trimiterea apare în istoricul leadului, iar o ofertă îl mută în etapa de ofertă.
+  const { movedTo } = await recordLeadDocumentEvent({ doc, event: "sent", userId: user.id, detail: to });
+
+  return c.json({ sent: true, to, leadMovedTo: movedTo });
 });
 
 // ─── POST /documents/:id/outcome — ce a răspuns clientul ─────────────────────
@@ -1964,6 +1968,14 @@ docsRoutes.post("/documents/:id/outcome", zValidator("json", outcomeSchema), asy
     reason: body.reason ?? null,
   });
 
+  // CRM-D05: răspunsul clientului intră în istoricul leadului; contractul semnat îl câștigă.
+  const { movedTo } = await recordLeadDocumentEvent({
+    doc,
+    event: body.status,
+    userId: user.id,
+    detail: body.status === "rejected" ? body.reason ?? null : null,
+  });
+
   // Cel care a făcut actul află ce a răspuns clientul, chiar dacă răspunsul l-a primit altcineva
   // (cerința 46). Best-effort: o notificare picată nu răstoarnă marcarea.
   if (doc.createdByUserId && doc.createdByUserId !== user.id) {
@@ -1981,7 +1993,7 @@ docsRoutes.post("/documents/:id/outcome", zValidator("json", outcomeSchema), asy
     }
   }
 
-  return c.json(row);
+  return c.json({ ...row, leadMovedTo: movedTo });
 });
 
 /**

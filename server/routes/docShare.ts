@@ -15,6 +15,7 @@
  * răspunsul la întrebarea pe care o pune orice agent: „a citit oferta sau nu?".
  */
 import { Hono } from "hono";
+import { recordLeadDocumentEvent } from "../lib/crm/documentEvents";
 import { rateLimiter } from "hono-rate-limiter";
 import type { Context } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -199,6 +200,8 @@ docPublicRoutes.get("/:token", async (c) => {
       action: "viewed_by_counterparty",
       actorUserId: null,
     });
+    // CRM-D05: „clientul a deschis oferta" — pe fișa leadului și la responsabilul lui, pe loc.
+    await recordLeadDocumentEvent({ doc, event: "viewed", userId: null });
   }
 
   return c.json({

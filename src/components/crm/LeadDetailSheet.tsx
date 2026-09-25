@@ -615,17 +615,18 @@ export function LeadDetailSheet({
     }
     setDocOutcomeId(documentId);
     try {
-      await setCrmDocumentOutcome(documentId, {
+      const res = await setCrmDocumentOutcome(documentId, {
         status,
         ...(reason ? { reason } : {}),
       });
       reloadDocuments();
+      // CRM-D05: semnarea unui contract poate muta leadul (câștigat) și scrie în istoric — fișa se
+      // recitește, altfel etapa și cronologia de pe ecran ar spune altceva decât baza.
+      await refetchDetail().catch(() => {});
+      const moved = res.leadMovedTo ? ` Leadul a trecut în „${crmStageLabel(stages, res.leadMovedTo)}”.` : "";
       onToast({
         kind: "success",
-        message:
-          status === "signed"
-            ? "Act marcat ca semnat."
-            : "Act marcat ca refuzat.",
+        message: (status === "signed" ? "Act marcat ca semnat." : "Act marcat ca refuzat.") + moved,
       });
       onChanged();
     } catch (err) {

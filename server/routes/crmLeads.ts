@@ -61,6 +61,7 @@ import {
   segmentConditions,
 } from "../lib/crm/segments";
 import { logCrmAudit } from "../lib/crm/audit";
+import { applyLeadStageChange } from "../lib/crm/changeStage";
 import { isCallOutcome, isTerminalOutcome } from "../lib/crm/callOutcomes";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
 
@@ -1234,69 +1235,19 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
     return c.json({ error: "lost_reason_required" }, 400);
   }
 
-  const fromStage = existing.stage;
-
-  const updates: Partial<NewLead> = { stage, updatedAt: new Date() };
-  if (targetStage.isLost) updates.lostReason = lostReason ?? null;
-
-  const [row] = await db
-    .update(leads)
-    .set(updates)
-    .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)))
-    .returning();
-
-  // Orice schimbare de etapă lasă o urmă în istoric — fără asta, nimeni nu poate reconstitui
-  // parcursul unui lead prin pipeline (cine l-a mutat, când, de ce a fost pierdut).
-  const interaction: NewLeadInteraction = {
+  // CRM-D05: aceeași implementare pe care o folosesc și actele (server/lib/crm/changeStage.ts).
+  const { lead, stock } = await applyLeadStageChange({
     tenantId: user.tenantId,
+    userId: user.id,
     leadId: id,
-    type: "stage_change",
-    direction: "internal",
-    body: `${fromStage} → ${stage}`,
-    metadata: { from: fromStage, to: stage, lostReason: lostReason ?? null },
-    userId: user.id,
-  };
-  await db.insert(leadInteractions).values(interaction);
-
-  await logCrmAudit({
-    tenantId: user.tenantId,
-    actorId: user.id,
-    action: "lead.stage_changed",
-    target: "crm_lead",
-    targetId: id,
-    before: { stage: fromStage },
-    after: { stage, lostReason: lostReason ?? null },
-  });
-
-  await runAutomations({
-    tenantId: user.tenantId,
-    userId: user.id,
-    lead: row,
-    kind: "lead.stage_changed",
+    fromStage: existing.stage,
     toStage: stage,
+    isLost: targetStage.isLost,
+    lostReason: lostReason ?? null,
   });
-
-  // Cadențele cu etapă declanșatoare: intrarea în etapă înscrie leadul în secvența de urmărire.
-  // Idempotent pe (lead, cadență) activă — o mutare înainte-înapoi nu-l înscrie de două ori.
-  await enrollByStage(user.tenantId, id, stage);
-
-  // Stocul produsului: scade la prima intrare în „câștigat", se întoarce la ieșirea din el.
-  // Vezi server/lib/crm/productStock.ts pentru regulile complete (idempotență, stoc insuficient).
-  const stock = await syncLeadStockForStage({
-    tenantId: user.tenantId,
-    userId: user.id,
-    lead: row,
-    fromStage,
-    toStage: stage,
-  });
-
-  const [fresh] = await db
-    .select()
-    .from(leads)
-    .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
   // `stock` călătorește lângă lead, nu în el: interfața are nevoie de rezultat ca să anunțe omul
   // („-2 buc., au rămas 5" sau „stoc insuficient"), dar nu e o coloană a leadului.
-  return c.json({ ...(fresh ?? row), stock });
+  return c.json({ ...lead, stock });
 });
 
 

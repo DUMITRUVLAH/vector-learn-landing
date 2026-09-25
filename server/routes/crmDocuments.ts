@@ -23,6 +23,7 @@
  * Montat la /api/crm/documents.
  */
 import { Hono } from "hono";
+import { recordLeadDocumentEvent } from "../lib/crm/documentEvents";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
@@ -336,6 +337,13 @@ crmDocumentsRoutes.post("/", zValidator("json", createInput), async (c) => {
     context: body.basedOn ? { "document.baza": body.basedOn } : undefined,
     lines,
     currency: resolvedCurrency,
+  });
+
+  // CRM-D05: actul nou apare în istoricul leadului, nu doar în fila „Acte".
+  await recordLeadDocumentEvent({
+    doc: { ...created, tenantId: user.tenantId, counterpartyKind: "crm_lead", counterpartyId: lead.id },
+    event: "created",
+    userId: user.id,
   });
 
   return c.json(created, 201);
