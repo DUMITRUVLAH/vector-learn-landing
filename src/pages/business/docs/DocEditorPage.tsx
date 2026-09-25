@@ -477,7 +477,10 @@ export function DocEditorPage() {
    */
   const sendEmail = useCallback(async () => {
     if (!docId) return;
-    const to = window.prompt("Către ce adresă trimitem actul?", doc?.counterpartyName ? "" : "");
+    // CRM-D02: adresa clientului e deja pe act (din lead sau din firmă) — o propunem, nu o
+    // cerem din nou. Omul o poate schimba înainte de trimitere.
+    const knownEmail = ((doc?.counterpartySnapshot ?? {}) as Record<string, string>).email ?? "";
+    const to = window.prompt("Către ce adresă trimitem actul?", knownEmail);
     if (!to) return;
     setError(null);
     setEmailNotice("Pregătesc actul și îl trimit…");
@@ -492,7 +495,7 @@ export function DocEditorPage() {
       const body = (e as { body?: { message?: string } }).body;
       setError(body?.message ?? "Actul nu a putut fi trimis.");
     }
-  }, [docId, doc?.counterpartyName]);
+  }, [docId, doc?.counterpartySnapshot]);
 
   /**
    * „Previzualizează" — aceeași foaie din care se face PDF-ul, deschisă pe loc.
@@ -599,7 +602,8 @@ export function DocEditorPage() {
               Descarcă pentru Word
             </button>
           )}
-          {docId && doc?.status === "final" && (
+          {/* Și după prima trimitere: clientul cere „mai trimite-mi o dată" mai des decât pare. */}
+          {docId && (doc?.status === "final" || doc?.status === "sent") && (
             <button
               type="button"
               onClick={() => void sendEmail()}

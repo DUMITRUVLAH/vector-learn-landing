@@ -898,4 +898,24 @@ describe("CRM-D01 — actul unui lead, deschis din CRM", () => {
     await userEvent.click(screen.getByRole("button", { name: /Înapoi la lead/ }));
     expect(navigate).toHaveBeenCalledWith("/business/crm/pipeline?lead=lead-1");
   });
+
+  it("[blocant] trimiterea pe e-mail propune adresa clientului, nu un câmp gol", async () => {
+    getDocument.mockResolvedValue({
+      ...LEAD_DOC,
+      status: "final",
+      docNumber: "OF-2026-0001",
+      counterpartySnapshot: { email: "tatiana.frunze@medlife.md" },
+    });
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue(null);
+    render(<DocEditorPage />);
+    await userEvent.click(await screen.findByRole("button", { name: /Trimite pe email/ }));
+    expect(prompt).toHaveBeenCalledWith(expect.any(String), "tatiana.frunze@medlife.md");
+    prompt.mockRestore();
+  });
+
+  it("[normal] un act deja trimis se poate retrimite", async () => {
+    getDocument.mockResolvedValue({ ...LEAD_DOC, status: "sent", docNumber: "OF-2026-0001" });
+    render(<DocEditorPage />);
+    expect(await screen.findByRole("button", { name: /Trimite pe email/ })).toBeInTheDocument();
+  });
 });

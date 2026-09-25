@@ -230,7 +230,8 @@ describe("Lista de oferte și contracte", () => {
     render(<CrmDocumentsPage />);
 
     const link = await screen.findByRole("link", { name: /nr\. 12/i });
-    expect(link.getAttribute("href")).toContain("/business/par/documente/d1");
+    // CRM-D01: același editor de acte, dar la adresa din CRM — ca meniul să nu treacă pe PAR.
+    expect(link.getAttribute("href")).toContain("/business/crm/documente/d1");
   });
 
   it("fără acte, ecranul spune de unde se pornește unul", async () => {

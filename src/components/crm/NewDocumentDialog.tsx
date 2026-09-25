@@ -10,7 +10,7 @@
  * care pleacă la client cu un preț pe el; omul trebuie să vadă suma ÎNAINTE, nu
  * s-o descopere în PDF.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Loader2, Plus, Trash2 } from "lucide-react";
 import { Alert, Button, Dialog, Input, Label, Select } from "@/components/ds";
 import { listCrmProducts, type CrmProduct } from "@/lib/api/crm";
@@ -54,14 +54,67 @@ function parsePrice(raw: string): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null;
 }
 
+/**
+ * CRM-D02 — ce știe deja leadul despre afacere. Dialogul pornea gol („Total 0,00 MDL") pe un lead
+ * de 29.000 cu produsul ales — vânzătorul reintroducea ce scrisese deja în fișă.
+ */
+export interface NewDocumentPrefill {
+  productId?: string | null;
+  productQty?: number | null;
+  /** Valoarea negociată a afacerii (cenți), pentru toată cantitatea. */
+  valueCents?: number | null;
+  /** Ce se vinde, în cuvintele leadului — pentru rândul scris de mână când n-are produs din catalog. */
+  description?: string | null;
+}
+
+/**
+ * Suma pentru un câmp editabil: „29000,00", FĂRĂ separator de mii. `money()` scrie „29.000,00",
+ * pe care `parsePrice` nu-l citește înapoi (punctul de mii devine punct zecimal) — prețul negociat
+ * ar fi căzut tăcut pe cel din catalog.
+ */
+function priceInput(cents: number): string {
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+/** Pozițiile de pornire din datele leadului. Pură, ca să se poată testa fără dialog. */
+export { parsePrice };
+
+export function prefillLines(
+  prefill: NewDocumentPrefill | undefined,
+  products: ReadonlyArray<Pick<CrmProduct, "id" | "listPriceCents">>
+): { chosen: ChosenProduct[]; freeLines: FreeLine[] } {
+  if (!prefill) return { chosen: [], freeLines: [] };
+  const qty = prefill.productQty && prefill.productQty > 0 ? prefill.productQty : 1;
+  const value = prefill.valueCents && prefill.valueCents > 0 ? prefill.valueCents : null;
+  const product = prefill.productId ? products.find((p) => p.id === prefill.productId) : undefined;
+  if (product) {
+    // Prețul negociat bate lista doar când chiar diferă — altfel câmpul rămâne gol („din catalog").
+    const unit = value ? Math.round(value / qty) : null;
+    const negotiated = unit !== null && unit !== product.listPriceCents;
+    return {
+      chosen: [{ productId: product.id, quantity: qty, priceText: negotiated ? priceInput(unit) : "" }],
+      freeLines: [],
+    };
+  }
+  if (value) {
+    return {
+      chosen: [],
+      freeLines: [{ description: prefill.description?.trim() || "Servicii", quantity: 1, priceText: priceInput(value) }],
+    };
+  }
+  return { chosen: [], freeLines: [] };
+}
+
 export function NewDocumentDialog({
   leadId,
   leadName,
+  prefill,
   onClose,
   onCreated,
 }: {
   leadId: string;
   leadName: string;
+  prefill?: NewDocumentPrefill;
   onClose: () => void;
   onCreated?: () => void | Promise<void>;
 }) {
@@ -76,9 +129,20 @@ export function NewDocumentDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pozițiile din lead se pun O DATĂ, după ce catalogul e aici (prețul de listă decide dacă
+  // valoarea leadului e un preț negociat). După aceea, dialogul e al omului.
+  const prefilled = useRef(false);
   useEffect(() => {
     listCrmProducts()
-      .then((r) => setProducts(r.items))
+      .then((r) => {
+        setProducts(r.items);
+        if (!prefilled.current) {
+          prefilled.current = true;
+          const start = prefillLines(prefill, r.items);
+          setChosen(start.chosen);
+          setFreeLines(start.freeLines);
+        }
+      })
       .catch(() => setProducts([]));
     // Lista cere `/api/docs/templates`, care instalează biblioteca standard la prima deschidere —
     // deci un workspace nou are din prima din ce alege.

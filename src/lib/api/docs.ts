@@ -4,7 +4,9 @@
  */
 import { api } from "@/lib/api";
 
-export type DocStatus = "draft" | "final" | "cancelled";
+/** Aceleași stări ca pe server (`doc_documents.status`): trimis/semnat/refuzat vin din ciclul de viață
+ *  al actelor CRM (CRM-P16) — tipul le ignora, deci editorul nu putea reacționa la ele. */
+export type DocStatus = "draft" | "pending_approval" | "final" | "sent" | "signed" | "rejected" | "cancelled";
 
 export interface DocListItem {
   id: string;
@@ -165,7 +167,11 @@ export const DOC_KIND_LABELS: Record<string, string> = {
 
 export const DOC_STATUS_LABELS: Record<DocStatus, string> = {
   draft: "Ciornă",
+  pending_approval: "În aprobare",
   final: "Finalizat",
+  sent: "Trimis",
+  signed: "Semnat",
+  rejected: "Refuzat",
   cancelled: "Anulat",
 };
 

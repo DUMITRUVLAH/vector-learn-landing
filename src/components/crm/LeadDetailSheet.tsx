@@ -1769,6 +1769,12 @@ export function LeadDetailSheet({
         <NewDocumentDialog
           leadId={lead.id}
           leadName={lead.company || lead.fullName}
+          prefill={{
+            productId: lead.productId,
+            productQty: lead.productQty,
+            valueCents: lead.valueCents,
+            description: lead.dealName || lead.interestCourse,
+          }}
           onClose={() => setNewDocOpen(false)}
           onCreated={reloadDocuments}
         />
