@@ -81,14 +81,14 @@ export function Button({
 
   if (href) {
     return (
-      <Link to={href} className={cn(classes, "no-underline")} aria-label={rest["aria-label"]}>
+      <Link to={href} data-slot="button" data-variant={variant} className={cn(classes, "no-underline")} aria-label={rest["aria-label"]}>
         {children}
       </Link>
     );
   }
 
   return (
-    <button type="button" className={classes} {...rest}>
+    <button type="button" data-slot="button" data-variant={variant} className={classes} {...rest}>
       {children}
     </button>
   );

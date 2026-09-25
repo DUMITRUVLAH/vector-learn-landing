@@ -49,6 +49,7 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
 export function Input({ invalid, icon, className, ...rest }: InputProps) {
   const field = (
     <input
+      data-slot="input"
       aria-invalid={invalid || undefined}
       className={cn(FIELD, "h-10 max-sm:h-11", invalid ? "border-destructive" : "border-input", icon && "pl-9", className)}
       {...rest}
@@ -77,6 +78,7 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
 export function Textarea({ invalid, rows = 3, className, ...rest }: TextareaProps) {
   return (
     <textarea
+      data-slot="input"
       rows={rows}
       aria-invalid={invalid || undefined}
       className={cn(
@@ -106,6 +108,7 @@ export function Select({ invalid, className, children, ...rest }: SelectProps) {
   return (
     <div className={cn("relative inline-flex w-full", className)}>
       <select
+        data-slot="input"
         aria-invalid={invalid || undefined}
         className={cn(
           FIELD,

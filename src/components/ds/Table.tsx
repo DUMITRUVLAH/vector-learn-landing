@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export function Table({ className, children, ...rest }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div data-slot="table" className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className={cn("w-full border-collapse text-sm", className)} {...rest}>
         {children}
       </table>

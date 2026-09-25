@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import "./styles/gm3.css";
 import { installGlobalErrorReporting } from "./lib/telemetry";
 import { syncDocumentLang } from "./lib/i18n";
 

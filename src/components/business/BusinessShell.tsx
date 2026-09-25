@@ -12,6 +12,8 @@
  */
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  Plus,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Landmark,
@@ -257,7 +259,7 @@ const CRM_NAV_GROUPS: NavGroup[] = [
   {
     section: null,
     items: [
-      { label: "Acasă CRM", href: "/business/crm", icon: Home, tone: "violet" },
+      { label: "Acasă", href: "/business/crm", icon: Home, tone: "violet" },
       { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare, tone: "sky" },
       { label: "Astăzi", href: "/business/crm/astazi", icon: CalendarClock, tone: "amber" },
       { label: "Clienți", href: "/business/crm/clienti", icon: Building2, tone: "rose" },
@@ -265,21 +267,29 @@ const CRM_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    section: "Documente & comunicare",
+    section: "Vânzări",
     prefix: "/business/crm",
     items: [
       { label: "Documente", href: "/business/crm/documente", icon: FileText, tone: "orange" },
       { label: "Comunicare", href: "/business/crm/comunicare", icon: MessageCircle, tone: "blue" },
-      { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
       { label: "Cadențe", href: "/business/crm/cadente", icon: RefreshCw, tone: "amber" },
+      { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
     ],
   },
   {
     section: "Analiză",
     prefix: "/business/crm",
     items: [
-      { label: "Tabloul pâlniei", href: "/business/crm/palnie", icon: Filter, tone: "sky" },
       { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3, tone: "violet" },
+      { label: "Tabloul pâlniei", href: "/business/crm/palnie", icon: Filter, tone: "sky" },
+    ],
+  },
+  {
+    // Import și Repartizare stăteau sub „Analiză", deși nu analizează nimic — sunt operațiuni
+    // pe bază, făcute de manager. Aici stau lângă celelalte unelte de administrare.
+    section: "Administrare",
+    prefix: "/business/crm",
+    items: [
       { label: "Import", href: "/business/crm/import", icon: Upload, tone: "teal" },
       {
         label: "Repartizare",
@@ -288,15 +298,9 @@ const CRM_NAV_GROUPS: NavGroup[] = [
         tone: "amber",
         crmPermission: "assignment.manage",
       },
-    ],
-  },
-  {
-    section: "Administrare",
-    prefix: "/business/crm",
-    items: [
       { label: "Drepturi", href: "/business/crm/drepturi", icon: ShieldCheck, tone: "teal", crmPermission: "audit.view" },
       { label: "Jurnal", href: "/business/crm/jurnal", icon: HistoryIcon, tone: "violet", crmPermission: "audit.view" },
-      { label: "API", href: "/business/crm/api", icon: Zap, tone: "rose", crmPermission: "audit.view" },
+      { label: "API", href: "/business/crm/api", icon: KeyRound, tone: "rose", crmPermission: "audit.view" },
     ],
   },
 ];
@@ -346,12 +350,15 @@ function SidebarGroup({
   financeCount,
   /** When the user is filtering, groups stay expanded so matches are never hidden. */
   forceOpen,
+  gm3 = false,
 }: {
   group: NavGroup;
   path: string;
   inboxCount: number;
   financeCount: number;
   forceOpen: boolean;
+  /** CRM-G01 — rânduri în stilul Google Drive (vezi SidebarNavItem `variant="gm3"`). */
+  gm3?: boolean;
 }) {
   const isActive = !!group.prefix && path.startsWith(group.prefix);
   // Sections without a label are always visible (no toggle needed).
@@ -378,14 +385,15 @@ function SidebarGroup({
       href={item.href}
       label={item.label}
       tone={item.tone}
-      icon={<item.icon className="h-3.5 w-3.5" />}
+      icon={<item.icon className={gm3 ? "h-5 w-5" : "h-3.5 w-3.5"} />}
       active={isItemActive(item, path)}
       count={badgeFor(item.href, inboxCount, financeCount)}
+      variant={gm3 ? "gm3" : "hr365"}
     />
   ));
 
   if (!hasHeader) {
-    return <div className="flex flex-col gap-0.5">{rows}</div>;
+    return <div className={cn("flex flex-col", gm3 ? "gap-0" : "gap-0.5")}>{rows}</div>;
   }
 
   const expanded = forceOpen || open;
@@ -396,8 +404,10 @@ function SidebarGroup({
         type="button"
         onClick={() => setOpenPersisted(!expanded)}
         className={cn(
-          "flex w-full items-center justify-between rounded-md px-3 py-1.5 text-3xs font-semibold uppercase tracking-group transition-colors",
-          isActive
+          gm3
+            ? "flex w-full items-center justify-between rounded-full px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-foreground/5"
+            : "flex w-full items-center justify-between rounded-md px-3 py-1.5 text-3xs font-semibold uppercase tracking-group transition-colors",
+          gm3 ? null : isActive
             ? "text-primary hover:bg-primary/5"
             : "text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
         )}
@@ -410,7 +420,7 @@ function SidebarGroup({
         />
       </button>
       {expanded && (
-        <div className="mt-1 flex flex-col gap-0.5">{rows}</div>
+        <div className={cn("mt-1 flex flex-col", gm3 ? "gap-0" : "gap-0.5")}>{rows}</div>
       )}
     </div>
   );
@@ -428,7 +438,9 @@ function SidebarBody({
   userRole,
   onLogout,
   onNavigate,
+  gm3 = false,
 }: {
+  gm3?: boolean;
   navGroups: NavGroup[];
   path: string;
   inboxCount: number;
@@ -472,8 +484,21 @@ function SidebarBody({
         <span className="text-[15px] font-bold tracking-tight text-sidebar-foreground">FinFlow</span>
       </Link>
 
-      {/* Filter */}
-      <div className="px-4 pb-2">
+      {/* CRM-G01 — butonul „Nou" din Drive: acțiunea cea mai frecventă stă sus, ridicată. */}
+      {gm3 && (
+        <div className="px-3 pb-4">
+          <Link
+            to="/business/crm/pipeline?nou=1"
+            className="inline-flex h-14 items-center gap-3 rounded-2xl bg-card pl-4 pr-6 text-sm font-medium text-foreground no-underline shadow-md transition-shadow hover:no-underline hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Plus className="h-6 w-6" aria-hidden="true" />
+            Lead nou
+          </Link>
+        </div>
+      )}
+
+      {/* Filter — în CRM îl înlocuiește căutarea din bara de sus */}
+      {!gm3 && <div className="px-4 pb-2">
         <label htmlFor="finflow-nav-search" className="sr-only">
           Caută funcționalitate
         </label>
@@ -492,10 +517,22 @@ function SidebarBody({
             className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
-      </div>
+      </div>}
 
       {/* Back to modules — only inside a module, și doar dacă mai există altul */}
-      {showBackToModules && (
+      {showBackToModules && gm3 && (
+        <div className="px-3 pb-2">
+          <Link
+            to="/business/dashboard"
+            className="flex h-8 items-center gap-4 rounded-full pl-4 pr-3 text-sm text-muted-foreground no-underline transition-colors hover:bg-foreground/5 hover:no-underline"
+            aria-label="Înapoi la toate modulele"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            Toate modulele
+          </Link>
+        </div>
+      )}
+      {showBackToModules && !gm3 && (
         <div className="px-4 pb-3 pt-1">
           <Link
             to="/business/dashboard"
@@ -512,7 +549,7 @@ function SidebarBody({
       <nav
         ref={navRef}
         onScroll={(e) => { navScroll.top = (e.target as HTMLElement).scrollTop; }}
-        className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-2"
+        className={cn("flex flex-1 flex-col overflow-y-auto px-3 py-2", gm3 ? "gap-4" : "gap-5")}
         aria-label="Meniu FinFlow"
       >
         {showDashboard && (
@@ -532,6 +569,7 @@ function SidebarBody({
             inboxCount={inboxCount}
             financeCount={financeCount}
             forceOpen={q.length > 0}
+            gm3={gm3}
           />
         ))}
         {q && shownGroups.length === 0 && (
@@ -540,7 +578,7 @@ function SidebarBody({
       </nav>
 
       {/* User */}
-      <div className="flex items-center gap-3 border-t border-sidebar-border p-3">
+      <div className={cn("flex items-center gap-3 p-3", !gm3 && "border-t border-sidebar-border")}>
         <Avatar name={userName} shape="square" size="sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-sidebar-foreground">{userName}</p>
@@ -556,6 +594,44 @@ function SidebarBody({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * CRM-G01 — căutarea din bara de sus, ca „Caută în Drive": o pastilă largă, umplută, care devine
+ * albă la focus. Caută în leaduri (nume, telefon, e-mail, firmă) și deschide Pipeline-ul filtrat —
+ * același filtru pe care îl are tabla, deci rezultatul e cel pe care l-ai fi obținut acolo.
+ */
+function CrmSearchBar({ onSearch }: { onSearch: (q: string) => void }) {
+  const [value, setValue] = useState("");
+  return (
+    <form
+      role="search"
+      className="min-w-0 flex-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const q = value.trim();
+        if (q) onSearch(q);
+      }}
+    >
+      <label htmlFor="crm-global-search" className="sr-only">
+        Caută în CRM
+      </label>
+      <div className="relative max-w-2xl">
+        <Search
+          className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <input
+          id="crm-global-search"
+          type="search"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Caută leaduri, firme, telefoane"
+          className="h-12 w-full rounded-full border-0 bg-secondary pl-12 pr-4 text-base text-foreground outline-none transition-shadow placeholder:text-muted-foreground focus:bg-card focus:shadow-md focus-visible:ring-0"
+        />
+      </div>
+    </form>
   );
 }
 
@@ -706,11 +782,12 @@ export function BusinessShell({
       userName={userName}
       userRole={userRole}
       onLogout={handleLogout}
+      gm3={useCrmNav}
     />
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className={cn("flex min-h-screen flex-col bg-background text-foreground", useCrmNav && "gm3")}>
       {/* PLATFORM-403: pe o sesiune de impersonare, banda stă deasupra întregului shell. */}
       <ImpersonationBanner />
       {/* `flex-1` e de ajuns: părintele are deja `min-h-screen`. Al doilea `min-h-screen`
@@ -719,7 +796,10 @@ export function BusinessShell({
       <div className="flex flex-1">
       {/* Desktop sidebar */}
       <aside
-        className="hidden w-sidebar shrink-0 border-r border-sidebar-border bg-sidebar md:sticky md:top-0 md:flex md:h-screen md:flex-col"
+        className={cn(
+          "hidden w-sidebar shrink-0 bg-sidebar md:sticky md:top-0 md:flex md:h-screen md:flex-col",
+          useCrmNav ? "border-r-0" : "border-r border-sidebar-border",
+        )}
         aria-label="Navigare Business Suite"
       >
         {sidebarBody}
@@ -746,6 +826,7 @@ export function BusinessShell({
               userRole={userRole}
               onLogout={handleLogout}
               onNavigate={() => setDrawerOpen(false)}
+              gm3={useCrmNav}
             />
           </div>
           <button
@@ -765,7 +846,7 @@ export function BusinessShell({
           (assistive tech reads them as part of the page; "first control in main"
           resolves to the bell instead of the page's own first control). */}
       <div className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
-        <header className="flex items-center gap-2 px-5 pt-5 sm:px-8">
+        <header className={cn("flex items-center gap-2", useCrmNav ? "h-16 px-3 md:pl-0 md:pr-4" : "px-5 pt-5 sm:px-8")}>
           {/* MOB-002: hamburgerul e cel mai apăsat control de pe telefon și măsura 40×40. */}
           <button
             type="button"
@@ -775,13 +856,25 @@ export function BusinessShell({
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
-          <div className="flex-1" />
+          {useCrmNav ? <CrmSearchBar onSearch={(q) => navigate(`/business/crm/pipeline?q=${encodeURIComponent(q)}`)} /> : <div className="flex-1" />}
           {/* Comutatorul stă lângă clopoțel, în rândul de utilitare: e chrome de
               aplicație, nu conținut de pagină, și rămâne în același loc pe toate rutele. */}
           <LanguageSwitcher variant="compact" />
           <NotificationBell />
         </header>
 
+        {useCrmNav ? (
+          /* CRM-G01 — semnătura Drive: conținutul stă pe o suprafață albă rotunjită care plutește
+             pe fundalul nuanțat al aplicației; meniul și bara de sus NU sunt pe alb. */
+          <div className="flex flex-1 flex-col bg-card md:mb-4 md:mr-4 md:rounded-2xl">
+            <main className="w-full px-4 pb-8 pt-4 sm:px-6">
+              {pageTitle ? (
+                <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} variant="gm3" />
+              ) : null}
+              {children}
+            </main>
+          </div>
+        ) : (
         <main className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 sm:px-8">
           {/* An empty pageTitle means the page owns its own header (FinLayout passes ""),
               so we must not emit a stray empty <h1> above it. */}
@@ -790,6 +883,7 @@ export function BusinessShell({
           ) : null}
           {children}
         </main>
+        )}
       </div>
 
       {/* Mobile bottom nav — 4 tab-uri principale */}

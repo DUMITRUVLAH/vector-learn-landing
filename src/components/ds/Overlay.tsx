@@ -79,6 +79,7 @@ export function Dialog({ open, onClose, title, description, footer, size = "md",
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
+        data-slot="dialog"
         className={cn(
           // `grid-cols-[minmax(0,1fr)]`, nu doar `grid`: un element de grilă are implicit
           // `min-width: auto`, așa că un rând lung (numele unui beneficiar, de pildă) lățea

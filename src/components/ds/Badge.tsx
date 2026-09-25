@@ -37,6 +37,7 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 export function Badge({ variant = "default", className, children, ...rest }: BadgeProps) {
   return (
     <span
+      data-slot="badge"
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold leading-normal",
         VARIANTS[variant],

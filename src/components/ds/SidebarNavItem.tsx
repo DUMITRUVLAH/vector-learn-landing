@@ -7,6 +7,10 @@
  *
  * Renders a router `<Link>` when given `href` — nav rows must stay real links
  * so middle-click / open-in-new-tab work.
+ *
+ * CRM-G01 — `variant="gm3"` e rândul din Google Drive: 32px, pastilă pe toată lățimea,
+ * iconiță simplă de 20px (fără pătrățel pastel), rândul activ umplut cu „secondary container"
+ * (albastru deschis) și text îngroșat — fără umbră colorată.
  */
 import type { ReactNode } from "react";
 import { Link } from "@/router/HashRouter";
@@ -26,6 +30,7 @@ export interface SidebarNavItemProps {
   href?: string;
   onClick?: () => void;
   className?: string;
+  variant?: "hr365" | "gm3";
 }
 
 export function SidebarNavItem({
@@ -38,7 +43,13 @@ export function SidebarNavItem({
   href,
   onClick,
   className,
+  variant = "hr365",
 }: SidebarNavItemProps) {
+  if (variant === "gm3") {
+    return (
+      <Gm3NavItem label={label} icon={icon} active={active} count={count} href={href} onClick={onClick} className={className} />
+    );
+  }
   const classes = cn(
     "flex w-full items-center text-left font-medium transition-all duration-200 ease-out no-underline hover:no-underline",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1",
@@ -78,6 +89,48 @@ export function SidebarNavItem({
     );
   }
 
+  return (
+    <button type="button" onClick={onClick} className={classes} aria-current={active ? "page" : undefined}>
+      {inner}
+    </button>
+  );
+}
+
+function Gm3NavItem({
+  label,
+  icon,
+  active,
+  count,
+  href,
+  onClick,
+  className,
+}: Pick<SidebarNavItemProps, "label" | "icon" | "active" | "count" | "href" | "onClick" | "className">) {
+  const classes = cn(
+    "flex h-8 w-full items-center gap-4 rounded-full pl-4 pr-3 text-left text-sm no-underline transition-colors hover:no-underline",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+    active
+      ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+      : "text-sidebar-foreground hover:bg-foreground/5",
+    className,
+  );
+  const inner = (
+    <>
+      <span className="inline-flex shrink-0 items-center justify-center" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="flex-1 truncate">{label}</span>
+      {count && count > 0 ? (
+        <span className="text-xs font-semibold tabular-nums">{count > 99 ? "99+" : count}</span>
+      ) : null}
+    </>
+  );
+  if (href) {
+    return (
+      <Link to={href} className={classes} aria-current={active ? "page" : undefined}>
+        {inner}
+      </Link>
+    );
+  }
   return (
     <button type="button" onClick={onClick} className={classes} aria-current={active ? "page" : undefined}>
       {inner}

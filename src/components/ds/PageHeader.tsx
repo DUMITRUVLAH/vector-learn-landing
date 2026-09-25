@@ -13,6 +13,8 @@ export interface PageHeaderProps {
   subtitle?: ReactNode;
   actions?: ReactNode;
   size?: "default" | "large";
+  /** CRM-G01 — antetul din Google Drive: titlu de 24px cu greutate normală, fără „erou". */
+  variant?: "hr365" | "gm3";
   className?: string;
 }
 
@@ -22,23 +24,28 @@ export function PageHeader({
   subtitle,
   actions,
   size = "default",
+  variant = "hr365",
   className,
 }: PageHeaderProps) {
+  const gm3 = variant === "gm3";
   return (
     <div
       className={cn(
-        "mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+        gm3
+          ? "mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          : "mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
         className,
       )}
     >
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <div className={cn("flex min-w-0 flex-col", gm3 ? "gap-0.5" : "gap-1.5")}>
         {eyebrow ? (
           <p className="text-sm font-medium capitalize text-muted-foreground">{eyebrow}</p>
         ) : null}
         <h1
           className={cn(
-            "font-bold leading-tight tracking-tight",
-            size === "large" ? "text-3xl sm:text-[2.5rem]" : "text-2xl sm:text-3xl",
+            gm3
+              ? "text-2xl font-normal leading-tight"
+              : cn("font-bold leading-tight tracking-tight", size === "large" ? "text-3xl sm:text-[2.5rem]" : "text-2xl sm:text-3xl"),
           )}
         >
           {title}

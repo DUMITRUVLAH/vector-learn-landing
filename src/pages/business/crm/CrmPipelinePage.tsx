@@ -39,6 +39,7 @@ import {
   type CrmBoardFilters,
 } from "@/lib/api/crm";
 import { cleanCrmSegments, crmSegmentCount, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
+import { readPipelineUrl, syncPipelineUrl } from "@/lib/crm/pipelineUrl";
 import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, crmSourceLabel, stageColorClasses } from "@/components/crm/constants";
 import { formatCents, formatCentsShort, leadValueToCents, leadCardLines } from "@/components/crm/format";
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
@@ -61,6 +62,7 @@ const VIEW_MODE_KEY = "crm_leads_view";
 // ─── Pagina principală ─────────────────────────────────────────────────────────
 
 export function CrmPipelinePage() {
+  const { path: routePath, navigate } = useRouter();
   const { data: session } = useBusinessSession();
   const currentUserId = session?.user.id ?? null;
 
@@ -83,7 +85,7 @@ export function CrmPipelinePage() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
 
-  const [showAddLead, setShowAddLead] = useState(false);
+  const [showAddLead, setShowAddLead] = useState(() => readPipelineUrl(routePath).nou);
   const [showStageEditor, setShowStageEditor] = useState(false);
   const [showPipelineManager, setShowPipelineManager] = useState(false);
 
@@ -99,12 +101,12 @@ export function CrmPipelinePage() {
   });
   /** Crește la fiecare schimbare de date venită din afara listei (fișă închisă, mutare). */
   const [listRefreshToken, setListRefreshToken] = useState(0);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => readPipelineUrl(routePath).lead);
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; toStage: string } | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
 
   // ─── Filtre (client-side, peste ce a întors deja /pipeline — fără cereri noi) ───
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => readPipelineUrl(routePath).q ?? "");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [onlyMine, setOnlyMine] = useState(false);
 
@@ -178,7 +180,6 @@ export function CrmPipelinePage() {
   const canManagePipelines = can("pipelines.manage");
   /** Cine poate repartiza — același drept ca pe ecranul de repartizare. */
   const canAssign = can("assignment.manage");
-  const { navigate } = useRouter();
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.id, m.fullName]));
 
   /** Comutarea vederii, cu preferința salvată. Stocarea poate arunca (mod privat) — vederea se
@@ -265,6 +266,23 @@ export function CrmPipelinePage() {
     setSelectedLeadId(null);
     void loadPipeline({ pipelineId: id });
   }
+
+  // CRM-G01 — căutarea din bara de sus / „Lead nou" / un link la lead pot sosi și când tabla e
+  // deja deschisă: aceeași componentă primește doar o altă adresă, deci o citim la fiecare schimbare.
+  useEffect(() => {
+    const url = readPipelineUrl(routePath);
+    if (url.q !== null) setSearch(url.q);
+    if (url.lead) setSelectedLeadId(url.lead);
+    if (url.nou) setShowAddLead(true);
+  }, [routePath]);
+
+  // Adresa urmărește fișa deschisă: linkul copiat din bară duce la ACEST lead. `?q` și `?nou` au
+  // fost consumate mai sus; rămân în adresă doar cât fișa e închisă și n-a mișcat nimeni nimic.
+  useEffect(() => {
+    const url = readPipelineUrl(routePath);
+    if (selectedLeadId || url.lead) syncPipelineUrl(selectedLeadId);
+    else if (url.nou && !showAddLead) syncPipelineUrl(null);
+  }, [selectedLeadId, showAddLead, routePath]);
 
   useEffect(() => {
     if (!toast) return;

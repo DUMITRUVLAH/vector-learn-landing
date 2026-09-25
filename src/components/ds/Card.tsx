@@ -19,6 +19,7 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export function Card({ tone = "default", hover = false, className, children, ...rest }: CardProps) {
   return (
     <div
+      data-slot="card"
       className={cn(
         "bg-card text-card-foreground border",
         tone === "dashboard"
