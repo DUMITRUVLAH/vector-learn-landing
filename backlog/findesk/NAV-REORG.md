@@ -54,6 +54,7 @@ e-Factura, mutarea în CRM a ce ține de vânzări și un prim ecran mai bun.
 | NAV-07 | Un titlu per pagină, cu numele din meniu (11 pagini aveau două `<h1>`) | livrat |
 | NAV-08 | IT Park: modulul întreg rutat în `/business/fin/itpark/*` (azi doar detaliul, rupt) | livrat |
 | NAV-09 | Fără `/app/fin`: 23 de linkuri + redirecționare, 3 pagini orfane rutate, fișa partenerului reparată | livrat |
+| NAV-10 | Bancă: un singur import și o singură coadă de potrivire (propunere, mai jos) | **decizie owner** |
 
 ## Backlog descoperit (nu intră în faza asta)
 
@@ -80,3 +81,35 @@ e-Factura, mutarea în CRM a ce ține de vânzări și un prim ecran mai bun.
 - **IT Park e rupt pe `/business`**: din 10 pagini e rutată doar fișa unui dosar, care caută id-ul
   după prefixul vechi `/app/fin/itpark/<id>` → pe `/business/fin/itpark` rămâne pe spinner, fără
   meniu. Lista, asistentul, anexele și scrisorile nu sunt accesibile deloc → NAV-08.
+
+## NAV-10 — propunere: zona „Bancă” are patru uși de import pentru același extras
+
+Ce există azi (verificat în cod și în browser, 2026-09-26):
+
+| Ecran | Rută | Ce importă | Unde scrie | Ce face apoi |
+|---|---|---|---|---|
+| Extrase bancare | `/statement/upload` | PDF, CSV, Excel, MT940, OFX | `fin_captures` (liniile extrasului) | potrivire cu facturile (Invoice Reporting), export e-Factura |
+| Conturi bancare | `/banklink/import` | OFX, MT940 | `fin_bank_transactions` (coloanele BankLink) + `fin_bank_connections` | auto-potrivire cu facturi, coadă |
+| Încasări | `/cash/import` (din butonul „Import extras”) | CSV, MT940 | `fin_bank_transactions` (coloanele Cash) | plăți + alocări pe facturi, coadă „Nepotrivite” |
+| Reconciliere & TVA import | butonul de pe pagină → `/api/fin/cash/import` | CSV, MT940 | același import ca Încasări | potrivire cu documentele echipelor |
+
+Plus `/cash` („Tranzacții bancare importate”), o a cincea vedere peste aceleași tranzacții.
+
+Problema pentru utilizator: contabilul are un singur extras de la bancă și patru locuri în care să-l
+încarce, fiecare cu alt format acceptat și altă coadă de potrivire. Ce a încărcat într-un loc nu apare
+în celelalte. Problema tehnică: `fin_bank_transactions` e definită de DOUĂ scheme (`finCash.ts` și
+`finBankLink.ts`) cu coloane diferite. Pe prod tabela le are pe amândouă (creată istoric din schemă),
+dar o bază nouă, creată din migrări, nu are coloanele BankLink și nici `fin_bank_connections` →
+„Conturi bancare” dă 500 pe orice mediu nou (local, preview, un client nou pe altă bază).
+
+Recomandare (de confirmat de owner, fiindcă atinge date reale):
+1. **O singură ușă de import**: „Extrase bancare → Încarcă extras” (acceptă deja toate formatele).
+   Celelalte butoane de import duc acolo.
+2. **O singură coadă de potrivire**, în „Încasări”: fiecare linie de extras se potrivește cu o factură
+   (încasare) sau cu o cheltuială (plată). Reconcilierea devine o filă a ei.
+3. „Conturi bancare” rămâne doar lista conturilor (IBAN, bancă, sold), fără import propriu.
+4. Tehnic: o migrare care creează `fin_bank_connections` și adaugă coloanele BankLink lipsă, cu heal în
+   `sync-schema.ts`, ca să nu mai depindă de istoria bazei de prod.
+
+Ce am făcut deja, fără risc: titlul `/cash` nu mai e al doilea „Încasări”, iar descrierea „Conturi
+bancare” nu mai conține codul intern „GAP G2”.

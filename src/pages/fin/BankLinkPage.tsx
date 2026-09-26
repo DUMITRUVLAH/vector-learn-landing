@@ -154,7 +154,7 @@ export default function BankLinkPage() {
   return (
     <AppShell
       pageTitle="Conturi bancare"
-      pageDescription="Import automat extrase bancare OFX/MT940 — GAP G2"
+      pageDescription="Conexiunile bancare și importul extraselor OFX / MT940."
     >
       {/* ─── Header actions (title/subtitle live in the shell) ──────── */}
       <div className="mb-6 flex flex-wrap items-center justify-end gap-3">

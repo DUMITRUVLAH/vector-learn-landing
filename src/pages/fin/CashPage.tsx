@@ -96,7 +96,7 @@ export default function CashPage() {
     .reduce((sum, t) => sum + t.amountCents, 0);
 
   return (
-    <AppShell pageTitle="Încasări (CASH)">
+    <AppShell pageTitle="Tranzacții bancare importate">
       <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
