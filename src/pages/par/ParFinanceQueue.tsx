@@ -47,6 +47,7 @@ import {
   TableRow,
   Tabs,
   Textarea,
+  Tooltip,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { FinanceAmendPanel } from "@/components/par/ParFinanceAmend";
@@ -1095,8 +1096,10 @@ function AmendModal({
  * acțiuni, ca pictograme, intră pe o treime din lățime.
  *
  * Ce NU se pierde odată cu textul: fiecare buton păstrează `aria-label`-ul complet (cu numărul
- * cererii), deci cititorul de ecran aude „Înregistrează plata pentru PAR-2026-0042", iar `title`
- * dă cuvântul scurt la survolare. Ordinea e cea a fluxului — primire, corectură, plată, dosar —
+ * cererii), deci cititorul de ecran aude „Înregistrează plata pentru PAR-2026-0042", iar la
+ * survolare `Tooltip` scrie acțiunea în cuvinte — pe loc, nu după cele 1–2 secunde ale casetei
+ * native de `title` (owner, 26.09.2026: „când faci hover pe butoane să poți vedea la ce acțiune
+ * se referă"). Ordinea e cea a fluxului — primire, corectură, plată, dosar —
  * iar arhivarea stă ultima, separată de o linie: e singura care scoate cererea din listă.
  */
 function QueueActions({
@@ -1116,90 +1119,99 @@ function QueueActions({
     <div className={cn("flex items-center justify-start gap-1", wrap ? "flex-wrap" : "flex-nowrap")}>
       {/* Secțiunea 16 — pe cererile aprobate / ajunse la finanțe */}
       {!archivedView && ["approved", "in_finance"].includes(par.status) && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onSection16(par)}
-          aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
-          title="Secțiunea 16 — PAR BL, primit de, alocat la"
-        >
-          <ClipboardList className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <Tooltip label="Secțiunea 16 — PAR BL, primit de, alocat la">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onSection16(par)}
+            aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
+          >
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </Tooltip>
       )}
       {/* Completarea de după semnare (doar în lista de lucru: în arhivă nu se mai corectează). */}
       {!archivedView && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onAmend(par)}
-          aria-label={`Completează cererea ${par.requestNo} — linia de buget, descrierea, anexele`}
-          title="Completează — linia de buget, descrierea, actele adiționale"
-        >
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <Tooltip label="Completează — linia de buget, descrierea, actele adiționale">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onAmend(par)}
+            aria-label={`Completează cererea ${par.requestNo} — linia de buget, descrierea, anexele`}
+          >
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </Tooltip>
       )}
       {/* Plata — pe cererile ajunse la finanțe. Singura acțiune colorată: e capătul drumului. */}
       {!archivedView && par.status === "in_finance" && (
-        <Button
-          size="icon"
-          onClick={() => onPay(par)}
-          aria-label={`Înregistrează plata pentru ${par.requestNo}`}
-          title="Plata"
-        >
-          <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <Tooltip label="Înregistrează plata">
+          <Button
+            size="icon"
+            onClick={() => onPay(par)}
+            aria-label={`Înregistrează plata pentru ${par.requestNo}`}
+          >
+            <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </Tooltip>
       )}
       {/* După re-aprobarea depășirii, plata se poate relua */}
       {!archivedView && par.status === "reapproval_required" && par.payment?.overageReapproved && (
-        <Button
-          size="icon"
-          onClick={() => onPay(par)}
-          aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
-          title="Plata (depășire re-aprobată)"
-        >
-          <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <Tooltip label="Înregistrează plata (depășire re-aprobată)">
+          <Button
+            size="icon"
+            onClick={() => onPay(par)}
+            aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
+          >
+            <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </Tooltip>
       )}
       {/* „De ce nu pot plăti?" NU se repetă aici: rândul spune deja, pe coloana de status,
           „Re-aprobare necesară (>10% depășire)". Două etichete pentru același lucru ocupau
           lățime fără să adauge informație — butonul de plată lipsește, iar motivul e la vedere. */}
       {/* VM1-12: dosarul complet PDF — pe orice status */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onDosar(par)}
-        disabled={dosarLoading}
-        aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
-        title="Dosarul complet (PDF)"
-      >
-        {dosarLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <FolderDown className="h-4 w-4" aria-hidden="true" />
-        )}
-      </Button>
+      {/* Cât se pregătește dosarul, butonul e dezactivat — iar un buton dezactivat nu primește
+          evenimente de pointer, deci n-are rost o etichetă separată pentru starea aia. */}
+      <Tooltip label="Descarcă dosarul complet (PDF)">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDosar(par)}
+          disabled={dosarLoading}
+          aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
+        >
+          {dosarLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <FolderDown className="h-4 w-4" aria-hidden="true" />
+          )}
+        </Button>
+      </Tooltip>
       {/* VM4-05: scoate din listă / readu în listă — ultima, după o linie: schimbă ce vezi în coadă. */}
       <span className="mx-0.5 h-5 w-px bg-border" aria-hidden="true" />
       {archivedView ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onRestore(par)}
-          aria-label={`Readu ${par.requestNo} în coada de finanțe`}
-          title="Readu cererea în coada de lucru"
-        >
-          <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <Tooltip label="Readu cererea în coada de lucru">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onRestore(par)}
+            aria-label={`Readu ${par.requestNo} în coada de finanțe`}
+          >
+            <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </Tooltip>
       ) : (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onArchive(par)}
-          aria-label={`Arhivează cererea ${par.requestNo}`}
-          title="Scoate cererea din lista de lucru (reversibil)"
-        >
-          <Archive className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <Tooltip label="Arhivează — scoate cererea din lista de lucru (reversibil)">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onArchive(par)}
+            aria-label={`Arhivează cererea ${par.requestNo}`}
+          >
+            <Archive className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </Tooltip>
       )}
     </div>
   );

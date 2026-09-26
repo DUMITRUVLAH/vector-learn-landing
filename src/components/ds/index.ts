@@ -60,6 +60,9 @@ export type { PastelIconProps } from "./PastelIcon";
 export { SidebarNavItem } from "./SidebarNavItem";
 export type { SidebarNavItemProps } from "./SidebarNavItem";
 
+export { Tooltip } from "./Tooltip";
+export type { TooltipProps, TooltipSide } from "./Tooltip";
+
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./Table";
 export type { TableRowProps } from "./Table";
 

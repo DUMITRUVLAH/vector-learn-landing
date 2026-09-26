@@ -20,6 +20,7 @@ import {
   Label,
   Select,
   Textarea,
+  Tooltip,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
@@ -1271,10 +1272,19 @@ export default function ParInbox() {
                           </td>
                         ) : (
                           <td className="px-3 py-3 align-middle">
+                            {/* Aceleași trei pictograme, dar la survolare spun ce fac: bula de
+                                `Tooltip` apare pe loc, unde caseta nativă de `title` te lăsa să
+                                ghicești o secundă-două (owner, 26.09.2026). */}
                             <div className="flex items-center gap-0.5">
-                              <button onClick={() => handleAction(item, "approve")} title="Aprobă" aria-label={`Aprobă ${item.requestNo}`} className="rounded-md p-1.5 text-success hover:bg-success/10"><CheckCircle className="h-4 w-4" aria-hidden="true" /></button>
-                              <button onClick={() => handleAction(item, "request_changes")} title="Solicită modificări" aria-label={`Solicită modificări la ${item.requestNo}`} className="rounded-md p-1.5 text-warning hover:bg-warning/10"><MessageSquare className="h-4 w-4" aria-hidden="true" /></button>
-                              <button onClick={() => handleAction(item, "reject")} title="Respinge" aria-label={`Respinge ${item.requestNo}`} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><XCircle className="h-4 w-4" aria-hidden="true" /></button>
+                              <Tooltip label="Aprobă">
+                                <button onClick={() => handleAction(item, "approve")} aria-label={`Aprobă ${item.requestNo}`} className="rounded-md p-1.5 text-success hover:bg-success/10"><CheckCircle className="h-4 w-4" aria-hidden="true" /></button>
+                              </Tooltip>
+                              <Tooltip label="Solicită modificări">
+                                <button onClick={() => handleAction(item, "request_changes")} aria-label={`Solicită modificări la ${item.requestNo}`} className="rounded-md p-1.5 text-warning hover:bg-warning/10"><MessageSquare className="h-4 w-4" aria-hidden="true" /></button>
+                              </Tooltip>
+                              <Tooltip label="Respinge">
+                                <button onClick={() => handleAction(item, "reject")} aria-label={`Respinge ${item.requestNo}`} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><XCircle className="h-4 w-4" aria-hidden="true" /></button>
+                              </Tooltip>
                             </div>
                           </td>
                         )}

@@ -173,6 +173,21 @@ describe("ParInbox", () => {
     });
   });
 
+  // Owner, 26.09.2026: „când faci hover pe butoane să poți vedea la ce acțiune se referă".
+  // Cele trei pictograme de decizie stau una lângă alta și arată la fel ca formă — iar una
+  // dintre ele respinge cererea. `title` (tooltipul nativ) răspundea după 1–2 secunde, în
+  // caseta sistemului; acum textul apare în pagină, la survolare.
+  it("[blocant] pictogramele de decizie își spun numele la survolare", async () => {
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [makeInboxItem()], total: 1 });
+    render(<ParInbox />);
+
+    const reject = await screen.findByLabelText(/Respinge PAR-2026-0001/);
+    expect(screen.queryByText("Respinge")).not.toBeInTheDocument();
+
+    fireEvent.pointerEnter(reject.parentElement!);
+    expect(await screen.findByText("Respinge")).toBeInTheDocument();
+  });
+
   // Regresie (raportat de utilizatori, 2026-08-28, tenant ATIC): matricea DOA avea un pas 2
   // "Oricine · PAR Admin", așa că o aprobare din inbox NU trimitea cererea în Coadă finanțe — o
   // muta la pasul următor, adesea al aceleiași persoane. UI-ul nu spunea nimic: modalul se
