@@ -63,7 +63,7 @@ Leadul are o singură istorie, nu una per canal.
 | Fișier | Rol |
 |---|---|
 | `server/db/schema/comms.ts` | tabelele (vezi §3) |
-| `drizzle/0191_comms_omnichannel.sql` + `server/db/ensure/comms.ts` | migrarea + heal-ul de pe prod (sync-schema) |
+| `drizzle/0195_comms_omnichannel.sql` + `server/db/ensure/comms.ts` | migrarea + heal-ul de pe prod (sync-schema) |
 | `server/lib/comms/types.ts` | contractul adaptoarelor (`ChannelAdapter`, evenimente normalizate) |
 | `server/lib/comms/adapters/{whatsapp,telegram,viber,gmail}.ts` | traducerea furnizor ↔ model comun |
 | `server/lib/comms/ingest.ts` | mesaj primit → contact → lead → conversație → cronologie |

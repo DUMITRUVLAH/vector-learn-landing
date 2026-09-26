@@ -6,7 +6,7 @@
  * primul webhook WhatsApp/Telegram după deploy ar da 500 („relation comm_channels does not
  * exist") și furnizorul ar începe să re-livreze, apoi să dezactiveze webhook-ul.
  *
- * Aceeași listă e și conținutul migrării 0191 (testul `comms-schema` verifică potrivirea).
+ * Aceeași listă e și conținutul migrării 0195 (testul `server/db/ensure/__tests__/comms-ensure.test.ts` verifică potrivirea și aplicarea pe o bază goală).
  * Toate sunt idempotente și non-distructive; o instrucțiune per intrare.
  */
 export const COMMS_ENSURE_STATEMENTS: string[] = [
