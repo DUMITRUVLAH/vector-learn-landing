@@ -129,7 +129,7 @@ describe("workspace cu un singur modul (PAR)", () => {
     await screen.findByTestId("par-kpi-inbox");
     expect(screen.queryByText("Cheltuieli totale")).not.toBeInTheDocument();
     expect(screen.queryByText("Rezidenți ITPark activi")).not.toBeInTheDocument();
-    expect(screen.queryByText("Facturi luna")).not.toBeInTheDocument();
+    expect(screen.queryByText("Facturi restante")).not.toBeInTheDocument();
     // Un singur modul → n-are rost un lansator „alege un modul".
     expect(screen.queryByText("Alege un modul")).not.toBeInTheDocument();
   });
@@ -146,7 +146,7 @@ describe("workspace cu mai multe module", () => {
     await waitFor(() => {
       expect(screen.queryByText("Cheltuieli totale")).not.toBeInTheDocument();
     });
-    expect(screen.queryByText("Facturi luna")).not.toBeInTheDocument();
+    expect(screen.queryByText("Facturi restante")).not.toBeInTheDocument();
     expect(screen.getByText("Alege un modul")).toBeInTheDocument();
   });
 });

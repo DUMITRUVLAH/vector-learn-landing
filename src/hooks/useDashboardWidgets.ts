@@ -6,7 +6,7 @@
  *   "findesk"   — FinDesk KPIs (expenses/invoices/net)
  *   "par"       — PAR pending approvals
  *   "itpark"    — ITPark active residents
- *   "invoices"  — Invoice count this month
+ *   "invoices"  — Overdue invoices (aging)
  *   "payroll"   — Active employees count
  *   "budget"    — Budget status summary
  */
@@ -30,7 +30,7 @@ export const ALL_WIDGETS: WidgetConfig[] = [
   { id: "findesk",  label: "FinDesk",       description: "Cheltuieli, facturi și sold net" },
   { id: "par",      label: "PAR",           description: "Cereri de plată pending" },
   { id: "itpark",   label: "ITPark",        description: "Rezidenți activi IT Park" },
-  { id: "invoices", label: "Facturi luna",  description: "Facturi emise în luna curentă" },
+  { id: "invoices", label: "Facturi restante", description: "Facturi neîncasate după scadență" },
   { id: "payroll",  label: "Angajați activi", description: "Nr. angajați activi în statul de plată" },
   { id: "budget",   label: "Buget",         description: "Status buget planificat vs realizat" },
 ];

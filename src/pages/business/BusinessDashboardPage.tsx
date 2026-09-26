@@ -11,7 +11,7 @@
  * Design: HR365 — dashboard cards on `rounded-2xl` with a pastel icon chip per
  * category, and the module launcher as flat saturated tiles.
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Landmark,
   ClipboardList,
@@ -33,6 +33,9 @@ import { useDashboardWidgets, type WidgetId } from "@/hooks/useDashboardWidgets"
 import { useEnabledModules, type ModuleKey } from "@/hooks/useEnabledModules";
 import { ParFocusDashboard } from "@/components/business/ParFocusDashboard";
 import { formatCents } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { getFinAging } from "@/lib/api/finInsight";
+import { listBudgets } from "@/lib/api/finBudget";
 import { cn } from "@/lib/utils";
 import {
   Button,
@@ -146,7 +149,7 @@ interface ModuleTile {
 const MODULE_TILES: ModuleTile[] = [
   {
     label: "FinDesk",
-    description: "Facturi, cheltuieli, plăți, TVA și e-Factura.",
+    description: "Facturi și e-Factura, cheltuieli, bancă, TVA și salarii.",
     href: "/business/fin/",
     icon: <Landmark className="h-7 w-7" />,
     tone: "sky",
@@ -162,7 +165,7 @@ const MODULE_TILES: ModuleTile[] = [
   },
   {
     label: "CRM — Vânzări",
-    description: "Pipeline de leaduri și catalogul de produse.",
+    description: "Pipeline, clienți, contracte și facturi.",
     href: "/business/crm",
     icon: <KanbanSquare className="h-7 w-7" />,
     tone: "amber",
@@ -189,7 +192,7 @@ function FinDeskWidget({ loading, data }: WidgetRenderProps) {
   return (
     <WidgetCard
       title="FinDesk"
-      subtitle="Finanțe"
+      subtitle="Ultimele 12 luni"
       href="/business/fin/"
       icon={<Landmark className="h-5 w-5" />}
       tone="sky"
@@ -288,26 +291,57 @@ function ItparkWidget({ loading, data }: WidgetRenderProps) {
   );
 }
 
+/**
+ * NAV-06: widget care își aduce singur cifra. Dalele Facturi/Angajați/Buget scriau doar
+ * „Disponibil în FinDesk → …" — un link deghizat în KPI. Acum arată numărul, iar dacă API-ul
+ * pică, dala spune asta în loc să mintă cu zero.
+ */
+function useWidgetValue<T>(fetcher: () => Promise<T>): { value: T | null; loading: boolean; error: boolean } {
+  const [state, setState] = useState<{ value: T | null; loading: boolean; error: boolean }>({ value: null, loading: true, error: false });
+  useEffect(() => {
+    let alive = true;
+    fetcher()
+      .then((value) => alive && setState({ value, loading: false, error: false }))
+      .catch(() => alive && setState({ value: null, loading: false, error: true }));
+    return () => {
+      alive = false;
+    };
+    // fetcher-ul e definit la nivel de modul, deci stabil
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return state;
+}
+
+const fetchAgingTotals = () => getFinAging().then((r) => r.aging);
+const fetchActiveEmployees = () =>
+  api<{ employees: unknown[] }>("/api/fin/payroll/employees").then((r) => (r.employees ?? []).length);
+const fetchActiveBudgets = () => listBudgets({ status: "active" }).then((r) => r.budgets.length);
+
 function InvoicesWidget({ loading }: Pick<WidgetRenderProps, "loading">) {
+  const aging = useWidgetValue(fetchAgingTotals);
+  const over30 = aging.value ? aging.value["31_60"] + aging.value["61_90"] + aging.value["90_plus"] : 0;
   return (
-    <WidgetCard title="Facturi luna" subtitle="Facturi emise luna curentă" href="/business/fin/invoices" icon={<Receipt className="h-5 w-5" />} tone="blue" loading={loading}>
-      <p className="text-sm text-muted-foreground">Disponibil în FinDesk → Facturi</p>
+    <WidgetCard title="Facturi restante" subtitle="Neîncasate după scadență" href="/business/fin/invoices" icon={<Receipt className="h-5 w-5" />} tone="blue" loading={loading || aging.loading} error={aging.error}>
+      <StatRow label="Total restant" value={formatCents(aging.value?.total ?? 0, "MDL")} valueClass={(aging.value?.total ?? 0) > 0 ? "text-destructive" : "text-foreground"} />
+      <StatRow label="Peste 30 de zile" value={formatCents(over30, "MDL")} />
     </WidgetCard>
   );
 }
 
 function PayrollWidget({ loading }: Pick<WidgetRenderProps, "loading">) {
+  const count = useWidgetValue(fetchActiveEmployees);
   return (
-    <WidgetCard title="Angajați activi" subtitle="Statul de plată" href="/business/fin/payroll" icon={<Users2 className="h-5 w-5" />} tone="amber" loading={loading}>
-      <p className="text-sm text-muted-foreground">Disponibil în FinDesk → Salarizare</p>
+    <WidgetCard title="Angajați activi" subtitle="Statul de plată" href="/business/fin/payroll" icon={<Users2 className="h-5 w-5" />} tone="amber" loading={loading || count.loading} error={count.error}>
+      <p className="text-2xl font-semibold tabular-nums text-foreground">{count.value ?? 0}</p>
     </WidgetCard>
   );
 }
 
 function BudgetWidget({ loading }: Pick<WidgetRenderProps, "loading">) {
+  const count = useWidgetValue(fetchActiveBudgets);
   return (
-    <WidgetCard title="Buget" subtitle="Planificat vs realizat" href="/business/fin/budget" icon={<BarChart3 className="h-5 w-5" />} tone="rose" loading={loading}>
-      <p className="text-sm text-muted-foreground">Disponibil în FinDesk → Buget</p>
+    <WidgetCard title="Buget" subtitle="Bugete active" href="/business/fin/budget" icon={<BarChart3 className="h-5 w-5" />} tone="rose" loading={loading || count.loading} error={count.error}>
+      <p className="text-2xl font-semibold tabular-nums text-foreground">{count.value ?? 0}</p>
     </WidgetCard>
   );
 }

@@ -38,30 +38,28 @@ export interface BusinessDashboardKPI {
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
 
+/** Prima zi a lunii de acum 11 luni — aceeași fereastră de 12 luni ca `/metrics?period=ytd`. */
+function windowStartIso(now = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 async function fetchFinDeskKPI(): Promise<FinDeskKPI> {
-  // Expenses summary — GET /api/fin/expenses/summary
-  const expSummary = await api<{
-    byCategory: { category: string; totalCents: number }[];
-    grandTotalCents: number;
-  }>("/api/fin/expenses/summary");
+  // NAV-06: ambele cifre pe aceeași fereastră de 12 luni. Înainte, facturile se citeau din
+  // `/api/fin/invoices?limit=500` ca `invoices[].totalAmountCents` — dar API-ul întoarce
+  // `data[].totalCents` (și plafonează la 200), deci „Facturi emise" era mereu 0, iar „Sold net"
+  // arăta minus cheltuielile. Acum suma vine agregată de server: încasat + de încasat pe lună,
+  // fără ciorne și anulate.
+  const [expSummary, metrics] = await Promise.all([
+    api<{ grandTotalCents: number }>(`/api/fin/expenses/summary?dateFrom=${windowStartIso()}`),
+    api<{ metrics: { revenue: number; receivable: number }[] }>("/api/analytics/fin/metrics?period=ytd"),
+  ]);
 
-  const totalExpensesCents = expSummary.grandTotalCents ?? 0;
-
-  // Invoices — GET /api/fin/invoices?status=sent (approximate revenue from sent invoices)
-  // We query all non-cancelled invoices to get a revenue total.
-  let totalInvoicesCents = 0;
-  try {
-    const invRes = await api<{
-      invoices: { totalAmountCents?: number; netAmountCents?: number }[];
-    }>("/api/fin/invoices?limit=500");
-    totalInvoicesCents = (invRes.invoices ?? []).reduce(
-      (sum, inv) => sum + (inv.totalAmountCents ?? inv.netAmountCents ?? 0),
-      0
-    );
-  } catch {
-    // Non-critical — expenses are more reliable
-    totalInvoicesCents = 0;
-  }
+  const totalExpensesCents = Number(expSummary.grandTotalCents ?? 0);
+  const totalInvoicesCents = (metrics.metrics ?? []).reduce(
+    (sum, m) => sum + Number(m.revenue ?? 0) + Number(m.receivable ?? 0),
+    0,
+  );
 
   return {
     totalExpensesCents,
