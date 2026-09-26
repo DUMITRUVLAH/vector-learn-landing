@@ -1,5 +1,6 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
 import { DOCS_BASE, DOCS_LEGACY_BASE, migrateLegacyDocsPath } from "./lib/docs/paths";
+import { CRM_INVOICING_ROUTES, FIN_INVOICING_ROUTES } from "./lib/fin/finNav";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BranchProvider } from "./contexts/BranchContext";
 import { Suspense, useEffect, useState } from "react";
@@ -189,6 +190,29 @@ function RedirectHash({ to }: { to: string }) {
   return null;
 }
 
+/**
+ * CONTPLATA-faza-1 + NAV-02: contul de plată e fila „Cont de plată” din modulul Facturi — aceleași
+ * pagini sub FinDesk (`/business/fin/invoices/document`) și sub CRM (`/business/crm/facturi/cont-de-plata`);
+ * meniul din jur îl alege shellul după prefix. Ordinea: setări, nou, un cont anume, apoi lista.
+ */
+function paymentAccountRoute(path: string) {
+  for (const base of [FIN_INVOICING_ROUTES.document, CRM_INVOICING_ROUTES.document]) {
+    if (!path.startsWith(base)) continue;
+    if (path.startsWith(`${base}/setari`)) return <BusinessGuardPage><CrmPaymentAccountSettingsPage /></BusinessGuardPage>;
+    if (path.startsWith(`${base}/nou`)) return <BusinessGuardPage><CrmPaymentAccountEditorPage key="nou" /></BusinessGuardPage>;
+    const id = path.slice(base.length).match(/^\/([0-9a-f-]{36})/i)?.[1];
+    if (id) return <BusinessGuardPage><CrmPaymentAccountEditorPage key={id} accountId={id} /></BusinessGuardPage>;
+    return <BusinessGuardPage><CrmPaymentAccountsPage /></BusinessGuardPage>;
+  }
+  // Adresele de dinainte de NAV-02 (modul separat, apoi rând propriu în CRM) duc la fila din CRM.
+  for (const legacy of ["/business/crm/conturi-plata", "/business/conturi-plata", "/app/conturi-plata"]) {
+    if (path.startsWith(legacy)) {
+      return <RedirectHash to={path.replace(legacy, CRM_INVOICING_ROUTES.document).replace(/\/editeaza$/, "")} />;
+    }
+  }
+  return null;
+}
+
 function Routes() {
   const { path } = useRouter();
 
@@ -253,7 +277,10 @@ function Routes() {
   if (path.startsWith("/business/fin/inventory")) return <BusinessGuardPage><InventoryPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/registry")) return <BusinessGuardPage><FinRegistryPage /></BusinessGuardPage>;
   // CONTPLATA-faza-1: generatorul vechi (fără număr, fără salvare, preview blocat) → modulul din CRM.
-  if (path.startsWith("/business/fin/invoices/document")) return <RedirectHash to="/business/crm/conturi-plata/nou" />;
+  {
+    const pa = paymentAccountRoute(path);
+    if (pa) return pa;
+  }
   if (path.startsWith("/business/fin/invoices")) return <BusinessGuardPage><FinInvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/expenses")) return <BusinessGuardPage><FinExpensesPage /></BusinessGuardPage>;
   {
@@ -359,7 +386,6 @@ function Routes() {
   if (path.startsWith("/business/crm/documente")) return <BusinessGuardPage><CrmDocumentsPage /></BusinessGuardPage>;
   // NAV-04: contractele și facturile FinDesk, montate și în CRM — aceleași pagini, meniul CRM în jur.
   if (path.startsWith("/business/crm/contracte")) return <BusinessGuardPage><Suspense fallback={null}><AgreementsPage /></Suspense></BusinessGuardPage>;
-  if (path.startsWith("/business/crm/facturi/cont-de-plata")) return <RedirectHash to="/business/crm/conturi-plata/nou" />;
   if (path.startsWith("/business/crm/facturi/efactura")) return <BusinessGuardPage><FinEinvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/facturi")) return <BusinessGuardPage><FinInvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/automatizari")) return <BusinessGuardPage><CrmAutomationsPage /></BusinessGuardPage>;
@@ -372,13 +398,6 @@ function Routes() {
   if (path.startsWith("/business/crm/drepturi")) return <BusinessGuardPage><CrmPermissionsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/firma")) return <BusinessGuardPage><CrmCompanyProfilePage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/api")) return <BusinessGuardPage><CrmApiPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/crm/conturi-plata/setari")) return <BusinessGuardPage><CrmPaymentAccountSettingsPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/crm/conturi-plata/nou")) return <BusinessGuardPage><CrmPaymentAccountEditorPage key="nou" /></BusinessGuardPage>;
-  {
-    const paMatch = path.match(/^\/business\/crm\/conturi-plata\/([0-9a-f-]{36})/i);
-    if (paMatch) return <BusinessGuardPage><CrmPaymentAccountEditorPage key={paMatch[1]} accountId={paMatch[1]} /></BusinessGuardPage>;
-  }
-  if (path.startsWith("/business/crm/conturi-plata")) return <BusinessGuardPage><CrmPaymentAccountsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm")) return <BusinessGuardPage><CrmHomePage /></BusinessGuardPage>;
   // PONTAJ-001: tabelul de pontaj self-service. Gardul de modul e pe server
   // (requireTenantModule) — ruta rămâne montată, iar pagina arată refuzul explicit.
@@ -388,13 +407,6 @@ function Routes() {
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;
 
-  // Payment accounts (cont de plată) — business module, canonical under /business/conturi-plata.
-  // SHELL-501: redirect legacy /app/conturi-plata/* so it renders BusinessShell, not the CRM shell.
-  if (path.startsWith("/app/conturi-plata")) return <RedirectHash to={path.replace("/app/conturi-plata", "/business/crm/conturi-plata")} />;
-  // CONTPLATA-faza-1: modulul s-a mutat în CRM; linkurile vechi (și „/:id/editeaza") duc acolo.
-  if (path.startsWith("/business/conturi-plata")) {
-    return <RedirectHash to={path.replace("/business/conturi-plata", "/business/crm/conturi-plata").replace(/\/editeaza$/, "")} />;
-  }
 
   // (Parties detail is matched above, before the /business/fin/parties list route.)
 

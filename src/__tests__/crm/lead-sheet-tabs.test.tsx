@@ -166,7 +166,7 @@ describe("Fișa leadului pe file", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Acte" }));
     const link = await screen.findByRole("link", { name: /Cont de plată/ });
     // O singură diez: `Button href` e o cale de router, nu un URL cu „#” (altfel ar ieși „##/…”).
-    expect(link).toHaveAttribute("href", "#/business/crm/conturi-plata/nou?lead=lead-1");
+    expect(link).toHaveAttribute("href", "#/business/crm/facturi/cont-de-plata/nou?lead=lead-1");
   });
 
   it("[blocant] antetul (etapă, acțiuni rapide) rămâne vizibil în orice filă", async () => {

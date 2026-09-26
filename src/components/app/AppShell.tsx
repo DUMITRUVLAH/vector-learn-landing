@@ -78,7 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Plăți", href: "/app/payments", icon: CreditCard },
       { label: "Facturi", href: "/app/invoices", icon: Receipt },
-      { label: "Conturi de plată", href: "/business/crm/conturi-plata", icon: Landmark }, // CONTPLATA-faza-1: modulul e în CRM
+      { label: "Cont de plată", href: "/business/crm/facturi/cont-de-plata", icon: Landmark }, // CONTPLATA + NAV-02: fila din modulul Facturi
       { label: "Contracte", href: "/app/contracts", icon: FileText },
       { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
     ],

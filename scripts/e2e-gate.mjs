@@ -243,7 +243,8 @@ const AREAS = {
       ["GET", "/api/payment-accounts/catalog?q=a", (j) => Array.isArray(j?.data?.products) && Array.isArray(j?.data?.recent)],
       ["GET", "/api/payment-accounts/templates", (j) => Array.isArray(j?.data)],
     ],
-    routes: ["/business/crm/conturi-plata", "/business/crm/conturi-plata/nou", "/business/crm/conturi-plata/setari"],
+    // Fila „Cont de plată” din modulul Facturi (NAV-02) — în CRM și în FinDesk, aceleași pagini.
+    routes: ["/business/crm/facturi/cont-de-plata", "/business/crm/facturi/cont-de-plata/nou", "/business/crm/facturi/cont-de-plata/setari", "/business/fin/invoices/document"],
     deep: [],
   },
   docmerge: {

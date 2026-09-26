@@ -39,6 +39,7 @@ import {
   X,
   FileText,
   ExternalLink, Eye, Send, ReceiptText } from "lucide-react";
+import { newPaymentAccountForLead } from "@/lib/paymentAccounts/routes";
 import {
   DateField,
   Sheet,
@@ -1688,7 +1689,7 @@ export function LeadDetailSheet({
                           <Button
                             size="sm"
                             variant="outline"
-                            href={`/business/crm/conturi-plata/nou?lead=${lead.id}`}
+                            href={newPaymentAccountForLead(lead.id)}
                           >
                             <ReceiptText className="h-4 w-4" aria-hidden="true" />
                             Cont de plată

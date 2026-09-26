@@ -1,5 +1,5 @@
 /**
- * CONTPLATA-faza-1 — editorul contului de plată, în CRM (`/business/crm/conturi-plata/nou|:id`).
+ * CONTPLATA-faza-1 — editorul contului de plată, (`<baza>/nou|:id`, în CRM sau FinDesk — vezi lib/paymentAccounts/routes.ts).
  *
  * Tot ce a cerut owner-ul pe 26.09.2026, într-un singur ecran:
  *  - numărul se pune SINGUR (următorul din serie) și se poate schimba de mână doar dacă vrei;
@@ -31,6 +31,8 @@ import {
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Badge, Button, Checkbox, DateField, Dialog, Input, Label, Select, StatusBadge, Textarea } from "@/components/ds";
 import { useRouter } from "@/router/HashRouter";
+import { paymentAccountsBase } from "@/lib/paymentAccounts/routes";
+import { InvoicingTabs } from "@/components/fin/ModuleTabs";
 import { BuyerPicker, EMPTY_BUYER, type BuyerValue } from "@/components/payment-accounts/BuyerPicker";
 import {
   LineItemsEditor,
@@ -64,8 +66,6 @@ import {
   type PaymentAccountSettingsView,
   type PaymentAccountTemplate,
 } from "@/lib/api/paymentAccounts";
-
-export const PAYMENT_ACCOUNTS_PATH = "/business/crm/conturi-plata";
 
 const CURRENCIES = ["MDL", "EUR", "USD", "RON"] as const;
 const LANGS: { value: PaymentAccountLang; label: string }[] = [
@@ -104,7 +104,8 @@ function formatMoney(cents: number, currency: string): string {
 }
 
 export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEditorPageProps) {
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
+  const base = paymentAccountsBase(path);
 
   const [id, setId] = useState<string | null>(accountId ?? null);
   const [account, setAccount] = useState<PaymentAccountDetail | null>(null);
@@ -309,7 +310,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
           idRef.current = res.data.id;
           setId(res.data.id);
           // Adresa devine cea a contului, fără a remonta pagina (și fără a pierde ce scrii acum).
-          window.history.replaceState(null, "", `#${PAYMENT_ACCOUNTS_PATH}/${res.data.id}`);
+          window.history.replaceState(null, "", `#${base}/${res.data.id}`);
         }
         setSavedAt(res.data.updatedAt);
         setPreviewVersion(res.data.updatedAt);
@@ -403,13 +404,13 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
   async function handleDuplicate() {
     if (!id) return;
     const res = await run("duplicate", () => duplicatePaymentAccount(id));
-    if (res) navigate(`${PAYMENT_ACCOUNTS_PATH}/${res.data.id}`);
+    if (res) navigate(`${base}/${res.data.id}`);
   }
 
   async function handleDeleteDraft() {
     if (!id || !window.confirm("Ștergi ciorna? Nu se poate reveni.")) return;
     const res = await run("delete", () => deletePaymentAccount(id));
-    if (res) navigate(PAYMENT_ACCOUNTS_PATH);
+    if (res) navigate(base);
   }
 
   async function handleUseTemplate(tpl: PaymentAccountTemplate) {
@@ -425,7 +426,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
       if (res) {
         idRef.current = res.data.id;
         setId(res.data.id);
-        window.history.replaceState(null, "", `#${PAYMENT_ACCOUNTS_PATH}/${res.data.id}`);
+        window.history.replaceState(null, "", `#${base}/${res.data.id}`);
         await reload(res.data.id);
       }
       return;
@@ -491,13 +492,14 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
               Din șablon
             </Button>
           )}
-          <Button variant="ghost" size="sm" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
+          <Button variant="ghost" size="sm" href={`${base}/setari`}>
             <Settings2 className="h-4 w-4" aria-hidden="true" />
             Aspect și numerotare
           </Button>
         </div>
       }
     >
+      <InvoicingTabs />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
         {/* ── Stânga: formularul ── */}
         <div className="space-y-5">
@@ -514,7 +516,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
           {isDraft && missing.length > 0 && (
             <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />} title="Lipsesc rechizitele tale">
               Contul iese fără: {missing.join(", ")}.{" "}
-              <a className="font-medium underline" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
+              <a className="font-medium underline" href={`${base}/setari`}>
                 Completează-le o dată
               </a>{" "}
               — apar apoi pe toate conturile.
@@ -756,7 +758,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
             ) : (
               <div className="flex h-[60vh] min-h-[420px] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border px-6 text-center text-sm text-muted-foreground">
                 <p>Alege clientul și adaugă o poziție — PDF-ul apare aici, exact cum îl primește clientul.</p>
-                <a className="font-medium text-primary underline" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
+                <a className="font-medium text-primary underline" href={`${base}/setari`}>
                   Vezi o mostră și alege aspectul
                 </a>
               </div>

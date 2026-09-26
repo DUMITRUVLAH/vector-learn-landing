@@ -1,6 +1,6 @@
 /**
  * CONTPLATA-faza-1 — cum arată și cum se numerotează contul de plată
- * (`/business/crm/conturi-plata/setari`).
+ * (`<baza>/setari`, vezi lib/paymentAccounts/routes.ts).
  *
  * Owner-ul: „nu-l putem personaliza cu logo, cu rechizitele noastre, culorile". Aici se fac toate,
  * o singură dată, cu mostra PDF alături — ce vezi în dreapta e exact ce pleacă la client.
@@ -30,7 +30,9 @@ import {
   type PaymentAccountSettingsView,
 } from "@/lib/api/paymentAccounts";
 import { DOCUMENT_ACCENT_PRESETS, isHexColor } from "@/lib/paymentAccounts/documentColors";
-import { PAYMENT_ACCOUNTS_PATH } from "./CrmPaymentAccountEditorPage";
+import { paymentAccountsBase } from "@/lib/paymentAccounts/routes";
+import { useRouter } from "@/router/HashRouter";
+import { InvoicingTabs } from "@/components/fin/ModuleTabs";
 
 const LAYOUTS: { value: PaymentAccountLayout; title: string; hint: string }[] = [
   { value: "modern", title: "Modern", hint: "Bandă colorată, carduri pentru părți, total evidențiat." },
@@ -93,6 +95,8 @@ function formatExample(s: PaymentAccountSettings, n: number): string {
 }
 
 export function CrmPaymentAccountSettingsPage() {
+  const { path } = useRouter();
+  const base = paymentAccountsBase(path);
   const [view, setView] = useState<PaymentAccountSettingsView | null>(null);
   const [draft, setDraft] = useState<PaymentAccountSettings | null>(null);
   const [profile, setProfile] = useState<CrmCompanyProfile | null>(null);
@@ -219,11 +223,12 @@ export function CrmPaymentAccountSettingsPage() {
       pageTitle="Aspect și numerotare"
       pageDescription="Rechizitele, logoul, culorile și formatul numărului — setate o dată, pe toate conturile de plată."
       actions={
-        <Button variant="ghost" size="sm" href={PAYMENT_ACCOUNTS_PATH}>
+        <Button variant="ghost" size="sm" href={base}>
           Înapoi la conturi
         </Button>
       }
     >
+      <InvoicingTabs />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
         <div className="space-y-5">
           {error && (

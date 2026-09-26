@@ -1,5 +1,5 @@
 /**
- * CONTPLATA-faza-1 — lista conturilor de plată, în CRM (`/business/crm/conturi-plata`).
+ * CONTPLATA-faza-1 — lista conturilor de plată, fila „Cont de plată” din modulul Facturi (CRM și FinDesk, vezi lib/paymentAccounts/routes.ts).
  *
  * Ce vrea să vadă omul dintr-o privire: cine îi datorează, cât, de când. Deci: căutare după client
  * sau număr, filtru pe stare, și totalul „de încasat" (emise, neplătite) sus.
@@ -29,7 +29,8 @@ import {
   type PaymentAccount,
   type PaymentAccountStatus,
 } from "@/lib/api/paymentAccounts";
-import { PAYMENT_ACCOUNTS_PATH } from "./CrmPaymentAccountEditorPage";
+import { paymentAccountsBase } from "@/lib/paymentAccounts/routes";
+import { InvoicingTabs } from "@/components/fin/ModuleTabs";
 
 type Filter = "all" | PaymentAccountStatus;
 
@@ -59,7 +60,8 @@ function overdue(a: PaymentAccount): boolean {
 }
 
 export function CrmPaymentAccountsPage() {
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
+  const base = paymentAccountsBase(path);
   const [rows, setRows] = useState<PaymentAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,17 +101,18 @@ export function CrmPaymentAccountsPage() {
       pageDescription="Numerotate automat, cu rechizitele și aspectul tău. Pozițiile vin din catalogul CRM."
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
+          <Button variant="ghost" size="sm" href={`${base}/setari`}>
             <Settings2 className="h-4 w-4" aria-hidden="true" />
             Aspect și numerotare
           </Button>
-          <Button onClick={() => navigate(`${PAYMENT_ACCOUNTS_PATH}/nou`)}>
+          <Button onClick={() => navigate(`${base}/nou`)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Cont de plată nou
           </Button>
         </div>
       }
     >
+      <InvoicingTabs />
       <div className="space-y-5">
         {(filter === "all" || filter === "issued") && kpis.due.length > 0 && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -155,7 +158,7 @@ export function CrmPaymentAccountsPage() {
             title={q || filter !== "all" ? "Niciun cont pe acest filtru" : "Niciun cont de plată încă"}
             description="Alegi clientul, adaugi produsele din catalog, iar numărul și PDF-ul se fac singure."
             action={
-              <Button onClick={() => navigate(`${PAYMENT_ACCOUNTS_PATH}/nou`)}>
+              <Button onClick={() => navigate(`${base}/nou`)}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Primul cont de plată
               </Button>
@@ -176,9 +179,9 @@ export function CrmPaymentAccountsPage() {
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
-                  <TableRow key={r.id} interactive onClick={() => navigate(`${PAYMENT_ACCOUNTS_PATH}/${r.id}`)}>
+                  <TableRow key={r.id} interactive onClick={() => navigate(`${base}/${r.id}`)}>
                     <TableCell className="font-mono text-sm">
-                      <a href={`#${PAYMENT_ACCOUNTS_PATH}/${r.id}`} className="font-medium text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                      <a href={`#${base}/${r.id}`} className="font-medium text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
                         {r.documentNumber ?? "ciornă"}
                       </a>
                     </TableCell>

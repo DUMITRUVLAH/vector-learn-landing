@@ -76,7 +76,7 @@ const SETTINGS = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  window.history.replaceState(null, "", "#/business/crm/conturi-plata/nou");
+  window.history.replaceState(null, "", "#/business/crm/facturi/cont-de-plata/nou");
   api.getPaymentAccountSettings.mockResolvedValue({ data: SETTINGS });
   api.listPaymentAccountTemplates.mockResolvedValue({ data: [] });
   api.getNextPaymentAccountNumber.mockResolvedValue({ data: { series: "CP", number: 7, documentNumber: "CP-2026-0007" } });
@@ -142,7 +142,7 @@ describe("CONTPLATA — editorul", () => {
     expect(src.startsWith("/api/payment-accounts/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/pdf")).toBe(true);
     expect(src).not.toMatch(/^blob:/);
     // Adresa devine cea a contului salvat, ca un refresh să nu piardă ciorna.
-    expect(window.location.hash).toBe("#/business/crm/conturi-plata/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    expect(window.location.hash).toBe("#/business/crm/facturi/cont-de-plata/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
   });
 
   it("[blocant] o creare lentă + tastare în continuare = O SINGURĂ ciornă, apoi actualizări", async () => {
@@ -168,7 +168,7 @@ describe("CONTPLATA — editorul", () => {
   });
 
   it("[blocant] pornit de pe fișa leadului: clientul și produsul sunt deja puse, iar ciorna poartă leadul", async () => {
-    window.history.replaceState(null, "", "#/business/crm/conturi-plata/nou?lead=cccccccc-cccc-cccc-cccc-cccccccccccc");
+    window.history.replaceState(null, "", "#/business/crm/facturi/cont-de-plata/nou?lead=cccccccc-cccc-cccc-cccc-cccccccccccc");
     api.getPaymentAccountPrefill.mockResolvedValue({
       data: {
         leadId: "cccccccc-cccc-cccc-cccc-cccccccccccc",

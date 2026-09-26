@@ -117,10 +117,10 @@ describe("CONTPLATA — lista", () => {
     });
     render(<HashRouter><CrmPaymentAccountsPage /></HashRouter>);
     expect(await screen.findByText("1 200,00 MDL", { selector: "p, span, div, dd" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "CP-2026-0001" })).toHaveAttribute("href", "#/business/crm/conturi-plata/a1");
+    expect(screen.getByRole("link", { name: "CP-2026-0001" })).toHaveAttribute("href", "#/business/crm/facturi/cont-de-plata/a1");
     expect(screen.getByText("Cu termenul depășit")).toBeInTheDocument();
     expect(screen.getByText("ciornă")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Aspect și numerotare/ })).toHaveAttribute("href", "#/business/crm/conturi-plata/setari");
+    expect(screen.getByRole("link", { name: /Aspect și numerotare/ })).toHaveAttribute("href", "#/business/crm/facturi/cont-de-plata/setari");
   });
 
   it("[normal] fără conturi, îndeamnă la primul", async () => {

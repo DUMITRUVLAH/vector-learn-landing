@@ -59,7 +59,7 @@ import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { onParBadgeRefresh } from "@/lib/par/badgeBus";
 import { DOCS_BASE } from "@/lib/docs/paths";
 import type { CrmPermission } from "@/lib/api/crm";
-import { CRM_FIN_ITEMS, visibleFinNavGroups } from "@/lib/fin/finNav";
+import { CRM_FIN_ITEMS, CRM_INVOICING_ROUTES, visibleFinNavGroups } from "@/lib/fin/finNav";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { cachedOnce, peekResolved } from "@/lib/sessionCache";
@@ -122,6 +122,9 @@ interface NavItem {
   alsoActive?: string[];
   /** NAV-04: rândul CRM care afișează date FinDesk — apare doar cu FinDesk pornit. */
   requiresFindesk?: boolean;
+  /** CONTPLATA: rândul apare DOAR cu FinDesk oprit — altfel e fila din modulul „Facturi”, și
+   *  două intrări spre același ecran sunt exact dublura pe care NAV-02 a scos-o. */
+  onlyWithoutFindesk?: boolean;
 }
 
 interface NavGroup {
@@ -274,7 +277,7 @@ const CRM_NAV_GROUPS: NavGroup[] = [
     prefix: "/business/crm",
     items: [
       { label: "Documente", href: "/business/crm/documente", icon: FileText, tone: "orange" },
-      { label: "Conturi de plată", href: "/business/crm/conturi-plata", icon: ReceiptText, tone: "sky" },
+      { label: "Conturi de plată", href: CRM_INVOICING_ROUTES.document, icon: ReceiptText, tone: "sky", onlyWithoutFindesk: true },
       { label: "Comunicare", href: "/business/crm/comunicare", icon: MessageCircle, tone: "blue" },
       { label: "Cadențe", href: "/business/crm/cadente", icon: RefreshCw, tone: "amber" },
       { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
@@ -763,6 +766,7 @@ export function BusinessShell({
         if (it.roles && !it.roles.some((r) => parRoles.includes(r)) && !(it.alsoPreApprover && preApprover)) return false;
         if (it.crmPermission && !crmCan(it.crmPermission)) return false;
         if (it.requiresFindesk && !isEnabled("findesk")) return false;
+        if (it.onlyWithoutFindesk && isEnabled("findesk")) return false;
         // Rândul ITPark trăiește sub FinDesk, dar e un modul separat în catalog.
         if (it.href.startsWith("/business/fin/itpark")) return isEnabled("itpark");
         return true;
