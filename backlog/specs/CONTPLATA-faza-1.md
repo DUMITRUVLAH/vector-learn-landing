@@ -124,3 +124,10 @@ Reamintire, nu excepție de la regulă generală.
 - Trimiterea pe email a contului direct din aplicație (se poate refolosi `documentEmail` din acte).
 - Legarea plății încasate (extras bancar) de contul de plată → status „plătit" automat.
 - Transformarea contului de plată în factură fiscală / e-Factura.
+- Buton „Cont de plată" pe fișa leadului / a firmei din CRM, cu clientul și produsul leadului
+  precompletate (coloana `lead_id` există deja; lipsește doar punctul de intrare).
+- „Adaugă în catalogul CRM" direct dintr-o poziție scrisă de mână.
+- `GET /api/fin/invoices/:id/document.pdf` (factura FinDesk) încă rasterizează cu Chromium → pe
+  Vercel iese HTML. Aceeași reparație ca aici (pdfmake), separat.
+- Previzualizarea logoului în pagina de setări: CSP-ul `img-src` nu include Storage, deci logoul se
+  vede doar în mostra PDF (suficient, dar o miniatură ar fi mai clară).
