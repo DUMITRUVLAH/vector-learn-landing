@@ -18,6 +18,7 @@
  * Panoul are `role="dialog"`, deci scurtăturile de tastatură ale inbox-ului (j/k/a/m/r/x) se
  * auto-dezactivează cât timp e deschis — ele ignoră orice apăsare când există un dialog.
  */
+import { lockBodyScroll } from "@/lib/scrollLock";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Download, ExternalLink, FileText, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ds";
@@ -61,12 +62,11 @@ export function ParAttachmentViewer() {
       if (e.key === "Escape") close();
     };
     document.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const release = lockBodyScroll();
     panelRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      release();
     };
   }, [target, close]);
 

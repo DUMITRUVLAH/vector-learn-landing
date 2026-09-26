@@ -11,6 +11,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { lockBodyScroll } from "@/lib/scrollLock";
 
 function useDismiss(open: boolean, onClose?: () => void) {
   useEffect(() => {
@@ -19,11 +20,10 @@ function useDismiss(open: boolean, onClose?: () => void) {
       if (e.key === "Escape") onClose?.();
     };
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const release = lockBodyScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      release();
     };
   }, [open, onClose]);
 }
