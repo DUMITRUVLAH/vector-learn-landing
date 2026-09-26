@@ -190,7 +190,7 @@ export function openDealAging(
   lastActivityAt: ReadonlyMap<string, string>,
   now: Date = new Date(),
   staleLimit = 10
-): { buckets: AgingBucket[]; stale: StaleDeal[]; staleCount: number } {
+): { buckets: AgingBucket[]; stale: StaleDeal[]; staleCount: number; staleValueCents: number } {
   const closed = new Set(stages.filter((s) => s.isWon || s.isLost).map((s) => s.key));
   const buckets: AgingBucket[] = [
     { key: "fresh", label: "0–7 zile", count: 0, valueCents: 0 },
@@ -221,7 +221,10 @@ export function openDealAging(
 
   // Cele mai scumpe întâi: dintre două afaceri uitate, cea de 48.000 cere telefonul azi.
   stale.sort((a, b) => b.valueCents - a.valueCents || b.daysIdle - a.daysIdle);
-  return { buckets, stale: stale.slice(0, staleLimit), staleCount: stale.length };
+  // Suma pe TOATE afacerile în stagnare, nu doar pe cele listate: „cât stă neatins" e cifra pe
+  // care o citește managerul, iar lista e doar începutul ei.
+  const staleValueCents = stale.reduce((n, s) => n + s.valueCents, 0);
+  return { buckets, stale: stale.slice(0, staleLimit), staleCount: stale.length, staleValueCents };
 }
 
 /** Numele afacerii cum îl spune un vânzător: firma, apoi omul, apoi ce s-a vândut. */

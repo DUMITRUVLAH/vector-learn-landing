@@ -96,10 +96,26 @@ API. Criteriu: zero `PastelIcon`/`pastel-*`/`rounded-2xl`/`shadow-lg` în `src/p
 Coloană `expected_close_at` pe leads (migrare + heal în `sync-schema.ts` + declarată în schemă),
 câmp în fișă, prognoză ponderată pe luni în Rapoarte („ce intră în octombrie").
 
+### CRM-G09 — Rapoarte personalizabile + insighturi automate (livrat 2026-09-26)
+Cerut de owner: „să își poată personaliza dashboardul; pâlnia să arate ca un funnel; insighturi
+automate — cel mai bun agent, cea mai bună / cea mai slabă sursă, oraș, industrie".
+- **Ce spun cifrele** (`server/lib/crm/reportSegments.ts#buildInsights`): cel mai bun vânzător (cota
+  din vânzări), cine închide cel mai des, trendul vânzărilor, cea mai bună/slabă valoare pe FIECARE
+  dimensiune, etapa unde se pierd afacerile, banii în stagnare, motivul dominant de pierdere.
+  Prag de eșantion: 3 leaduri per valoare / 3 afaceri închise per agent — fără „100% din 1 lead".
+- **Conversie pe segment** (înlocuiește „Surse" + „Pe produs"): sursă, agent, produs, industrie,
+  regiune, mărime (din firma leadului) + orice câmp personalizat text/listă (ex. „Oraș").
+- **Pâlnia desenată** pe raport (`FunnelChart`, compactă pe telefon); tabelul rămâne la un click.
+- **Personalizează**: secțiuni ascunse/mutate + plăcuțele de sus, per om, salvate în
+  `crm_report_layouts` (migrarea 0192 + heal în sync-schema).
+
 ### Rapoarte — continuări
+- Conversia pe segment socotește leadurile încă deschise ca „ne-convertite"; o sursă nouă pare
+  slabă până se închid afacerile. Varianta: comparație doar pe cohorte mai vechi de ciclul mediu.
 - ROAS pe sursă/campanie (`ad_spend`) — specul CRM-112, nelivrat.
 - Drill-down: click pe o bară/rând din raport → lista leadurilor din spatele cifrei.
-- Filtrul de segment (industrie, regiune…) și pe raportul general, nu doar pe pâlnie.
+- Filtrul de segment (industrie, regiune…) și pe raportul general, nu doar pe pâlnie
+  (G09 a adus GRUPAREA pe segment, nu și filtrarea întregului raport după un segment).
 - Agregare în SQL în loc de plafonul `MAX_ROWS = 5000` (peste 5.000 de leaduri raportul taie în tăcere).
 - „Oferte trimise" se detectează după eticheta etapei („ofert"); un flag `is_offer` pe etapă ar fi corect.
 

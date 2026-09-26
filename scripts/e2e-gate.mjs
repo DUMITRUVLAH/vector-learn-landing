@@ -150,7 +150,16 @@ const AREAS = {
       ["GET", "/api/crm/products", (j) => Array.isArray(j?.items)],
       ["GET", "/api/crm/tasks/today", (j) => !!j],
       ["GET", "/api/crm/companies", (j) => Array.isArray(j?.items)],
-      ["GET", "/api/crm/reports", (j) => !!j],
+      // CRM-G09: raportul poartă segmentele și constatările — un `!!j` ar trece și fără ele.
+      ["GET", "/api/crm/reports", (j) => Array.isArray(j?.dimensions) && Array.isArray(j?.insights)],
+      ["GET", "/api/crm/reports/layout", (j) => !!j && "layout" in j],
+      [
+        "PUT",
+        "/api/crm/reports/layout",
+        (j) => j?.saved === true && Array.isArray(j?.layout?.order),
+        { body: { order: ["insights", "metrics"], hidden: [], hiddenMetrics: [], segmentDimension: null } },
+      ],
+      ["PUT", "/api/crm/reports/layout", (j) => !!j, { body: { order: "nu-e-listă" }, status: 400 }],
       // Tabloul pâlniei (CC-4): FORMA răspunsului, nu doar un 200 — o pâlnie fără `stages` ar
       // desena un ecran gol care arată exact ca „n-ai încă leaduri".
       ["GET", "/api/crm/reports/funnel", (j) => Array.isArray(j?.stages) && Array.isArray(j?.byOwner)],

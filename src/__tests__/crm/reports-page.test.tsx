@@ -14,6 +14,7 @@ import type { CrmReportsResponse } from "@/lib/api/crmReports";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getCrmReportLayout.mockResolvedValue({ layout: null });
 });
 
 vi.mock("@/hooks/useBusinessSession", () => ({
@@ -50,9 +51,16 @@ vi.mock("@/lib/crmReportPdf", () => ({
 }));
 
 const getCrmReports = vi.fn();
+const getCrmReportLayout = vi.fn().mockResolvedValue({ layout: null });
+const saveCrmReportLayout = vi.fn().mockImplementation(async (layout: unknown) => ({ layout, saved: true }));
 vi.mock("@/lib/api/crmReports", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/crmReports")>();
-  return { ...actual, getCrmReports: (...a: unknown[]) => getCrmReports(...a) };
+  return {
+    ...actual,
+    getCrmReports: (...a: unknown[]) => getCrmReports(...a),
+    getCrmReportLayout: (...a: unknown[]) => getCrmReportLayout(...a),
+    saveCrmReportLayout: (...a: unknown[]) => saveCrmReportLayout(...a),
+  };
 });
 
 const { CrmReportsPage } = await import("@/pages/business/crm/CrmReportsPage");
@@ -128,6 +136,53 @@ function makeReports(): CrmReportsResponse {
       staleCount: 1,
     },
     leaderboard: [{ ownerKey: "u1", wonCount: 3, wonValueCents: 1_250_00, lostCount: 1, winRatePct: 75, avgDealCents: 41_667, openCount: 4, openValueCents: 100_00 }],
+    dimensions: [
+      {
+        key: "source",
+        label: "Sursă",
+        kind: "builtin",
+        rows: [
+          { value: "referral", leads: 5, won: 2, lost: 1, open: 2, wonValueCents: 800_00, conversionPct: 40, winRatePct: 67 },
+          { value: "facebook_ad", leads: 4, won: 0, lost: 2, open: 2, wonValueCents: 0, conversionPct: 0, winRatePct: 0 },
+        ],
+      },
+      {
+        key: "product",
+        label: "Produs",
+        kind: "builtin",
+        rows: [{ value: "Panouri 10kW", leads: 8, won: 3, lost: 2, open: 3, wonValueCents: 900_00, conversionPct: 38, winRatePct: 60 }],
+      },
+      {
+        key: "cf_oras",
+        label: "Oraș",
+        kind: "custom",
+        rows: [
+          { value: "Chișinău", leads: 6, won: 3, lost: 1, open: 2, wonValueCents: 1_000_00, conversionPct: 50, winRatePct: 75 },
+          { value: "Bălți", leads: 3, won: 0, lost: 2, open: 1, wonValueCents: 0, conversionPct: 0, winRatePct: 0 },
+        ],
+      },
+    ],
+    insights: [
+      { kind: "topSeller", tone: "positive", ownerKey: "u1", wonValueCents: 1_250_00, wonCount: 3, sharePct: 80, sellers: 2 },
+      {
+        kind: "segmentSpread",
+        tone: "neutral",
+        dimension: "source",
+        dimensionLabel: "Sursă",
+        dimensionKind: "builtin",
+        best: { value: "referral", conversionPct: 40, leads: 5, won: 2, wonValueCents: 800_00 },
+        worst: { value: "facebook_ad", conversionPct: 0, leads: 4, won: 0, wonValueCents: 0 },
+      },
+      {
+        kind: "segmentSpread",
+        tone: "neutral",
+        dimension: "cf_oras",
+        dimensionLabel: "Oraș",
+        dimensionKind: "custom",
+        best: { value: "Chișinău", conversionPct: 50, leads: 6, won: 3, wonValueCents: 1_000_00 },
+        worst: { value: "Bălți", conversionPct: 0, leads: 3, won: 0, wonValueCents: 0 },
+      },
+    ],
   };
 }
 
@@ -136,6 +191,8 @@ describe("Tabelele arată cifre, nu „undefined”", () => {
     getCrmReports.mockResolvedValue(makeReports());
 
     render(<CrmReportsPage />);
+    // Pâlnia e desenată implicit; tabelul cu zilele în etapă e la un click.
+    fireEvent.click(await screen.findByRole("button", { name: "Tabel" }));
     await screen.findByRole("table", { name: "Pâlnia pe etape" });
 
     // Pâlnia: `conversionPct` pe etapa deschisă; etapa câștigată nu „trece mai departe".
@@ -143,9 +200,6 @@ describe("Tabelele arată cifre, nu „undefined”", () => {
     expect(screen.getByText("etapa finală")).toBeInTheDocument();
     // Timpul petrecut în etapă vine din `velocity`.
     expect(screen.getByText("3,5")).toBeInTheDocument();
-    // Produs: `product` + `valueCents`, nu `productName`/`wonValueCents`.
-    expect(screen.getByText("Panouri 10kW")).toBeInTheDocument();
-    expect(screen.getByText("60%")).toBeInTheDocument();
     // Pierderi: numărul și procentul.
     expect(screen.getByText("4 · 57%")).toBeInTheDocument();
 
@@ -202,8 +256,9 @@ describe("Cerința 58 — export Excel și PDF", () => {
     expect(input.kpis.find((k) => k.label === "Contracte semnate")?.value).toBe("3");
     expect(input.kpis.find((k) => k.label === "Rata de câștig")?.value).toBe("75%");
     expect(input.tables.map((t) => t.title)).toEqual([
+      "Ce spun cifrele",
       "Pâlnia",
-      "Surse",
+      "Conversie pe sursă",
       "Echipa",
       "De ce pierdem",
       "Afaceri în stagnare",
@@ -266,8 +321,91 @@ describe("CRM-G02 — raportul unui CRM de vânzări", () => {
     getCrmReports.mockResolvedValue(makeReports());
     render(<CrmReportsPage />);
 
-    const table = await screen.findByRole("table", { name: "Rezultate pe sursă" });
+    const table = await screen.findByRole("table", { name: "Conversie pe sursă" });
     expect(table).toHaveTextContent("Recomandare");
     expect(table).toHaveTextContent("67%");
+  });
+});
+
+describe("CRM-G09 — pâlnia desenată, insighturi, personalizare", () => {
+  it("[blocant] pâlnia se desenează implicit, cu etapele citibile de cititorul de ecran", async () => {
+    getCrmReports.mockResolvedValue(makeReports());
+    render(<CrmReportsPage />);
+
+    const list = await screen.findByRole("list", { name: "Pâlnia Vânzări" });
+    expect(list).toHaveTextContent("Lead nou: 10 au ajuns aici");
+    expect(screen.queryByRole("table", { name: "Pâlnia pe etape" })).not.toBeInTheDocument();
+  });
+
+  it("[blocant] constatările numesc agentul și cea mai bună / cea mai slabă sursă, cu etichete omenești", async () => {
+    getCrmReports.mockResolvedValue(makeReports());
+    render(<CrmReportsPage />);
+
+    const list = await screen.findByRole("list", { name: "Constatări" });
+    expect(list).toHaveTextContent("Ana Ionescu a vândut cel mai mult");
+    expect(list).toHaveTextContent("80% din vânzările echipei");
+    expect(list).toHaveTextContent("Sursă: cea mai bună conversie o are Recomandare — 40% din 5 leaduri");
+    expect(list).toHaveTextContent("Cea mai slabă: Facebook");
+    expect(list).toHaveTextContent("Oraș: cea mai bună conversie o are Chișinău");
+    expect(list).not.toHaveTextContent("facebook_ad");
+  });
+
+  it("[blocant] „Vezi pe oraș” comută raportul pe segment și salvează alegerea", async () => {
+    getCrmReports.mockResolvedValue(makeReports());
+    render(<CrmReportsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Vezi pe oraș" }));
+    const table = await screen.findByRole("table", { name: "Conversie pe oraș" });
+    expect(table).toHaveTextContent("Chișinău");
+    expect(table).toHaveTextContent("cea mai bună");
+    expect(table).toHaveTextContent("cea mai slabă");
+    await waitFor(() => expect(saveCrmReportLayout).toHaveBeenCalled(), { timeout: 2000 });
+    expect(saveCrmReportLayout.mock.calls.at(-1)?.[0]).toMatchObject({ segmentDimension: "cf_oras" });
+  });
+
+  it("[blocant] o secțiune ascunsă dispare și aranjamentul se salvează pe server", async () => {
+    getCrmReports.mockResolvedValue(makeReports());
+    render(<CrmReportsPage />);
+
+    await screen.findByRole("table", { name: "Motivele pierderii" });
+    fireEvent.click(screen.getByRole("button", { name: /Personalizează/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "De ce pierdem" }));
+
+    expect(screen.queryByRole("table", { name: "Motivele pierderii" })).not.toBeInTheDocument();
+    await waitFor(() => expect(saveCrmReportLayout).toHaveBeenCalled(), { timeout: 2000 });
+    expect(saveCrmReportLayout.mock.calls.at(-1)?.[0]).toMatchObject({ hidden: ["lostReasons"] });
+  });
+
+  it("[blocant] aranjamentul salvat se aplică la deschidere: ordinea și plăcuțele ascunse", async () => {
+    getCrmReportLayout.mockResolvedValue({
+      layout: {
+        // Serverul salvează mereu ordinea completă (vezi `serializeLayout`).
+        order: ["team", "insights", "metrics", "wonLost", "funnel", "segments", "aging", "lostReasons", "activity", "calls"],
+        hidden: [],
+        hiddenMetrics: ["sales"],
+      },
+    });
+    getCrmReports.mockResolvedValue(makeReports());
+    const { container } = render(<CrmReportsPage />);
+
+    await waitFor(() => {
+      const ids = [...container.querySelectorAll("[id^='sectiune-']")].map((el) => el.id);
+      expect(ids.slice(0, 2)).toEqual(["sectiune-team", "sectiune-insights"]);
+    });
+    expect(screen.queryByRole("tab", { name: /Vânzări/ })).not.toBeInTheDocument();
+    // Graficul trece pe prima plăcuță vizibilă, nu rămâne pe una ascunsă.
+    expect(screen.getByTestId("timeline")).toHaveTextContent("Afaceri câștigate");
+  });
+
+  it("[normal] mutarea unei secțiuni în sus schimbă ordinea pe ecran", async () => {
+    getCrmReports.mockResolvedValue(makeReports());
+    const { container } = render(<CrmReportsPage />);
+
+    await screen.findByRole("list", { name: "Constatări" });
+    fireEvent.click(screen.getByRole("button", { name: /Personalizează/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Mută „Indicatori și evoluție\" mai sus" }));
+
+    const ids = [...container.querySelectorAll("[id^='sectiune-']")].map((el) => el.id);
+    expect(ids.slice(0, 2)).toEqual(["sectiune-metrics", "sectiune-insights"]);
   });
 });

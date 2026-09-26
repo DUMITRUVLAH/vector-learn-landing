@@ -66,6 +66,7 @@ export * from "./crmPipelines";
 export * from "./crmKpiTargets";
 export * from "./crmRecall";
 export * from "./crmSavedViews";
+export * from "./crmReportLayouts";
 export * from "./crmCadences";
 export * from "./crmCaptureSources";
 export * from "./crmUserPermissions";

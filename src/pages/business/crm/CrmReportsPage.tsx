@@ -16,27 +16,52 @@
  *
  * Toată agregarea e pe server (o cerere); aici e doar afișarea. Exportul Excel/PDF poartă
  * aceleași cifre ca ecranul.
+ *
+ * CRM-G09 (ownerul, 2026-09-26): „să își poată personaliza dashboardul; pâlnia să arate ca o
+ * pâlnie; insighturi automate — cel mai bun agent, cea mai bună / cea mai slabă sursă, oraș,
+ * industrie". De aici:
+ *   - sus stau constatările generate automat („Ce spun cifrele");
+ *   - fiecare secțiune se poate ascunde și muta, iar plăcuțele de sus se pot alege — aranjamentul
+ *     e al fiecărui om și se salvează pe server (`/api/crm/reports/layout`);
+ *   - pâlnia e desenată (același `FunnelChart` ca „Tabloul pâlniei"), tabelul rămâne la un click;
+ *   - „Surse" și „Pe produs" au devenit un singur raport pe segment, pe ORICE dimensiune:
+ *     sursă, agent, produs, industrie, regiune, mărime, plus câmpurile personalizate (ex. Oraș).
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, BarChart3, Download, FileText, Loader2, Target } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, BarChart3, Download, FileText, Loader2, SlidersHorizontal, Target } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { KpiTargetsDialog } from "@/components/crm/KpiTargetsDialog";
-import { Alert, Button, Card, DateField, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
+import { Alert, Button, Card, Checkbox, DateField, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { TrendChart, WonLostChart, type TrendPoint, type TrendSize } from "@/components/crm/ReportsCharts";
+import { FunnelChart } from "@/components/crm/FunnelChart";
+import { ReportInsights, insightText, type InsightContext } from "@/components/crm/ReportInsights";
+import {
+  DEFAULT_LAYOUT,
+  REPORT_SECTIONS,
+  moveSection,
+  resolveLayout,
+  serializeLayout,
+  type ReportSectionKey,
+  type ResolvedLayout,
+} from "@/lib/crm/reportLayout";
 import { crmSourceLabel } from "@/components/crm/constants";
 import { formatCentsShort } from "@/components/crm/format";
 import { downloadCrmReportPdf } from "@/lib/crmReportPdf";
 import { pipelineHref } from "@/lib/crm/pipelineUrl";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import { Link } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import {
   getCrmReports,
+  getCrmReportLayout,
+  saveCrmReportLayout,
   presetRange,
   CRM_PERIOD_LABELS,
   type CrmPeriodPreset,
   type CrmReportsResponse,
   type CrmSalesKpis,
+  type CrmSegmentDimension,
   type CrmTimelineBucket,
 } from "@/lib/api/crmReports";
 
@@ -190,9 +215,46 @@ export function CrmReportsPage() {
   const [exporting, setExporting] = useState(false);
   const [targetsOpen, setTargetsOpen] = useState(false);
   const { data: session } = useBusinessSession();
+  const isPhone = useIsPhone();
   const [data, setData] = useState<CrmReportsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [layout, setLayout] = useState<ResolvedLayout>(DEFAULT_LAYOUT);
+  const [customizing, setCustomizing] = useState(false);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [funnelView, setFunnelView] = useState<"chart" | "table">("chart");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Aranjamentul personal. Până vine (sau dacă nu vine), ecranul arată aranjamentul implicit —
+  // raportul nu așteaptă după preferințe.
+  useEffect(() => {
+    let alive = true;
+    getCrmReportLayout()
+      .then((res) => alive && res.layout && setLayout(resolveLayout(res.layout)))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+  }, []);
+
+  /** Schimbă aranjamentul pe loc și îl salvează după o pauză — cinci click-uri pe „mută în sus"
+   *  sunt o singură salvare, nu cinci. */
+  const updateLayout = useCallback((next: ResolvedLayout) => {
+    setLayout(next);
+    setLayoutError(null);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveCrmReportLayout(serializeLayout(next))
+        .then((res) => {
+          if (!res.saved) setLayoutError("Aranjamentul se vede acum, dar nu s-a putut salva pentru data viitoare.");
+        })
+        .catch(() => setLayoutError("Aranjamentul se vede acum, dar nu s-a putut salva pentru data viitoare."));
+    }, 600);
+  }, []);
 
   const range = useMemo(() => {
     if (preset !== "custom") return presetRange(preset);
@@ -230,6 +292,37 @@ export function CrmReportsPage() {
   );
   const stageLabel = useCallback((key: string) => data?.stages.find((s) => s.key === key)?.label ?? key, [data]);
 
+  /** Eticheta unei valori de segment: sursele au nume omenești, agentul e un id. */
+  const segmentValue = useCallback(
+    (dimension: string, value: string) => {
+      if (!value) return "Necompletat";
+      if (dimension === "source") return crmSourceLabel(value);
+      if (dimension === "owner") return ownerName(value);
+      return value;
+    },
+    [ownerName]
+  );
+  const insightCtx: InsightContext = useMemo(() => ({ money: (c) => money(c), ownerName, segmentValue }), [ownerName, segmentValue]);
+
+  const dimensions: CrmSegmentDimension[] = useMemo(() => data?.dimensions ?? [], [data]);
+  /** Dimensiunea aleasă; dacă cea salvată nu mai are date în perioada asta, prima disponibilă. */
+  const activeDimension = useMemo(
+    () => dimensions.find((d) => d.key === layout.segmentDimension) ?? dimensions[0] ?? null,
+    [dimensions, layout.segmentDimension]
+  );
+  const activeSpread = useMemo(() => {
+    const hit = (data?.insights ?? []).find((i) => i.kind === "segmentSpread" && i.dimension === activeDimension?.key);
+    return hit && hit.kind === "segmentSpread" ? { best: hit.best.value, worst: hit.worst.value } : null;
+  }, [data, activeDimension]);
+
+  const openSegment = useCallback(
+    (dimension: string) => {
+      updateLayout({ ...layout, segmentDimension: dimension, hidden: new Set([...layout.hidden].filter((k) => k !== "segments")) });
+      requestAnimationFrame(() => document.getElementById("sectiune-segments")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    },
+    [layout, updateLayout]
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -253,7 +346,11 @@ export function CrmReportsPage() {
   }, [load]);
 
   const size: TrendSize = data?.bucketSize ?? "day";
-  const activeMetric = METRICS.find((m) => m.key === metric) ?? METRICS[0];
+  // Plăcuța aleasă poate fi ascunsă din „Personalizează": graficul trece pe prima vizibilă.
+  const activeMetric =
+    METRICS.find((m) => m.key === metric && !layout.hiddenMetrics.has(m.key)) ??
+    METRICS.find((m) => m.series && !layout.hiddenMetrics.has(m.key)) ??
+    METRICS[0];
 
   /** Punctele graficului: toate intervalele, cu perioada precedentă aliniată pe poziție. */
   const trend = useMemo((): { points: TrendPoint[]; hasPrevious: boolean } => {
@@ -267,9 +364,9 @@ export function CrmReportsPage() {
     const prevKeys = data.previous ? allBuckets(data.previous.range.from, data.previous.range.to, size, []) : [];
     // Rata de câștig pe perioada precedentă ar cere pierderile ei pe intervale — nu le avem, deci
     // nu desenăm o linie falsă de 100%.
-    const hasPrevious = prevKeys.length > 0 && metric !== "winRate";
+    const hasPrevious = prevKeys.length > 0 && activeMetric.key !== "winRate";
     const empty: CrmTimelineBucket = { bucket: "", leadsCreated: 0, offersSent: 0, contractsSigned: 0, salesValueCents: 0, lostCount: 0 };
-    const toUnits = (v: number | null) => (v == null ? null : metric === "sales" || metric === "avgDeal" ? v / 100 : v);
+    const toUnits = (v: number | null) => (v == null ? null : activeMetric.key === "sales" || activeMetric.key === "avgDeal" ? v / 100 : v);
     const points = keys.map((k, i) => {
       const prevKey = prevKeys[i];
       return {
@@ -279,7 +376,7 @@ export function CrmReportsPage() {
       };
     });
     return { points, hasPrevious };
-  }, [data, activeMetric, metric, size]);
+  }, [data, activeMetric, size]);
 
   const wonLost = useMemo(() => {
     if (!data) return [];
@@ -326,7 +423,13 @@ export function CrmReportsPage() {
 
   function exportCsv() {
     if (!data) return;
-    const rows: (string | number)[][] = [["Indicator", "Perioada", "Perioada precedentă"], ...summaryRows(data)];
+    const rows: (string | number)[][] = [];
+    if ((data.insights ?? []).length) {
+      rows.push(["Ce spun cifrele"]);
+      for (const i of data.insights ?? []) rows.push([insightText(i, insightCtx)]);
+      rows.push([]);
+    }
+    rows.push(["Indicator", "Perioada", "Perioada precedentă"], ...summaryRows(data));
     rows.push([], ["Activitate", "Perioada", "Perioada precedentă", "Normă"]);
     for (const a of ACTIVITY_ROWS) {
       const att = data.attainment?.[a.key];
@@ -339,8 +442,10 @@ export function CrmReportsPage() {
         rows.push([r.label, r.currentCount, money(r.currentValueCents), money(r.weightedValueCents), r.reached, r.isWon ? "—" : `${r.conversionPct}%`, velocityByKey.get(r.key)?.avgDays ?? "—"]);
       }
     }
-    rows.push([], ["Sursă", "Leaduri", "Câștigate", "Rată", "Valoare câștigată"]);
-    for (const s of data.sources ?? []) rows.push([crmSourceLabel(s.source), s.leads, s.won, pct(s.winRatePct), money(s.wonValueCents)]);
+    for (const d of dimensions) {
+      rows.push([], [d.label, "Leaduri", "Câștigate", "Pierdute", "Conversie", "Rată de câștig", "Valoare câștigată"]);
+      for (const r of d.rows) rows.push([segmentValue(d.key, r.value), r.leads, r.won, r.lost, `${r.conversionPct}%`, pct(r.winRatePct), money(r.wonValueCents)]);
+    }
     rows.push([], ["Agent", "Câștigate", "Valoare", "Rată", "Valoare medie", "Deschise", "Apeluri", "Întâlniri"]);
     for (const t of team) rows.push([t.name, t.wonCount, money(t.wonValueCents), pct(t.winRatePct), money(t.avgDealCents), t.openCount, t.calls, t.meetings]);
     rows.push([], ["Motiv pierdere", "Număr", "Procent", "Valoare pierdută"]);
@@ -367,16 +472,23 @@ export function CrmReportsPage() {
           ],
           cycleLabel: days(data.cycleDays),
           tables: [
+            ...((data.insights ?? []).length
+              ? [{ title: "Ce spun cifrele", head: ["Constatare"], rows: (data.insights ?? []).map((i) => [insightText(i, insightCtx)]) }]
+              : []),
             {
               title: "Pâlnia",
               head: ["Etapă", "Acum", "Valoare", "Au ajuns", "Trec mai departe", "Zile în etapă"],
               rows: funnelRows.map((r) => [r.label, r.currentCount, money(r.currentValueCents), r.reached, r.isWon ? "—" : `${r.conversionPct}%`, velocityByKey.get(r.key)?.avgDays ?? "—"]),
             },
-            {
-              title: "Surse",
-              head: ["Sursă", "Leaduri", "Câștigate", "Rată", "Valoare câștigată"],
-              rows: (data.sources ?? []).map((s) => [crmSourceLabel(s.source), s.leads, s.won, pct(s.winRatePct), money(s.wonValueCents)]),
-            },
+            ...(activeDimension
+              ? [
+                  {
+                    title: `Conversie pe ${activeDimension.label.toLowerCase()}`,
+                    head: [activeDimension.label, "Leaduri", "Câștigate", "Conversie", "Valoare câștigată"],
+                    rows: activeDimension.rows.map((r) => [segmentValue(activeDimension.key, r.value), r.leads, r.won, `${r.conversionPct}%`, money(r.wonValueCents)]),
+                  },
+                ]
+              : []),
             {
               title: "Echipa",
               head: ["Agent", "Câștigate", "Valoare", "Rată", "Deschise", "Apeluri"],
@@ -409,23 +521,483 @@ export function CrmReportsPage() {
   // ─── Randare ───────────────────────────────────────────────────────────────
 
   const hasData = !!data && !data.schemaLag;
+  const visibleMetrics = METRICS.filter((m) => !layout.hiddenMetrics.has(m.key));
+
+  /** O secțiune a raportului, după cheie; `null` = n-are ce arăta (ex. contactabilitate fără apeluri). */
+  function renderSection(key: ReportSectionKey): ReactNode {
+    if (!data) return null;
+    switch (key) {
+      case "insights":
+        return (
+          <Section title="Ce spun cifrele" subtitle="Constatări calculate automat din perioada și pâlnia alese.">
+            <ReportInsights insights={data.insights ?? []} ctx={insightCtx} onOpenSegment={openSegment} />
+          </Section>
+        );
+
+      case "metrics":
+        // Plăcuțele + graficul metricii alese (Google Analytics).
+        if (visibleMetrics.length === 0) return null;
+        return (
+          <Card className="overflow-hidden p-0">
+            <div
+              className={cn(
+                "grid grid-cols-2 border-b border-border sm:grid-cols-3",
+                visibleMetrics.length >= 6 ? "lg:grid-cols-6" : visibleMetrics.length === 5 ? "lg:grid-cols-5" : visibleMetrics.length === 4 ? "lg:grid-cols-4" : ""
+              )}
+              role="tablist"
+              aria-label="Indicatori"
+            >
+              {visibleMetrics.map((m) => {
+                const { cur, prev } = metricValues(data, m.key);
+                const d = delta(m, cur, prev);
+                const selectable = !!m.series;
+                const selected = activeMetric.key === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    disabled={!selectable}
+                    onClick={() => selectable && setMetric(m.key)}
+                    className={cn(
+                      "flex min-h-24 flex-col items-start gap-1 border-b-2 px-4 py-3 text-left transition-colors disabled:cursor-default",
+                      selected ? "border-primary bg-card" : "border-transparent bg-muted/40 hover:bg-muted",
+                    )}
+                  >
+                    <span className="text-sm text-muted-foreground">{m.label}</span>
+                    <span className="text-2xl tabular-nums text-foreground">{m.format(cur)}</span>
+                    {d ? (
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-0.5 text-xs font-medium tabular-nums",
+                          d.good === true ? "text-success" : d.good === false ? "text-destructive" : "text-muted-foreground",
+                        )}
+                      >
+                        {d.good !== null &&
+                          ((cur ?? 0) >= (prev ?? 0) ? (
+                            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          ) : (
+                            <ArrowDownRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          ))}
+                        <span className="sr-only">{(cur ?? 0) >= (prev ?? 0) ? "crește cu" : "scade cu"}</span>
+                        {d.text}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{data.previous ? "fără comparație" : " "}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {activeMetric.series && (
+              <div className="p-4">
+                <TrendChart
+                  points={trend.points}
+                  size={size}
+                  label={activeMetric.label}
+                  showPrevious={trend.hasPrevious}
+                  format={(v) => activeMetric.format(activeMetric.key === "sales" || activeMetric.key === "avgDeal" ? Math.round(v * 100) : v)}
+                />
+                {trend.hasPrevious && (
+                  <p className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-primary" aria-hidden="true" />Perioada aleasă</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed border-muted-foreground" aria-hidden="true" />Perioada precedentă</span>
+                  </p>
+                )}
+              </div>
+            )}
+          </Card>
+        );
+
+      case "wonLost":
+        return (
+          <Section title="Câștigate și pierdute" subtitle={outcomeSentence(data)}>
+            <Card className="p-4">
+              <WonLostChart points={wonLost} size={size} />
+              <p className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-success" aria-hidden="true" />Câștigate</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-destructive" aria-hidden="true" />Pierdute</span>
+              </p>
+            </Card>
+          </Section>
+        );
+
+      case "funnel":
+        // Pâlnia: unde se opresc afacerile. Desenată ca pâlnie; tabelul cu zilele în etapă, la un click.
+        if (funnelRows.length === 0) return null;
+        return (
+          <Section
+            title="Pâlnia"
+            subtitle={`${openTotals.count} afaceri deschise · ${money(openTotals.value)} în lucru · prognoză ponderată ${money(openTotals.weighted)}`}
+            action={
+              <div className="flex items-center gap-3">
+                <div className="inline-flex rounded-lg border border-input p-0.5" role="group" aria-label="Cum se arată pâlnia">
+                  {(["chart", "table"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      aria-pressed={funnelView === v}
+                      onClick={() => setFunnelView(v)}
+                      className={cn(
+                        "h-8 rounded-md px-3 text-sm font-medium transition-colors",
+                        funnelView === v ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      {v === "chart" ? "Pâlnie" : "Tabel"}
+                    </button>
+                  ))}
+                </div>
+                <Link to={`/business/crm/palnie${data.pipelineId ? `?pipelineId=${data.pipelineId}` : ""}`} className="text-sm font-medium text-primary">
+                  Tabloul pâlniei
+                </Link>
+              </div>
+            }
+          >
+            {funnelView === "chart" ? (
+              <Card className="p-4">
+                {/* Pe telefon, desenul lat s-ar strânge la ~35% și textul ar ieși ilizibil — varianta
+                    strânsă are propria pânză, gândită pentru ~350px. */}
+                <FunnelChart
+                  stages={(data.funnel ?? []).map((r, i) => ({ ...r, orderIndex: i }))}
+                  label={`Pâlnia ${pipelineLabel || "raportului"}`}
+                  compact={isPhone}
+                />
+              </Card>
+            ) : (
+              <Table aria-label="Pâlnia pe etape">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Etapă</TableHead>
+                    <TableHead className="text-right">Acum</TableHead>
+                    <TableHead className="text-right">Valoare</TableHead>
+                    <TableHead className="text-right">Au ajuns</TableHead>
+                    <TableHead className="w-1/4">Trec mai departe</TableHead>
+                    <TableHead className="text-right">Zile în etapă</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {funnelRows.map((r) => {
+                    const v = velocityByKey.get(r.key);
+                    return (
+                      <TableRow key={r.key}>
+                        <TableCell className="font-medium">{r.label}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.currentCount}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(r.currentValueCents)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.reached}</TableCell>
+                        <TableCell>
+                          {r.isWon ? (
+                            <span className="text-muted-foreground">etapa finală</span>
+                          ) : (
+                            <Meter value={r.conversionPct} label={`${r.conversionPct}%`} />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {v?.avgDays != null ? v.avgDays.toLocaleString("ro-MD") : "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
+        );
+
+      case "segments":
+        // Conversia pe orice dimensiune: sursă, agent, produs, industrie, regiune, câmpuri proprii.
+        return (
+          <Section
+            title="Conversie pe segment"
+            subtitle="Leadurile intrate în perioadă, grupate după câmpul ales, și câte au devenit clienți."
+            action={
+              dimensions.length > 0 ? (
+                <FilterChip
+                  id="rap-segment"
+                  label="Grupează după"
+                  value={activeDimension?.key ?? ""}
+                  onChange={(v) => updateLayout({ ...layout, segmentDimension: v })}
+                >
+                  {dimensions.map((d) => (
+                    <option key={d.key} value={d.key}>
+                      {d.label}
+                    </option>
+                  ))}
+                </FilterChip>
+              ) : undefined
+            }
+          >
+            {!activeDimension ? (
+              <p className="text-sm text-muted-foreground">Niciun lead nou în perioada aleasă.</p>
+            ) : (
+              <Table aria-label={`Conversie pe ${activeDimension.label.toLowerCase()}`}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{activeDimension.label}</TableHead>
+                    <TableHead className="text-right">Leaduri</TableHead>
+                    <TableHead className="text-right">Câștigate</TableHead>
+                    <TableHead className="w-1/4">Conversie</TableHead>
+                    <TableHead className="text-right">Rată de câștig</TableHead>
+                    <TableHead className="text-right">Valoare câștigată</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeDimension.rows.map((r) => {
+                    const tag = activeSpread?.best === r.value ? "cea mai bună" : activeSpread?.worst === r.value ? "cea mai slabă" : null;
+                    return (
+                      <TableRow key={r.value || "__gol"}>
+                        <TableCell className={cn(!r.value && "text-muted-foreground")}>
+                          <span className="inline-flex flex-wrap items-center gap-2">
+                            {segmentValue(activeDimension.key, r.value)}
+                            {tag && (
+                              <span
+                                className={cn(
+                                  "rounded-full px-2 py-0.5 text-xs font-medium",
+                                  activeSpread?.best === r.value ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                                )}
+                              >
+                                {tag}
+                              </span>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{r.leads}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.won}</TableCell>
+                        <TableCell>
+                          <Meter value={r.conversionPct} label={`${r.conversionPct}%`} tone={activeSpread?.best === r.value ? "success" : "primary"} />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{pct(r.winRatePct)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(r.wonValueCents)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
+        );
+
+      case "aging":
+        // Afacerile care mor în tăcere.
+        if (!data.aging) return null;
+        return (
+          <Section
+            title="Afaceri care stagnează"
+            subtitle={
+              data.aging.staleCount
+                ? `${data.aging.staleCount} afaceri deschise fără nicio activitate de peste 14 zile`
+                : "Nicio afacere deschisă neatinsă de peste 14 zile."
+            }
+          >
+            <div className="mb-3 flex flex-wrap gap-2">
+              {data.aging.buckets.map((b) => (
+                <span key={b.key} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm">
+                  <span className="text-muted-foreground">{b.label}</span>
+                  <span className="font-medium tabular-nums">{b.count}</span>
+                  <span className="text-muted-foreground tabular-nums">{money(b.valueCents)}</span>
+                </span>
+              ))}
+            </div>
+            {data.aging.stale.length > 0 && (
+              <Table aria-label="Afaceri în stagnare">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Afacere</TableHead>
+                    <TableHead>Etapă</TableHead>
+                    <TableHead className="text-right">Valoare</TableHead>
+                    <TableHead className="text-right">Fără activitate</TableHead>
+                    <TableHead>Responsabil</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.aging.stale.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell>
+                        <Link to={pipelineHref(s.id)} className="font-medium text-foreground hover:text-primary hover:underline">
+                          {s.title}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{stageLabel(s.stage)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(s.valueCents)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{s.daysIdle} zile</TableCell>
+                      <TableCell className="text-muted-foreground">{ownerName(s.assignedTo)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
+        );
+
+      case "lostReasons":
+        return (
+          <Section title="De ce pierdem" subtitle={data.outcomes ? `${money(data.outcomes.lostValueCents)} pierduți în perioadă` : undefined}>
+            {data.lostReasons.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Niciun motiv de pierdere notat în perioada aleasă.</p>
+            ) : (
+              <Table aria-label="Motivele pierderii">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Motiv</TableHead>
+                    <TableHead className="w-1/3">Din pierderi</TableHead>
+                    <TableHead className="text-right">Valoare</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.lostReasons.map((r) => (
+                    <TableRow key={r.reason}>
+                      <TableCell>{r.reason}</TableCell>
+                      <TableCell>
+                        <Meter value={r.pct} label={`${r.count} · ${r.pct}%`} tone="muted" />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{money(r.valueCents)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
+        );
+
+      case "team": {
+        if (team.length === 0) return null;
+        const topValue = Math.max(1, ...team.map((t) => t.wonValueCents));
+        return (
+          <Section title="Echipa" subtitle="Ordonată după valoarea vândută în perioadă.">
+            <Table aria-label="Rezultate pe agent">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Agent</TableHead>
+                  <TableHead className="text-right">Câștigate</TableHead>
+                  <TableHead className="w-1/5">Valoare</TableHead>
+                  <TableHead className="text-right">Rată</TableHead>
+                  <TableHead className="text-right">Valoare medie</TableHead>
+                  <TableHead className="text-right">Deschise</TableHead>
+                  <TableHead className="text-right">Apeluri</TableHead>
+                  <TableHead className="text-right">Întâlniri</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {team.map((t) => (
+                  <TableRow key={t.ownerKey}>
+                    <TableCell className="font-medium">{t.name}</TableCell>
+                    <TableCell className="text-right tabular-nums">{t.wonCount}</TableCell>
+                    <TableCell>
+                      <Meter value={Math.round((t.wonValueCents / topValue) * 100)} label={money(t.wonValueCents)} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{pct(t.winRatePct)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(t.avgDealCents)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {t.openCount} <span className="text-muted-foreground">· {money(t.openValueCents)}</span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{t.calls}</TableCell>
+                    <TableCell className="text-right tabular-nums">{t.meetings}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Section>
+        );
+      }
+
+      case "activity":
+        // Activitatea, cu norma și perioada precedentă.
+        return (
+          <Section title="Activitate" subtitle="Munca din spatele rezultatelor, față de normă.">
+            <Table aria-label="Activitate">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Indicator</TableHead>
+                  <TableHead className="text-right">Perioada aleasă</TableHead>
+                  <TableHead className="text-right">Perioada precedentă</TableHead>
+                  <TableHead className="w-1/3">Față de normă</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ACTIVITY_ROWS.map((a) => {
+                  const att = data.attainment?.[a.key];
+                  const fmt = (v: number | undefined) => (v == null ? "—" : a.money ? money(v) : String(v));
+                  return (
+                    <TableRow key={a.key}>
+                      <TableCell>{a.label}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(data.kpis[a.key])}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(data.previous?.kpis[a.key])}</TableCell>
+                      <TableCell>
+                        {att ? (
+                          <Meter
+                            value={Math.min(100, att.pct)}
+                            label={`${att.pct}% din ${a.money ? money(att.target) : att.target}`}
+                            tone={att.pct >= 100 ? "success" : "primary"}
+                          />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">fără normă</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Section>
+        );
+
+      case "calls":
+        // Contactabilitatea — doar pe echipele care sună.
+        if (!data.callFunnel || data.callFunnel.dialed === 0) return null;
+        return (
+          <Section
+            title="Contactabilitate"
+            subtitle={`${data.callFunnel.dialed} apeluri · a răspuns cineva la ${data.callFunnel.connected} · ${data.callFunnel.decisionMakers} decidenți atinși${data.callFunnel.callsPerDecisionMaker ? ` · ${data.callFunnel.callsPerDecisionMaker} apeluri per decident` : ""}`}
+          >
+            <Table aria-label="Rezultatele apelurilor">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Rezultatul apelului</TableHead>
+                  <TableHead className="w-2/5">Din apeluri</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.callFunnel.byOutcome.map((r) => (
+                  <TableRow key={r.outcome}>
+                    <TableCell>{r.label}</TableCell>
+                    <TableCell>
+                      <Meter value={r.pct} label={`${r.count} · ${r.pct}%`} tone="muted" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {data.callFunnel.unknown > 0 && (
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Fără rezultat notat</TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">{data.callFunnel.unknown}</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Section>
+        );
+    }
+  }
 
   return (
     <BusinessShell
       pageTitle="Rapoarte"
       actions={
         <>
+          <Button variant="ghost" onClick={() => setCustomizing((v) => !v)} aria-expanded={customizing} aria-controls="personalizare-rapoarte">
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            <span className="max-sm:sr-only">Personalizează</span>
+          </Button>
           <Button variant="ghost" onClick={() => setTargetsOpen(true)}>
             <Target className="h-4 w-4" aria-hidden="true" />
-            Norme
+            <span className="max-sm:sr-only">Norme</span>
           </Button>
           <Button variant="outline" onClick={exportCsv} disabled={!hasData || loading}>
             <Download className="h-4 w-4" aria-hidden="true" />
-            Export Excel
+            <span className="max-sm:sr-only">Export Excel</span>
           </Button>
           <Button variant="outline" onClick={() => void exportPdf()} disabled={!hasData || loading || exporting}>
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
-            Export PDF
+            <span className="max-sm:sr-only">Export PDF</span>
           </Button>
         </>
       }
@@ -485,380 +1057,121 @@ export function CrmReportsPage() {
           />
         ) : (
           <div className={cn("space-y-8 transition-opacity", loading && "opacity-60")} aria-busy={loading}>
-            {/* 1 · Plăcuțele + graficul metricii alese (Google Analytics). */}
-            <Card className="overflow-hidden p-0">
-              <div className="grid grid-cols-2 border-b border-border sm:grid-cols-3 lg:grid-cols-6" role="tablist" aria-label="Indicatori">
-                {METRICS.map((m) => {
-                  const { cur, prev } = metricValues(data, m.key);
-                  const d = delta(m, cur, prev);
-                  const selectable = !!m.series;
-                  const selected = metric === m.key;
-                  return (
-                    <button
-                      key={m.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      disabled={!selectable}
-                      onClick={() => selectable && setMetric(m.key)}
-                      className={cn(
-                        "flex min-h-24 flex-col items-start gap-1 border-b-2 px-4 py-3 text-left transition-colors disabled:cursor-default",
-                        selected ? "border-primary bg-card" : "border-transparent bg-muted/40 hover:bg-muted",
-                      )}
-                    >
-                      <span className="text-sm text-muted-foreground">{m.label}</span>
-                      <span className="text-2xl tabular-nums text-foreground">{m.format(cur)}</span>
-                      {d ? (
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-0.5 text-xs font-medium tabular-nums",
-                            d.good === true ? "text-success" : d.good === false ? "text-destructive" : "text-muted-foreground",
-                          )}
-                        >
-                          {d.good !== null &&
-                            ((cur ?? 0) >= (prev ?? 0) ? (
-                              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-                            ) : (
-                              <ArrowDownRight className="h-3.5 w-3.5" aria-hidden="true" />
-                            ))}
-                          <span className="sr-only">{(cur ?? 0) >= (prev ?? 0) ? "crește cu" : "scade cu"}</span>
-                          {d.text}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{data.previous ? "fără comparație" : " "}</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="p-4">
-                <TrendChart
-                  points={trend.points}
-                  size={size}
-                  label={activeMetric.label}
-                  showPrevious={trend.hasPrevious}
-                  format={(v) => activeMetric.format(metric === "sales" || metric === "avgDeal" ? Math.round(v * 100) : v)}
-                />
-                {trend.hasPrevious && (
-                  <p className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-primary" aria-hidden="true" />Perioada aleasă</span>
-                    <span className="inline-flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed border-muted-foreground" aria-hidden="true" />Perioada precedentă</span>
-                  </p>
-                )}
-              </div>
-            </Card>
-
-            {/* 2 · Câștigat față de pierdut. */}
-            <Section title="Câștigate și pierdute" subtitle={outcomeSentence(data)}>
-              <Card className="p-4">
-                <WonLostChart points={wonLost} size={size} />
-                <p className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-success" aria-hidden="true" />Câștigate</span>
-                  <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-destructive" aria-hidden="true" />Pierdute</span>
-                </p>
-              </Card>
-            </Section>
-
-            {/* 3 · Pâlnia: unde se opresc afacerile. */}
-            {funnelRows.length > 0 && (
-              <Section
-                title="Pâlnia"
-                subtitle={`${openTotals.count} afaceri deschise · ${money(openTotals.value)} în lucru · prognoză ponderată ${money(openTotals.weighted)}`}
-                action={
-                  <Link to={`/business/crm/palnie${data.pipelineId ? `?pipelineId=${data.pipelineId}` : ""}`} className="text-sm font-medium text-primary">
-                    Tabloul pâlniei
-                  </Link>
-                }
-              >
-                <Table aria-label="Pâlnia pe etape">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Etapă</TableHead>
-                      <TableHead className="text-right">Acum</TableHead>
-                      <TableHead className="text-right">Valoare</TableHead>
-                      <TableHead className="text-right">Au ajuns</TableHead>
-                      <TableHead className="w-1/4">Trec mai departe</TableHead>
-                      <TableHead className="text-right">Zile în etapă</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {funnelRows.map((r) => {
-                      const v = velocityByKey.get(r.key);
-                      return (
-                        <TableRow key={r.key}>
-                          <TableCell className="font-medium">{r.label}</TableCell>
-                          <TableCell className="text-right tabular-nums">{r.currentCount}</TableCell>
-                          <TableCell className="text-right tabular-nums">{money(r.currentValueCents)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{r.reached}</TableCell>
-                          <TableCell>
-                            {r.isWon ? (
-                              <span className="text-muted-foreground">etapa finală</span>
-                            ) : (
-                              <Meter value={r.conversionPct} label={`${r.conversionPct}%`} />
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums text-muted-foreground">
-                            {v?.avgDays != null ? v.avgDays.toLocaleString("ro-MD") : "—"}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </Section>
+            {customizing && (
+              <CustomizePanel
+                layout={layout}
+                onChange={updateLayout}
+                onClose={() => setCustomizing(false)}
+                error={layoutError}
+              />
             )}
-
-            {/* 4 · Afacerile care mor în tăcere. */}
-            {data.aging && (
-              <Section
-                title="Afaceri care stagnează"
-                subtitle={
-                  data.aging.staleCount
-                    ? `${data.aging.staleCount} afaceri deschise fără nicio activitate de peste 14 zile`
-                    : "Nicio afacere deschisă neatinsă de peste 14 zile."
-                }
-              >
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {data.aging.buckets.map((b) => (
-                    <span key={b.key} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm">
-                      <span className="text-muted-foreground">{b.label}</span>
-                      <span className="font-medium tabular-nums">{b.count}</span>
-                      <span className="text-muted-foreground tabular-nums">{money(b.valueCents)}</span>
-                    </span>
-                  ))}
-                </div>
-                {data.aging.stale.length > 0 && (
-                  <Table aria-label="Afaceri în stagnare">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Afacere</TableHead>
-                        <TableHead>Etapă</TableHead>
-                        <TableHead className="text-right">Valoare</TableHead>
-                        <TableHead className="text-right">Fără activitate</TableHead>
-                        <TableHead>Responsabil</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.aging.stale.map((s) => (
-                        <TableRow key={s.id}>
-                          <TableCell>
-                            <Link to={pipelineHref(s.id)} className="font-medium text-foreground hover:text-primary hover:underline">
-                              {s.title}
-                            </Link>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">{stageLabel(s.stage)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{money(s.valueCents)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{s.daysIdle} zile</TableCell>
-                          <TableCell className="text-muted-foreground">{ownerName(s.assignedTo)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </Section>
-            )}
-
-            <div className="grid gap-8 xl:grid-cols-2">
-              {/* 5 · Surse. */}
-              <Section title="Surse" subtitle="Leadurile intrate în perioadă și ce s-a ales de ele.">
-                {(data.sources ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Niciun lead nou în perioada aleasă.</p>
-                ) : (
-                  <Table aria-label="Rezultate pe sursă">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Sursă</TableHead>
-                        <TableHead className="text-right">Leaduri</TableHead>
-                        <TableHead className="text-right">Câștigate</TableHead>
-                        <TableHead className="text-right">Rată</TableHead>
-                        <TableHead className="text-right">Valoare</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(data.sources ?? []).map((s) => (
-                        <TableRow key={s.source}>
-                          <TableCell>{crmSourceLabel(s.source)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{s.leads}</TableCell>
-                          <TableCell className="text-right tabular-nums">{s.won}</TableCell>
-                          <TableCell className="text-right tabular-nums">{pct(s.winRatePct)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{money(s.wonValueCents)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </Section>
-
-              {/* 6a · De ce pierdem. */}
-              <Section title="De ce pierdem" subtitle={data.outcomes ? `${money(data.outcomes.lostValueCents)} pierduți în perioadă` : undefined}>
-                {data.lostReasons.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Niciun motiv de pierdere notat în perioada aleasă.</p>
-                ) : (
-                  <Table aria-label="Motivele pierderii">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Motiv</TableHead>
-                        <TableHead className="w-1/3">Din pierderi</TableHead>
-                        <TableHead className="text-right">Valoare</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.lostReasons.map((r) => (
-                        <TableRow key={r.reason}>
-                          <TableCell>{r.reason}</TableCell>
-                          <TableCell>
-                            <Meter value={r.pct} label={`${r.count} · ${r.pct}%`} tone="muted" />
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">{money(r.valueCents)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </Section>
-            </div>
-
-            {/* 6b · Echipa. */}
-            {team.length > 0 && (
-              <Section title="Echipa" subtitle="Ordonată după valoarea vândută în perioadă.">
-                <Table aria-label="Rezultate pe agent">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Agent</TableHead>
-                      <TableHead className="text-right">Câștigate</TableHead>
-                      <TableHead className="text-right">Valoare</TableHead>
-                      <TableHead className="text-right">Rată</TableHead>
-                      <TableHead className="text-right">Valoare medie</TableHead>
-                      <TableHead className="text-right">Deschise</TableHead>
-                      <TableHead className="text-right">Apeluri</TableHead>
-                      <TableHead className="text-right">Întâlniri</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {team.map((t) => (
-                      <TableRow key={t.ownerKey}>
-                        <TableCell className="font-medium">{t.name}</TableCell>
-                        <TableCell className="text-right tabular-nums">{t.wonCount}</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(t.wonValueCents)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{pct(t.winRatePct)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(t.avgDealCents)}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {t.openCount} <span className="text-muted-foreground">· {money(t.openValueCents)}</span>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{t.calls}</TableCell>
-                        <TableCell className="text-right tabular-nums">{t.meetings}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Section>
-            )}
-
-            {/* 7 · Activitatea, cu norma și perioada precedentă (în locul celor 10 plăcuțe). */}
-            <Section title="Activitate" subtitle="Munca din spatele rezultatelor, față de normă.">
-              <Table aria-label="Activitate">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Indicator</TableHead>
-                    <TableHead className="text-right">Perioada aleasă</TableHead>
-                    <TableHead className="text-right">Perioada precedentă</TableHead>
-                    <TableHead className="w-1/3">Față de normă</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ACTIVITY_ROWS.map((a) => {
-                    const att = data.attainment?.[a.key];
-                    const fmt = (v: number | undefined) => (v == null ? "—" : a.money ? money(v) : String(v));
-                    return (
-                      <TableRow key={a.key}>
-                        <TableCell>{a.label}</TableCell>
-                        <TableCell className="text-right tabular-nums">{fmt(data.kpis[a.key])}</TableCell>
-                        <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(data.previous?.kpis[a.key])}</TableCell>
-                        <TableCell>
-                          {att ? (
-                            <Meter
-                              value={Math.min(100, att.pct)}
-                              label={`${att.pct}% din ${a.money ? money(att.target) : att.target}`}
-                              tone={att.pct >= 100 ? "success" : "primary"}
-                            />
-                          ) : (
-                            <span className="text-sm text-muted-foreground">fără normă</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </Section>
-
-            {/* Contactabilitatea — doar pe echipele care sună. */}
-            {data.callFunnel && data.callFunnel.dialed > 0 && (
-              <Section
-                title="Contactabilitate"
-                subtitle={`${data.callFunnel.dialed} apeluri · a răspuns cineva la ${data.callFunnel.connected} · ${data.callFunnel.decisionMakers} decidenți atinși${data.callFunnel.callsPerDecisionMaker ? ` · ${data.callFunnel.callsPerDecisionMaker} apeluri per decident` : ""}`}
-              >
-                <Table aria-label="Rezultatele apelurilor">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Rezultatul apelului</TableHead>
-                      <TableHead className="w-2/5">Din apeluri</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.callFunnel.byOutcome.map((r) => (
-                      <TableRow key={r.outcome}>
-                        <TableCell>{r.label}</TableCell>
-                        <TableCell>
-                          <Meter value={r.pct} label={`${r.count} · ${r.pct}%`} tone="muted" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {data.callFunnel.unknown > 0 && (
-                      <TableRow>
-                        <TableCell className="text-muted-foreground">Fără rezultat notat</TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">{data.callFunnel.unknown}</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </Section>
-            )}
-
-            {data.perProduct.length > 0 && (
-              <Section title="Pe produs">
-                <Table aria-label="Rezultate pe produs">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Produs</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right">Câștigate</TableHead>
-                      <TableHead className="text-right">Pierdute</TableHead>
-                      <TableHead className="text-right">Rată</TableHead>
-                      <TableHead className="text-right">Valoare</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.perProduct.map((p) => (
-                      <TableRow key={p.product}>
-                        <TableCell>{p.product}</TableCell>
-                        <TableCell className="text-right tabular-nums">{p.total}</TableCell>
-                        <TableCell className="text-right tabular-nums">{p.won}</TableCell>
-                        <TableCell className="text-right tabular-nums">{p.lost}</TableCell>
-                        <TableCell className="text-right tabular-nums">{p.winRatePct}%</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(p.valueCents)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Section>
-            )}
+            {layout.order
+              .filter((key) => !layout.hidden.has(key))
+              .map((key) => {
+                const node = renderSection(key);
+                return node ? (
+                  <div key={key} id={`sectiune-${key}`} className="scroll-mt-4">
+                    {node}
+                  </div>
+                ) : null;
+              })}
           </div>
         )}
       </div>
 
       <KpiTargetsDialog open={targetsOpen} onClose={() => setTargetsOpen(false)} owners={data?.owners ?? []} onSaved={() => void load()} />
     </BusinessShell>
+  );
+}
+
+// ─── Personalizarea ───────────────────────────────────────────────────────────
+
+interface CustomizePanelProps {
+  layout: ResolvedLayout;
+  onChange: (next: ResolvedLayout) => void;
+  onClose: () => void;
+  error: string | null;
+}
+
+/**
+ * Lista secțiunilor, cu „afișează" și săgeți sus/jos. Butoane, nu drag-and-drop: se folosesc din
+ * tastatură și pe telefon fără nicio bibliotecă, iar ordinea a zece secțiuni nu cere mai mult.
+ */
+function CustomizePanel({ layout, onChange, onClose, error }: CustomizePanelProps) {
+  const label = (key: ReportSectionKey) => REPORT_SECTIONS.find((s) => s.key === key)?.label ?? key;
+  const toggle = <T,>(set: Set<T>, value: T) => {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    return next;
+  };
+  return (
+    <Card id="personalizare-rapoarte" className="space-y-5 p-4" aria-label="Personalizează raportul">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-medium">Personalizează raportul</h2>
+          <p className="text-sm text-muted-foreground">Alege ce vezi și în ce ordine. Se salvează pentru tine, pe orice dispozitiv.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => onChange({ ...DEFAULT_LAYOUT, segmentDimension: layout.segmentDimension })}>
+            Revino la implicit
+          </Button>
+          <Button onClick={onClose}>Gata</Button>
+        </div>
+      </div>
+      {error && <Alert variant="destructive">{error}</Alert>}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div>
+          <h3 className="mb-2 text-sm font-medium">Secțiuni</h3>
+          <ol className="divide-y divide-border rounded-lg border border-border">
+            {layout.order.map((key, i) => (
+              <li key={key} className="flex items-center gap-2 px-3 py-1.5">
+                <span className="flex-1">
+                  <Checkbox
+                    checked={!layout.hidden.has(key)}
+                    onChange={() => onChange({ ...layout, hidden: toggle(layout.hidden, key) })}
+                    label={label(key)}
+                  />
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Mută „${label(key)}" mai sus`}
+                  disabled={i === 0}
+                  onClick={() => onChange({ ...layout, order: moveSection(layout.order, key, -1) })}
+                >
+                  <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Mută „${label(key)}" mai jos`}
+                  disabled={i === layout.order.length - 1}
+                  onClick={() => onChange({ ...layout, order: moveSection(layout.order, key, 1) })}
+                >
+                  <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div>
+          <h3 className="mb-2 text-sm font-medium">Plăcuțele de sus</h3>
+          <ul className="space-y-2">
+            {METRICS.map((m) => (
+              <li key={m.key}>
+                <Checkbox
+                  checked={!layout.hiddenMetrics.has(m.key)}
+                  onChange={() => onChange({ ...layout, hiddenMetrics: toggle(layout.hiddenMetrics, m.key) })}
+                  label={m.label}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </Card>
   );
 }
 

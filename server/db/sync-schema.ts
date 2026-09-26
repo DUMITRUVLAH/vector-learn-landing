@@ -781,6 +781,16 @@ async function main() {
     )`,
     `CREATE INDEX IF NOT EXISTS "crm_assignment_log_tenant_idx" ON "crm_assignment_log" ("tenant_id","created_at")`,
     `CREATE INDEX IF NOT EXISTS "crm_assignment_log_lead_idx" ON "crm_assignment_log" ("lead_id")`,
+    // Migrarea 0192 (CRM-G09): aranjamentul personal al rapoartelor. Ecranul îl citește la fiecare
+    // deschidere; fără tabelă cade pe aranjamentul implicit, dar salvarea n-ar avea unde scrie.
+    `CREATE TABLE IF NOT EXISTS "crm_report_layouts" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "layout" jsonb NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "crm_report_layouts_user_uniq" ON "crm_report_layouts" ("tenant_id","user_id")`,
     ...DOCGEN_ENSURE_STATEMENTS,
     // Migrarea 0176 — DUPĂ `DOCGEN_ENSURE_STATEMENTS`, fiindcă referă `doc_documents`, pe care
     // acelea o creează. Testul `docgen-schema` aplică lista pe o bază goală, în ordine, și

@@ -20,6 +20,8 @@ import { tenants, users, leads, leadInteractions } from "../db/schema";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmPipelines } from "../db/schema/crmPipelines";
 import { crmLeadTasks } from "../db/schema/crmTasks";
+import { crmCompanies } from "../db/schema/crmCompanies";
+import { customFields, leadFieldValues } from "../db/schema/leads";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -493,5 +495,80 @@ describe("CRM-G02 — raportul e al unei pâlnii", () => {
     expect(Array.isArray(body.aging.buckets)).toBe(true);
     expect(body.leaderboard.find((r: { ownerKey: string }) => r.ownerKey === userC)).toMatchObject({ wonCount: 1 });
     expect(body.timeline.every((b: { lostCount: number }) => typeof b.lostCount === "number")).toBe(true);
+  });
+});
+
+describe("CRM-G09 — segmente, insighturi, aranjament personal", () => {
+  async function segLead(tenantId: string, stage: string, extra: { companyId?: string; source?: "referral" | "facebook_ad" } = {}) {
+    const [l] = await testDb
+      .insert(leads)
+      .values({ tenantId, fullName: "Seg", stage, valueCents: 100_00, source: extra.source ?? "manual", companyId: extra.companyId ?? null })
+      .returning();
+    return l;
+  }
+
+  it("[blocant] raportul pe segment vede regiunea firmei și câmpul personalizat „Oraș”, cu cea mai bună / cea mai slabă valoare", async () => {
+    const [nord] = await testDb.insert(crmCompanies).values({ tenantId: tenantA, name: "Nord SRL", region: "Nord" }).returning();
+    const [sud] = await testDb.insert(crmCompanies).values({ tenantId: tenantA, name: "Sud SRL", region: "Sud" }).returning();
+    const [oras] = await testDb.insert(customFields).values({ tenantId: tenantA, key: "oras", label: "Oraș", type: "text" }).returning();
+    // Workspace-ul B are același câmp, cu o valoare care n-are voie să ajungă la A.
+    const [orasB] = await testDb.insert(customFields).values({ tenantId: tenantB, key: "oras", label: "Oraș", type: "text" }).returning();
+
+    for (let i = 0; i < 3; i++) {
+      const won = await segLead(tenantA, "castigat", { companyId: nord.id, source: "referral" });
+      await testDb.insert(leadFieldValues).values({ tenantId: tenantA, leadId: won.id, fieldId: oras.id, value: "Chișinău" });
+      const lost = await segLead(tenantA, "refuzat", { companyId: sud.id, source: "facebook_ad" });
+      await testDb.insert(leadFieldValues).values({ tenantId: tenantA, leadId: lost.id, fieldId: oras.id, value: "Bălți" });
+    }
+    const foreign = await segLead(tenantB, "castigat");
+    await testDb.insert(leadFieldValues).values({ tenantId: tenantB, leadId: foreign.id, fieldId: orasB.id, value: "Tiraspol" });
+
+    const res = await app.request("/api/crm/reports?pipelineId=all");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const dim = (key: string) => body.dimensions.find((d: { key: string }) => d.key === key);
+
+    expect(dim("region").rows.map((r: { value: string }) => r.value).sort()).toEqual(["Nord", "Sud"]);
+    expect(dim("cf_oras")).toMatchObject({ label: "Oraș", kind: "custom" });
+    expect(JSON.stringify(body)).not.toContain("Tiraspol");
+
+    const spread = body.insights.find((i: { kind: string; dimension?: string }) => i.kind === "segmentSpread" && i.dimension === "cf_oras");
+    expect(spread).toMatchObject({ best: { value: "Chișinău", conversionPct: 100 }, worst: { value: "Bălți", conversionPct: 0 } });
+    const bySource = body.insights.find((i: { kind: string; dimension?: string }) => i.kind === "segmentSpread" && i.dimension === "source");
+    expect(bySource).toMatchObject({ best: { value: "referral" }, worst: { value: "facebook_ad" } });
+
+    await testDb.delete(leadFieldValues);
+    await testDb.delete(customFields);
+  });
+
+  it("[blocant] aranjamentul e personal: se salvează, se citește înapoi, nu se vede la alt om", async () => {
+    expect(await (await app.request("/api/crm/reports/layout")).json()).toEqual({ layout: null });
+
+    const layout = { order: ["team", "insights"], hidden: ["calls"], hiddenMetrics: ["cycle"], segmentDimension: "cf_oras" };
+    const put = await app.request("/api/crm/reports/layout", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(layout),
+    });
+    expect(put.status).toBe(200);
+    // A doua salvare actualizează rândul, nu creează altul.
+    await app.request("/api/crm/reports/layout", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...layout, hidden: [] }),
+    });
+    expect((await (await app.request("/api/crm/reports/layout")).json()).layout).toMatchObject({ order: ["team", "insights"], hidden: [] });
+
+    currentUser = { id: userB, tenantId: tenantB, role: "admin", email: "bogdan@beta.md" };
+    expect(await (await app.request("/api/crm/reports/layout")).json()).toEqual({ layout: null });
+  });
+
+  it("[normal] un aranjament malformat e refuzat, nu salvat", async () => {
+    const res = await app.request("/api/crm/reports/layout", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ order: "team" }),
+    });
+    expect(res.status).toBe(400);
   });
 });

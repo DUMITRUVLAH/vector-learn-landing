@@ -65,6 +65,17 @@ import {
   type InsightLead,
 } from "../lib/crm/salesInsights";
 import { crmPipelines } from "../db/schema/crmPipelines";
+import { crmCompanies } from "../db/schema/crmCompanies";
+import { customFields, leadFieldValues } from "../db/schema/leads";
+import { crmReportLayouts } from "../db/schema/crmReportLayouts";
+import {
+  buildInsights,
+  segmentDimensions,
+  type SegmentDimensionDef,
+  type SegmentLead,
+} from "../lib/crm/reportSegments";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 
 export const crmReportsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmReportsRoutes.use("/*", requireAuth);
@@ -142,6 +153,7 @@ crmReportsRoutes.get("/", async (c) => {
         company: leads.company,
         dealName: leads.dealName,
         probabilityPct: leads.probabilityPct,
+        companyId: leads.companyId,
       })
       .from(leads)
       .where(
@@ -379,6 +391,27 @@ crmReportsRoutes.get("/", async (c) => {
       : [];
     const velocity = pipelineId ? stageVelocity(ownedInsightLeads, ownedChanges, reportStages) : [];
 
+    // ── CRM-G09: raportul pe segment + insighturile ──────────────────────────
+    const segments = await loadSegments({
+      tenantId,
+      leadRows: owner ? leadRows.filter((l) => l.assignedTo === owner) : leadRows,
+      productNameById,
+      owners,
+    });
+    const dimensions = segmentDimensions(segments.leads, reportStages, range, segments.defs);
+    const aging = openDealAging(ownedInsightLeads, reportStages, lastActivityAt);
+    const leaderboard = ownerOutcomes(insightLeads, stageChanges, reportStages, range, owners);
+    const lostReasons = lostReasonBreakdown(reportLeads, { stageChanges: scopedChanges, stages: reportStages, range });
+    const insights = buildInsights({
+      // Pe un singur agent, „cel mai bun vânzător" n-are cu cine se compara.
+      leaderboard: owner ? [] : leaderboard,
+      dimensions,
+      funnel,
+      aging,
+      lostReasons,
+      sales: { currentCents: outcomes.wonValueCents, previousCents: previous ? previous.outcomes.wonValueCents : null },
+    });
+
     return c.json({
       range,
       owner: owner ?? null,
@@ -392,8 +425,10 @@ crmReportsRoutes.get("/", async (c) => {
       funnel,
       velocity,
       sources: sourceBreakdown(ownedInsightLeads, reportStages, range),
-      aging: openDealAging(ownedInsightLeads, reportStages, lastActivityAt),
-      leaderboard: ownerOutcomes(insightLeads, stageChanges, reportStages, range, owners),
+      aging,
+      leaderboard,
+      dimensions,
+      insights,
       previousTimeline,
       // Gradul de realizare față de normă (CC-5). Gol = fără normă setată SAU perioadă
       // nedefinită — interfața arată atunci cifra simplă, nu un 0% care ar acuza degeaba.
@@ -405,11 +440,7 @@ crmReportsRoutes.get("/", async (c) => {
       // Cu harta de nume, raportul grupează după PRODUSUL din catalog; textul liber
       // (`interest_course`) rămâne doar pentru leadurile cărora nu li s-a ales unul.
       perProduct: perProductBreakdown(scopedLeads, reportStages, productNameById),
-      lostReasons: lostReasonBreakdown(reportLeads, {
-        stageChanges: scopedChanges,
-        stages: reportStages,
-        range,
-      }),
+      lostReasons,
       taskCompliance: taskCompliance(scopedTasks),
       // Contactabilitatea (CC-6): apeluri → răspunsuri → decidenți. Pe o operațiune de outreach,
       // ăsta e raportul care spune dacă lista cumpărată face bani sau doar consumă timp.
@@ -583,5 +614,161 @@ crmReportsRoutes.get("/funnel", async (c) => {
       return c.json({ stages: [], byOwner: [], owners: [], totalLeads: 0, schemaLag: true }, 200);
     }
     throw e;
+  }
+});
+
+// ─── CRM-G09: segmentele raportului ──────────────────────────────────────────
+
+interface SegmentSourceRow {
+  id: string;
+  stage: string;
+  assignedTo: string | null;
+  valueCents: number | null;
+  createdAt: Date | string | null;
+  source: string | null;
+  productId: string | null;
+  interestCourse: string | null;
+  companyId: string | null;
+}
+
+/**
+ * Leadurile raportului cu TOATE dimensiunile rezolvate: produsul pe nume, firmografia din firma
+ * leadului, câmpurile personalizate (text/listă — numerele nu se segmentează pe valoare exactă).
+ *
+ * Fiecare citire suplimentară e opțională: o tabelă lipsă pe prod (migrare neaplicată) scoate
+ * dimensiunea ei din raport, nu raportul întreg.
+ */
+async function loadSegments(args: {
+  tenantId: string;
+  leadRows: SegmentSourceRow[];
+  productNameById: Record<string, string>;
+  owners: { id: string; name: string }[];
+}): Promise<{ leads: SegmentLead[]; defs: SegmentDimensionDef[] }> {
+  const { tenantId, leadRows, productNameById } = args;
+  const defs: SegmentDimensionDef[] = [
+    { key: "source", label: "Sursă", kind: "builtin" },
+    { key: "owner", label: "Agent", kind: "builtin" },
+    { key: "product", label: "Produs", kind: "builtin" },
+    { key: "industry", label: "Industrie", kind: "builtin" },
+    { key: "region", label: "Regiune", kind: "builtin" },
+    { key: "companySize", label: "Mărimea firmei", kind: "builtin" },
+  ];
+
+  const companyIds = [...new Set(leadRows.map((l) => l.companyId).filter((id): id is string => !!id))];
+  const companyById = new Map<string, { industry: string | null; region: string | null; companySize: string | null }>();
+  if (companyIds.length) {
+    try {
+      const rows = await db
+        .select({ id: crmCompanies.id, industry: crmCompanies.industry, region: crmCompanies.region, companySize: crmCompanies.companySize })
+        .from(crmCompanies)
+        .where(and(eq(crmCompanies.tenantId, tenantId), inArray(crmCompanies.id, companyIds)));
+      for (const r of rows) companyById.set(r.id, r);
+    } catch (err) {
+      console.error("[crm/reports] firmele nu s-au putut citi:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  const leadIds = leadRows.map((l) => l.id);
+  const customByLead = new Map<string, Record<string, string>>();
+  if (leadIds.length) {
+    try {
+      const fields = await db
+        .select({ id: customFields.id, key: customFields.key, label: customFields.label, type: customFields.type })
+        .from(customFields)
+        .where(eq(customFields.tenantId, tenantId))
+        .orderBy(customFields.orderIndex);
+      const usable = fields.filter((f) => f.type !== "number");
+      if (usable.length) {
+        const keyByField = new Map(usable.map((f) => [f.id, `cf_${f.key}`]));
+        const values = await db
+          .select({ leadId: leadFieldValues.leadId, fieldId: leadFieldValues.fieldId, value: leadFieldValues.value })
+          .from(leadFieldValues)
+          .where(
+            and(
+              eq(leadFieldValues.tenantId, tenantId),
+              inArray(leadFieldValues.fieldId, usable.map((f) => f.id)),
+              inArray(leadFieldValues.leadId, leadIds)
+            )
+          )
+          .limit(MAX_ROWS * 10);
+        for (const v of values) {
+          const key = keyByField.get(v.fieldId);
+          if (!key || !v.value) continue;
+          const bag = customByLead.get(v.leadId) ?? {};
+          bag[key] = v.value;
+          customByLead.set(v.leadId, bag);
+        }
+        for (const f of usable) defs.push({ key: `cf_${f.key}`, label: f.label, kind: "custom" });
+      }
+    } catch (err) {
+      console.error("[crm/reports] câmpurile personalizate nu s-au putut citi:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  const leads: SegmentLead[] = leadRows.map((l) => {
+    const company = l.companyId ? companyById.get(l.companyId) : undefined;
+    return {
+      id: l.id,
+      stage: l.stage,
+      assignedTo: l.assignedTo,
+      valueCents: l.valueCents ?? 0,
+      createdAt: iso(l.createdAt) ?? new Date(0).toISOString(),
+      values: {
+        source: l.source,
+        owner: l.assignedTo,
+        product: (l.productId && productNameById[l.productId]) || l.interestCourse,
+        industry: company?.industry ?? null,
+        region: company?.region ?? null,
+        companySize: company?.companySize ?? null,
+        ...customByLead.get(l.id),
+      },
+    };
+  });
+  return { leads, defs };
+}
+
+// ─── CRM-G09: aranjamentul personal al rapoartelor ───────────────────────────
+
+const key = z.string().trim().min(1).max(64);
+const layoutSchema = z.object({
+  order: z.array(key).max(40).optional(),
+  hidden: z.array(key).max(40).optional(),
+  hiddenMetrics: z.array(key).max(20).optional(),
+  segmentDimension: key.nullable().optional(),
+});
+
+const missingTable = (err: unknown) => /does not exist|undefined_table/i.test(err instanceof Error ? err.message : String(err));
+
+crmReportsRoutes.get("/layout", async (c) => {
+  const user = c.get("user");
+  try {
+    const [row] = await db
+      .select({ layout: crmReportLayouts.layout })
+      .from(crmReportLayouts)
+      .where(and(eq(crmReportLayouts.tenantId, user.tenantId), eq(crmReportLayouts.userId, user.id)))
+      .limit(1);
+    return c.json({ layout: row?.layout ?? null });
+  } catch (err) {
+    // Tabela încă neaplicată pe prod: ecranul arată aranjamentul implicit, nu o eroare.
+    if (missingTable(err)) return c.json({ layout: null });
+    throw err;
+  }
+});
+
+crmReportsRoutes.put("/layout", zValidator("json", layoutSchema), async (c) => {
+  const user = c.get("user");
+  const layout = c.req.valid("json");
+  try {
+    await db
+      .insert(crmReportLayouts)
+      .values({ tenantId: user.tenantId, userId: user.id, layout, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [crmReportLayouts.tenantId, crmReportLayouts.userId],
+        set: { layout, updatedAt: new Date() },
+      });
+    return c.json({ layout, saved: true });
+  } catch (err) {
+    if (missingTable(err)) return c.json({ layout, saved: false }, 503);
+    throw err;
   }
 });

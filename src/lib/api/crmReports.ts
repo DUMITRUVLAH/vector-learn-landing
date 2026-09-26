@@ -126,6 +126,7 @@ export interface CrmAging {
   buckets: { key: string; label: string; count: number; valueCents: number }[];
   stale: { id: string; title: string; stage: string; valueCents: number; daysIdle: number; assignedTo: string | null }[];
   staleCount: number;
+  staleValueCents?: number;
 }
 
 export interface CrmLeaderboardRow {
@@ -138,6 +139,54 @@ export interface CrmLeaderboardRow {
   openCount: number;
   openValueCents: number;
 }
+
+/** CRM-G09 — o valoare a unei dimensiuni (sursa „facebook_ad", orașul „Chișinău"). */
+export interface CrmSegmentRow {
+  /** Valoarea brută; `""` = necompletat. */
+  value: string;
+  leads: number;
+  won: number;
+  lost: number;
+  open: number;
+  wonValueCents: number;
+  /** Din leadurile intrate, câte au devenit clienți. */
+  conversionPct: number;
+  winRatePct: number | null;
+}
+
+export interface CrmSegmentDimension {
+  /** `source`, `owner`, `product`, `industry`, `region`, `companySize` sau `cf_<cheie>`. */
+  key: string;
+  label: string;
+  kind: "builtin" | "custom";
+  rows: CrmSegmentRow[];
+}
+
+export interface CrmSegmentPick {
+  value: string;
+  conversionPct: number;
+  leads: number;
+  won: number;
+  wonValueCents: number;
+}
+
+/** Constatările generate automat — obiecte, nu text: interfața le scrie (bani, nume, etichete). */
+export type CrmInsight =
+  | { kind: "topSeller"; tone: "positive"; ownerKey: string; wonValueCents: number; wonCount: number; sharePct: number; sellers: number }
+  | { kind: "bestWinRate"; tone: "positive"; ownerKey: string; winRatePct: number; decided: number }
+  | {
+      kind: "segmentSpread";
+      tone: "neutral";
+      dimension: string;
+      dimensionLabel: string;
+      dimensionKind: "builtin" | "custom";
+      best: CrmSegmentPick;
+      worst: CrmSegmentPick;
+    }
+  | { kind: "funnelLeak"; tone: "negative"; stageKey: string; stageLabel: string; dropRatePct: number; dropped: number; reached: number }
+  | { kind: "stale"; tone: "negative"; count: number; valueCents: number }
+  | { kind: "topLostReason"; tone: "negative"; reason: string; pct: number; count: number }
+  | { kind: "salesTrend"; tone: "positive" | "negative"; changePct: number; currentCents: number; previousCents: number };
 
 export interface CrmReportsResponse {
   range: { from: string | null; to: string | null };
@@ -153,6 +202,10 @@ export interface CrmReportsResponse {
   sources?: CrmSourceRow[];
   aging?: CrmAging;
   leaderboard?: CrmLeaderboardRow[];
+  /** CRM-G09 — raportul pe segment: toate dimensiunile care au valori în perioadă. */
+  dimensions?: CrmSegmentDimension[];
+  /** CRM-G09 — constatările de sus ale raportului. */
+  insights?: CrmInsight[];
   previousTimeline?: CrmTimelineBucket[];
   stages: { key: string; label: string; isWon: boolean; isLost: boolean }[];
   owners: { id: string; name: string }[];
@@ -199,6 +252,26 @@ export function getCrmReports(params: {
   if (params.owner) qs.set("owner", params.owner);
   const suffix = qs.toString();
   return api<CrmReportsResponse>(`/api/crm/reports${suffix ? `?${suffix}` : ""}`);
+}
+
+// ─── CRM-G09: aranjamentul personal ─────────────────────────────────────────
+
+export interface CrmReportLayout {
+  order?: string[];
+  hidden?: string[];
+  hiddenMetrics?: string[];
+  segmentDimension?: string | null;
+}
+
+export function getCrmReportLayout(): Promise<{ layout: CrmReportLayout | null }> {
+  return api<{ layout: CrmReportLayout | null }>("/api/crm/reports/layout");
+}
+
+export function saveCrmReportLayout(layout: CrmReportLayout): Promise<{ layout: CrmReportLayout; saved: boolean }> {
+  return api<{ layout: CrmReportLayout; saved: boolean }>("/api/crm/reports/layout", {
+    method: "PUT",
+    body: JSON.stringify(layout),
+  });
 }
 
 // ─── Perioade ────────────────────────────────────────────────────────────────
