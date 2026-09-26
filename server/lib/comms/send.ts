@@ -43,6 +43,18 @@ export interface ComposeInput {
   replyToMessageId?: string | null;
 }
 
+/**
+ * Gmail e cutia PERSONALĂ a agentului: din ea scrie doar el. Altfel un coleg ar putea trimite, prin
+ * tokenul OAuth al directorului, un email „de la director" oricui — iar mesajul ar apărea și în
+ * „Trimise"-ul directorului. Citirea rămâne comună: sunt doar emailurile leadurilor, pe care
+ * cronologia leadului le arată oricum întregii echipe.
+ */
+export function assertMailboxOwner(channel: Pick<CommChannel, "kind" | "connectedBy">, userId: string): void {
+  if (channel.kind === "gmail" && channel.connectedBy !== userId) {
+    throw new CommsError("not_mailbox_owner", "Din această cutie Gmail poate scrie doar omul care a conectat-o.", 403);
+  }
+}
+
 async function lastInboundMeta(conversationId: string): Promise<Record<string, unknown> | null> {
   const [m] = await db
     .select({ meta: commMessages.meta })
@@ -91,6 +103,7 @@ export async function sendInConversation(
 
   const text = input.text?.trim() ?? "";
   if (!text && !input.media && !input.template) throw new CommsError("empty", "Mesajul e gol.", 400);
+  assertMailboxOwner(channel, userId);
 
   if (conv.leadId) {
     const [lead] = await db.select({ revoked: leads.consentRevokedAt }).from(leads).where(eq(leads.id, conv.leadId));
@@ -233,6 +246,7 @@ export async function startConversation(
     .from(commChannels)
     .where(and(eq(commChannels.id, channelId), eq(commChannels.tenantId, tenantId)));
   if (!channel) throw new CommsError("not_found", "Canalul nu există.", 404);
+  assertMailboxOwner(channel, userId);
   const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.tenantId, tenantId)));
   if (!lead) throw new CommsError("not_found", "Leadul nu există.", 404);
 

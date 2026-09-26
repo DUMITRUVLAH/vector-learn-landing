@@ -44,9 +44,12 @@ function storablePayload(raw: string): unknown {
 
 async function logEvent(channelId: string | null, kind: string, signatureOk: boolean, raw: string, error?: string | null) {
   try {
+    // O cerere nesemnată e a oricui: păstrăm doar mărimea, nu corpul — altfel un script anonim ar
+    // umple baza cu câte 64 KB la fiecare POST.
+    const payload = signatureOk ? storablePayload(raw) : { rejected: true, size: raw.length };
     const [row] = await db
       .insert(commWebhookEvents)
-      .values({ channelId, kind, signatureOk, payload: storablePayload(raw), error: error?.slice(0, 1000) ?? null })
+      .values({ channelId, kind, signatureOk, payload, error: error?.slice(0, 1000) ?? null })
       .returning({ id: commWebhookEvents.id });
     return row?.id ?? null;
   } catch {
@@ -101,7 +104,10 @@ commsWebhooksRoutes.get("/whatsapp", (c) => handshake(c, process.env.META_WEBHOO
  * O aplicație Meta poate avea mai multe numere, iar un webhook poate grupa schimbări pentru
  * numere diferite. Împărțim pe `metadata.phone_number_id` și dăm fiecare parte canalului ei.
  */
-async function processWhatsapp(payload: unknown, fallback: CommChannel | null): Promise<{ messages: number; unknownNumbers: string[] }> {
+async function processWhatsapp(
+  payload: unknown,
+  signedFor: CommChannel | null
+): Promise<{ messages: number; unknownNumbers: string[] }> {
   const byNumber = new Map<string, unknown[]>();
   for (const entry of arr(obj(payload).entry)) {
     for (const change of arr(obj(entry).changes)) {
@@ -113,14 +119,21 @@ async function processWhatsapp(payload: unknown, fallback: CommChannel | null): 
   const unknownNumbers: string[] = [];
   for (const [pnid, changes] of byNumber) {
     let channel: CommChannel | null = null;
-    if (pnid) {
+    if (signedFor) {
+      // Ruta PER CANAL e semnată cu App Secret-ul ACESTUI canal, pe care l-a dat clientul (Meta nu
+      // ni-l confirmă). O semnătură validă dovedește doar că cererea vine de la cine știe secretul
+      // lui — deci ea poate atinge DOAR numărul lui. Altfel un workspace ar putea injecta mesaje
+      // în conversațiile altuia punând în payload `phone_number_id`-ul victimei.
+      channel = !pnid || pnid === signedFor.externalId ? signedFor : null;
+    } else if (pnid) {
+      // Ruta PLATFORMEI e semnată cu META_APP_SECRET-ul nostru: Meta trimite aici toate numerele
+      // aplicației, deci rutăm după număr.
       const [ch] = await db
         .select()
         .from(commChannels)
         .where(and(eq(commChannels.kind, "whatsapp"), eq(commChannels.externalId, pnid)));
       channel = ch ?? null;
     }
-    channel ??= fallback;
     if (!channel || channel.status === "disabled") {
       if (pnid) unknownNumbers.push(pnid);
       continue;
@@ -222,6 +235,10 @@ commsWebhooksRoutes.post("/gmail", async (c) => {
   const errors: string[] = [];
   for (const ch of channels) {
     if (ch.status === "disabled") continue;
+    // Gmail trimite max ~1 notificare/s per cutie; o rafală (sau un push fals, dar semnat) nu are
+    // voie să ardă cota Gmail a omului. Cronul și deschiderea inboxului prind oricum restul.
+    const last = Date.parse(String((ch.config as Record<string, unknown>)?.lastSyncAt ?? "")) || 0;
+    if (Date.now() - last < 20_000) continue;
     try {
       await syncGmailChannel(ch.id);
     } catch (err) {

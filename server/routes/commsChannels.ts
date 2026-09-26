@@ -20,6 +20,7 @@ import { and, desc, eq, ne } from "drizzle-orm";
 import { db } from "../db/client";
 import { commChannels, commWebhookEvents, type CommChannel } from "../db/schema/comms";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCommsAccess } from "../lib/comms/access";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import { getAdapter } from "../lib/comms/registry";
 import {
@@ -39,6 +40,7 @@ import { newWebhookSecret } from "../lib/comms/util";
 
 export const commsChannelsRoutes = new Hono<{ Variables: AuthVariables }>();
 commsChannelsRoutes.use("/*", requireAuth);
+commsChannelsRoutes.use("/*", requireCommsAccess);
 const manage = requireCrmPermission("comms.manage");
 
 const credentialsSchema = z.record(z.string().max(4000)).default({});
@@ -102,8 +104,15 @@ commsChannelsRoutes.get("/", async (c) => {
     .from(commChannels)
     .where(eq(commChannels.tenantId, user.tenantId))
     .orderBy(commChannels.createdAt);
+  // URL-ul de webhook și verify token-ul sunt pentru cine configurează canalul, nu pentru toți agenții.
+  const { canWithOverrides } = await import("../lib/crm/permissions");
+  const { crmOverridesFor } = await import("../middleware/requireCrmAccess");
+  const manager = canWithOverrides(user.role, await crmOverridesFor(user.id, user.tenantId), "comms.manage");
   return c.json({
-    channels: rows.map((r) => publicChannel(r, base)),
+    channels: rows.map((r) => {
+      const pub = publicChannel(r, base);
+      return manager ? pub : { ...pub, webhookUrl: null, verifyToken: null };
+    }),
     platform: {
       gmailConfigured: gmailConfigured(),
       gmailPush: Boolean(process.env.GMAIL_PUBSUB_TOPIC),
@@ -147,6 +156,8 @@ commsChannelsRoutes.post("/", manage, zValidator("json", createInput), async (c)
 
   const adapter = getAdapter(body.kind)!;
   const creds: Credentials = Object.fromEntries(Object.entries(body.credentials).map(([k, v]) => [k, v.trim()]));
+  // Telegram: secretul antetului webhook-ului e generat de noi, separat de cel din URL.
+  if (body.kind === "telegram") creds.headerSecret = newWebhookSecret();
 
   // Rândul se creează ÎNAINTE de `connect`: Viber verifică URL-ul chiar în timpul `set_webhook`,
   // iar webhook-ul trebuie să găsească deja canalul după segmentul secret.
@@ -222,6 +233,7 @@ commsChannelsRoutes.post("/:id/credentials", manage, zValidator("json", z.object
   if (ch.kind === "gmail" || isMockChannel(ch)) return c.json({ error: "not_supported" }, 400);
   const adapter = getAdapter(ch.kind)!;
   const creds: Credentials = { ...decryptCredentials(ch), ...c.req.valid("json").credentials };
+  if (ch.kind === "telegram" && !creds.headerSecret) creds.headerSecret = newWebhookSecret();
   const base = publicBaseUrl(c.req.url);
   // Tokenul nou se salvează ÎNAINTE de connect (Viber îl folosește la verificarea webhook-ului).
   const previous = ch.credentialsEnc;

@@ -21,6 +21,7 @@ import { commChannels, commContacts, commConversations, commMessages, type CommM
 import { leads } from "../db/schema/leads";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCommsAccess } from "../lib/comms/access";
 import { adapterContext, isMockChannel } from "../lib/comms/channelStore";
 import { freshGmailCreds } from "../lib/comms/gmailService";
 import { getAdapter } from "../lib/comms/registry";
@@ -32,6 +33,7 @@ import { str } from "../lib/comms/util";
 
 export const commsInboxRoutes = new Hono<{ Variables: AuthVariables }>();
 commsInboxRoutes.use("/*", requireAuth);
+commsInboxRoutes.use("/*", requireCommsAccess);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -204,7 +206,10 @@ commsInboxRoutes.get("/conversations/:id", async (c) => {
   msgs.reverse();
 
   const lastInbound = [...msgs].reverse().find((m) => m.direction === "inbound");
-  const r = sendRestrictions(channel, conv, contact, (lastInbound?.meta as Record<string, unknown> | null) ?? null);
+  let r = sendRestrictions(channel, conv, contact, (lastInbound?.meta as Record<string, unknown> | null) ?? null);
+  if (channel.kind === "gmail" && channel.connectedBy !== user.id && !r.blocked) {
+    r = { canSendFreeform: false, needsTemplate: false, blocked: true, reason: "E cutia Gmail a unui coleg — răspunde doar el. Poți scrie leadului din propria ta cutie." };
+  }
   const [lead] = conv.leadId
     ? await db
         .select({ id: leads.id, fullName: leads.fullName, phone: leads.phone, email: leads.email, stage: leads.stage, consentRevokedAt: leads.consentRevokedAt })
@@ -335,11 +340,13 @@ commsInboxRoutes.get("/leads/:leadId", async (c) => {
       .innerJoin(commChannels, eq(commChannels.id, commConversations.channelId))
       .where(and(eq(commConversations.tenantId, user.tenantId), eq(commConversations.leadId, leadId)))
       .orderBy(sql`${commConversations.lastMessageAt} desc nulls last`);
-    const channels = await db
-      .select()
-      .from(commChannels)
-      .where(and(eq(commChannels.tenantId, user.tenantId), eq(commChannels.status, "active")))
-      .orderBy(asc(commChannels.createdAt));
+    const channels = (
+      await db
+        .select()
+        .from(commChannels)
+        .where(and(eq(commChannels.tenantId, user.tenantId), eq(commChannels.status, "active")))
+        .orderBy(asc(commChannels.createdAt))
+    ).filter((ch) => ch.kind !== "gmail" || ch.connectedBy === user.id); // din Gmail scrie doar proprietarul
     const payload = leadLinkPayload(user.tenantId, leadId);
     return c.json({
       conversations,
@@ -354,11 +361,13 @@ commsInboxRoutes.get("/leads/:leadId", async (c) => {
           // Ce poate face agentul de aici: să scrie direct, sau să trimită leadului linkul de abonare.
           canStart: ch.kind === "whatsapp" ? Boolean(lead.phone) : ch.kind === "gmail" ? Boolean(lead.email) : false,
           optInLink:
-            ch.kind === "telegram" && botUsername
-              ? telegramDeepLink(botUsername, payload)
-              : ch.kind === "viber" && botUri
-                ? viberDeepLink(botUri, payload)
-                : null,
+            !payload
+              ? null
+              : ch.kind === "telegram" && botUsername
+                ? telegramDeepLink(botUsername, payload)
+                : ch.kind === "viber" && botUri
+                  ? viberDeepLink(botUri, payload)
+                  : null,
           needsTemplate: ch.kind === "whatsapp",
         };
       }),

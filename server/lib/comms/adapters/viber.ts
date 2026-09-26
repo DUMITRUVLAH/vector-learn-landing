@@ -38,6 +38,16 @@ export const VIBER_STATUS_MESSAGES: Record<number, string> = {
   24: "Botul nu are sold (mesaje facturabile)",
 };
 
+/** Doar https pe domeniile Viber. */
+export function isViberMediaUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && (u.hostname === "viber.com" || u.hostname.endsWith(".viber.com"));
+  } catch {
+    return false;
+  }
+}
+
 /** `message_token` rămâne șir: 4912661846655238145 > Number.MAX_SAFE_INTEGER. */
 export function decodeViberBody(raw: string): unknown {
   return JSON.parse(raw.replace(/"message_token"\s*:\s*(\d+)/g, '"message_token":"$1"'));
@@ -213,8 +223,11 @@ export const viberAdapter: ChannelAdapter = {
   },
 
   async fetchMedia(ctx, url) {
-    // La Viber `providerFileId` lipsește; media are URL direct, valabil o oră.
-    const res = await ctx.fetch(url);
+    // La Viber `providerFileId` lipsește; media are URL direct, valabil o oră. URL-ul vine din
+    // callback — deci îl poate alege oricine are tokenul botului. Fără lista de mai jos, serverul
+    // nostru ar descărca orice adresă (inclusiv interne) și i-ar da conținutul (SSRF).
+    if (!isViberMediaUrl(url)) throw new CommsError("media_unavailable", "Adresa fișierului nu e un server media Viber.", 404);
+    const res = await ctx.fetch(url, { redirect: "error" });
     if (!res.ok) throw new CommsError("media_unavailable", "Fișierul Viber a expirat (linkurile sunt valabile o oră).", 404);
     return { body: await res.arrayBuffer(), mime: res.headers.get("content-type") };
   },

@@ -25,6 +25,7 @@ import { decryptCredentials, encryptCredentials, providerFetch } from "./channel
 import { ingestEvents, type IngestResult } from "./ingest";
 import { CommsError, type Credentials, type NormalizedEvent } from "./types";
 import { arr, obj, readJson, safeEqual, str } from "./util";
+import { commsHmacSecret } from "./secrets";
 
 export function gmailConfigured(): boolean {
   return Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET);
@@ -37,7 +38,9 @@ export function gmailRedirectUri(baseUrl: string): string {
 // ─── state OAuth: semnat, legat de om, cu expirare ────────────────────────────
 
 function stateKey(): string {
-  return `comms-gmail-state:${process.env.ENCRYPTION_KEY ?? "dev-key-do-not-use-in-production-32"}`;
+  const key = commsHmacSecret("comms-gmail-state");
+  if (!key) throw new CommsError("encryption_key_missing", "Conectarea Gmail e oprită până se setează ENCRYPTION_KEY pe server.", 503);
+  return key;
 }
 
 export interface OAuthState {
@@ -58,7 +61,13 @@ export function signState(s: OAuthState): string {
 export function verifyState(raw: string | undefined | null): OAuthState | null {
   const [body, sig] = (raw ?? "").split(".");
   if (!body || !sig) return null;
-  const expected = createHmac("sha256", stateKey()).update(body).digest("base64url");
+  let key: string;
+  try {
+    key = stateKey();
+  } catch {
+    return null;
+  }
+  const expected = createHmac("sha256", key).update(body).digest("base64url");
   if (!safeEqual(sig, expected)) return null;
   try {
     const s = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as OAuthState;
@@ -345,8 +354,10 @@ export async function verifyPubsubRequest(authHeader: string | undefined, queryT
       if (iss !== "https://accounts.google.com" && iss !== "accounts.google.com") return false;
       if (claims.aud !== audience) return false;
       if (Number(claims.exp) * 1000 < Date.now()) return false;
+      // Contul de serviciu e OBLIGATORIU: orice utilizator Google Cloud poate obține un token semnat
+      // de Google pentru audiența noastră; doar `email` spune că vine din abonamentul NOSTRU.
       const sa = process.env.GMAIL_PUSH_SA_EMAIL;
-      if (sa && (claims.email !== sa || claims.email_verified !== true)) return false;
+      if (!sa || claims.email !== sa || claims.email_verified !== true) return false;
       return true;
     } catch {
       return false;

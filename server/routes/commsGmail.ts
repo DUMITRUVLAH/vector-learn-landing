@@ -15,6 +15,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { commChannels } from "../db/schema/comms";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCommsAccess } from "../lib/comms/access";
 import { encryptCredentials, publicBaseUrl } from "../lib/comms/channelStore";
 import {
   buildAuthUrl,
@@ -32,6 +33,7 @@ import { newWebhookSecret } from "../lib/comms/util";
 
 export const commsGmailRoutes = new Hono<{ Variables: AuthVariables }>();
 commsGmailRoutes.use("/*", requireAuth);
+commsGmailRoutes.use("/*", requireCommsAccess);
 
 commsGmailRoutes.post("/oauth/start", zValidator("json", z.object({ name: z.string().trim().max(120).optional() })), async (c) => {
   if (!gmailConfigured()) {
@@ -42,13 +44,19 @@ commsGmailRoutes.post("/oauth/start", zValidator("json", z.object({ name: z.stri
   }
   const user = c.get("user");
   const { verifier, challenge } = newPkce();
-  const state = signState({
-    tenantId: user.tenantId,
-    userId: user.id,
-    name: c.req.valid("json").name || `Gmail ${user.name ?? user.email}`,
-    verifier,
-    exp: Date.now() + 10 * 60_000,
-  });
+  let state: string;
+  try {
+    state = signState({
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: c.req.valid("json").name || `Gmail ${user.name ?? user.email}`,
+      verifier,
+      exp: Date.now() + 10 * 60_000,
+    });
+  } catch (err) {
+    if (err instanceof CommsError) return c.json({ error: err.code, message: err.message }, err.httpStatus);
+    throw err;
+  }
   const url = buildAuthUrl({ state, challenge, redirectUri: gmailRedirectUri(publicBaseUrl(c.req.url)), loginHint: user.email });
   return c.json({ url });
 });

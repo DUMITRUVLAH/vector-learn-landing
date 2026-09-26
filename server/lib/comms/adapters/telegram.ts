@@ -128,7 +128,7 @@ export const telegramAdapter: ChannelAdapter = {
     return str(obj(me.data.result).id) ?? "";
   },
 
-  async connect({ creds, fetch, webhookUrl, webhookSecret }) {
+  async connect({ creds, fetch, webhookUrl }) {
     if (!creds.botToken || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(creds.botToken)) {
       throw new CommsError("missing_credentials", "Tokenul botului lipsește sau nu are formatul de la @BotFather (123456:ABC…).", 422);
     }
@@ -137,9 +137,12 @@ export const telegramAdapter: ChannelAdapter = {
       throw new CommsError("provider_rejected", `Telegram a refuzat tokenul: ${str(me.data.description) ?? me.status}.`, 422);
     }
     const bot = obj(me.data.result);
+    if (!creds.headerSecret) throw new CommsError("missing_header_secret", "Lipsește secretul antetului webhook-ului.", 500);
     const hook = await call({ creds, fetch }, "setWebhook", {
       url: webhookUrl,
-      secret_token: webhookSecret,
+      // Secretul din ANTET e altul decât cel din URL: URL-ul ajunge în loguri și e afișat în
+      // aplicație; antetul stă doar criptat la noi și la Telegram.
+      secret_token: creds.headerSecret,
       allowed_updates: TELEGRAM_ALLOWED_UPDATES,
       drop_pending_updates: true,
       max_connections: 40,
@@ -162,7 +165,9 @@ export const telegramAdapter: ChannelAdapter = {
   },
 
   verifyWebhook(req, ctx) {
-    return safeEqual(req.headers["x-telegram-bot-api-secret-token"], ctx.webhookSecret);
+    // Canalele simulate (doar în afara producției) n-au credențiale: acolo antetul e segmentul din URL.
+    const expected = ctx.creds.headerSecret || (ctx.config.mock === true ? ctx.webhookSecret : null);
+    return safeEqual(req.headers["x-telegram-bot-api-secret-token"], expected);
   },
 
   parseWebhook(payload) {

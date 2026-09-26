@@ -179,11 +179,13 @@ describe("WhatsApp Cloud API", () => {
 describe("Telegram Bot API", () => {
   const creds = { botToken: "110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" };
 
-  it("[blocant] webhook-ul e autentic doar cu X-Telegram-Bot-Api-Secret-Token corect", () => {
-    const base = { creds, config: {}, fetch: fakeFetch([]).f, webhookSecret: "abc123def456" };
-    expect(telegramAdapter.verifyWebhook({ rawBody: "{}", headers: { "x-telegram-bot-api-secret-token": "abc123def456" } }, base)).toBe(true);
-    expect(telegramAdapter.verifyWebhook({ rawBody: "{}", headers: { "x-telegram-bot-api-secret-token": "gresit" } }, base)).toBe(false);
+  it("[blocant] webhook-ul e autentic doar cu secretul din ANTET (nu cel din URL)", () => {
+    const base = { creds: { ...creds, headerSecret: "hdr-secret-1" }, config: {}, fetch: fakeFetch([]).f, webhookSecret: "url-secret-1" };
+    expect(telegramAdapter.verifyWebhook({ rawBody: "{}", headers: { "x-telegram-bot-api-secret-token": "hdr-secret-1" } }, base)).toBe(true);
+    expect(telegramAdapter.verifyWebhook({ rawBody: "{}", headers: { "x-telegram-bot-api-secret-token": "url-secret-1" } }, base)).toBe(false);
     expect(telegramAdapter.verifyWebhook({ rawBody: "{}", headers: {} }, base)).toBe(false);
+    // canal real fără secret de antet → nimic nu trece
+    expect(telegramAdapter.verifyWebhook({ rawBody: "{}", headers: { "x-telegram-bot-api-secret-token": "url-secret-1" } }, { ...base, creds })).toBe(false);
   });
 
   it("connect: getMe, apoi setWebhook cu secret_token și allowed_updates", async () => {
@@ -191,7 +193,7 @@ describe("Telegram Bot API", () => {
       { body: { ok: true, result: { id: 7000000001, is_bot: true, first_name: "Acme", username: "acme_bot", can_connect_to_business: true } } },
       { body: { ok: true, result: true } },
     ]);
-    const r = await telegramAdapter.connect({ creds, config: {}, fetch: f, webhookUrl: "https://app/x", webhookSecret: "s3cr3t" });
+    const r = await telegramAdapter.connect({ creds: { ...creds, headerSecret: "s3cr3t" }, config: {}, fetch: f, webhookUrl: "https://app/x", webhookSecret: "url" });
     expect(r.externalId).toBe("7000000001");
     expect(r.config).toMatchObject({ botUsername: "acme_bot", canConnectToBusiness: true });
     expect(calls[0].url).toBe(`https://api.telegram.org/bot${creds.botToken}/getMe`);
@@ -315,6 +317,18 @@ describe("Viber REST Bot API", () => {
     expect((calls[0].init?.headers as Record<string, string>)["X-Viber-Auth-Token"]).toBe("t");
     expect((calls[0].json?.sender as { name: string }).name.length).toBeLessThanOrEqual(28);
     expect(calls[0].json).toMatchObject({ receiver: "01234567890A=", type: "text", text: "Bună!" });
+  });
+
+  it("[blocant] SEC-5: descărcarea media acceptă doar https pe domeniile Viber (fără SSRF)", async () => {
+    const { f, calls } = fakeFetch([]);
+    const ctx = { creds: { authToken: "t" }, config: {}, fetch: f };
+    for (const bad of ["http://10.0.0.5/admin", "https://169.254.169.254/latest", "https://viber.com.evil.md/x", "file:///etc/passwd"]) {
+      await expect(viberAdapter.fetchMedia!(ctx, bad)).rejects.toThrow();
+    }
+    expect(calls).toHaveLength(0);
+    const ok = fakeFetch([{ body: "bytes" }]);
+    await viberAdapter.fetchMedia!({ ...ctx, fetch: ok.f }, "https://dl-media.viber.com/1/share/2/abc.jpg");
+    expect(ok.calls[0].init?.redirect).toBe("error");
   });
 
   it("status 6 (neabonat) → mesaj clar în română", async () => {

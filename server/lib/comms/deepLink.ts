@@ -11,25 +11,26 @@
  */
 import { createHmac } from "node:crypto";
 import { safeEqual } from "./util";
+import { commsHmacSecret } from "./secrets";
 
-function key(): string {
-  return `comms-deeplink:${process.env.ENCRYPTION_KEY ?? "dev-key-do-not-use-in-production-32"}`;
+function sign(tenantId: string, leadHex: string): string | null {
+  const key = commsHmacSecret("comms-deeplink");
+  if (!key) return null;
+  return createHmac("sha256", key).update(`${tenantId}:${leadHex}`).digest("hex").slice(0, 16);
 }
 
-function sign(tenantId: string, leadHex: string): string {
-  return createHmac("sha256", key()).update(`${tenantId}:${leadHex}`).digest("hex").slice(0, 16);
-}
-
-export function leadLinkPayload(tenantId: string, leadId: string): string {
+/** `null` când nu se poate semna (ENCRYPTION_KEY lipsă în producție) — nu oferim un link falsificabil. */
+export function leadLinkPayload(tenantId: string, leadId: string): string | null {
   const hex = leadId.replace(/-/g, "").toLowerCase();
-  return `l${hex}${sign(tenantId, hex)}`;
+  const sig = sign(tenantId, hex);
+  return sig ? `l${hex}${sig}` : null;
 }
 
 /** Id-ul leadului din payload, doar dacă semnătura se potrivește workspace-ului. */
 export function parseLeadLinkPayload(tenantId: string, payload: string | null | undefined): string | null {
   const m = (payload ?? "").match(/^l([0-9a-f]{32})([0-9a-f]{16})$/);
   if (!m) return null;
-  if (!safeEqual(m[2], sign(tenantId, m[1]))) return null;
+  if (!safeEqual(m[2], sign(tenantId, m[1]))) return null; // sign null → safeEqual fals
   const h = m[1];
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }

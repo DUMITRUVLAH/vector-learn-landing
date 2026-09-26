@@ -107,7 +107,7 @@ async function req(method: string, url: string, body?: unknown, headers: Record<
 
 const TG_TOKEN = "110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw";
 
-async function connectTelegram(botId = 7000000001): Promise<{ id: string; webhookUrl: string; secret: string }> {
+async function connectTelegram(botId = 7000000001): Promise<{ id: string; webhookUrl: string; secret: string; header: string }> {
   responder = (url) => {
     if (url.endsWith("/getMe")) return { body: { ok: true, result: { id: botId, is_bot: true, first_name: "Acme", username: "acme_bot" } } };
     if (url.endsWith("/setWebhook")) return { body: { ok: true, result: true } };
@@ -117,7 +117,9 @@ async function connectTelegram(botId = 7000000001): Promise<{ id: string; webhoo
   expect(r.status).toBe(201);
   const ch = r.body.channel as { id: string; webhookUrl: string };
   const secret = ch.webhookUrl.split("/").pop()!;
-  return { id: ch.id, webhookUrl: ch.webhookUrl, secret };
+  // Secretul din antet e cel dat Telegram-ului la setWebhook — separat de cel din URL.
+  const header = String(calls.filter((c) => c.url.endsWith("/setWebhook")).pop()?.json?.secret_token ?? "");
+  return { id: ch.id, webhookUrl: ch.webhookUrl, secret, header };
 }
 
 function tgUpdate(updateId: number, text: string, from = { id: 123456789, first_name: "Maria", last_name: "Pop" }) {
@@ -171,7 +173,10 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
   it("[blocant] conectarea validează tokenul, setează webhook-ul cu secret și NU întoarce tokenul", async () => {
     const ch = await connectTelegram();
     const setHook = calls.find((c) => c.url.endsWith("/setWebhook"))!;
-    expect(setHook.json).toMatchObject({ url: ch.webhookUrl, secret_token: ch.secret });
+    expect(setHook.json).toMatchObject({ url: ch.webhookUrl, secret_token: ch.header });
+    // antetul NU e segmentul din URL (URL-ul e afișat în aplicație și ajunge în loguri)
+    expect(ch.header).toMatch(/^[a-f0-9]{48}$/);
+    expect(ch.header).not.toBe(ch.secret);
     const list = await req("GET", "/api/comms/channels");
     expect(JSON.stringify(list.body)).not.toContain(TG_TOKEN);
     expect(JSON.stringify(list.body)).not.toContain("credentialsEnc");
@@ -185,13 +190,13 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
     const r = await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(1, "salut"));
     expect(r.status).toBe(401);
     expect(await testDb.select().from(commMessages)).toHaveLength(0);
-    const r2 = await req("POST", `/api/comms/webhooks/telegram/${"0".repeat(48)}`, tgUpdate(1, "salut"), { "x-telegram-bot-api-secret-token": ch.secret });
+    const r2 = await req("POST", `/api/comms/webhooks/telegram/${"0".repeat(48)}`, tgUpdate(1, "salut"), { "x-telegram-bot-api-secret-token": ch.header });
     expect(r2.status).toBe(404);
   });
 
   it("[blocant] mesaj primit → lead nou + conversație + urmă în cronologie; re-livrarea nu dublează", async () => {
     const ch = await connectTelegram();
-    const h = { "x-telegram-bot-api-secret-token": ch.secret };
+    const h = { "x-telegram-bot-api-secret-token": ch.header };
     expect((await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(10, "Aveți locuri la curs?"), h)).status).toBe(200);
     expect((await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(10, "Aveți locuri la curs?"), h)).status).toBe(200);
 
@@ -211,7 +216,7 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
 
   it("[blocant] răspunsul din inbox pleacă la Telegram cu chat_id-ul omului și intră în cronologie", async () => {
     const ch = await connectTelegram();
-    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(20, "Bună"), { "x-telegram-bot-api-secret-token": ch.secret });
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(20, "Bună"), { "x-telegram-bot-api-secret-token": ch.header });
     const convId = ((await req("GET", "/api/comms/inbox/conversations")).body.items as Array<{ id: string }>)[0].id;
     calls = [];
     responder = () => ({ body: { ok: true, result: { message_id: 21 } } });
@@ -228,7 +233,7 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
 
   it("un eșec la furnizor rămâne în conversație ca „failed”, cu motivul", async () => {
     const ch = await connectTelegram();
-    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(30, "x"), { "x-telegram-bot-api-secret-token": ch.secret });
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(30, "x"), { "x-telegram-bot-api-secret-token": ch.header });
     const convId = ((await req("GET", "/api/comms/inbox/conversations")).body.items as Array<{ id: string }>)[0].id;
     responder = () => ({ status: 403, body: { ok: false, error_code: 403, description: "Forbidden: bot was blocked by the user" } });
     const r = await req("POST", `/api/comms/inbox/conversations/${convId}/messages`, { text: "Hei" });
@@ -238,7 +243,7 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
 
   it("[blocant] omul blochează botul → trimiterea e oprită ÎNAINTE de furnizor", async () => {
     const ch = await connectTelegram();
-    const h = { "x-telegram-bot-api-secret-token": ch.secret };
+    const h = { "x-telegram-bot-api-secret-token": ch.header };
     await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(40, "x"), h);
     await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, { update_id: 41, my_chat_member: { chat: { id: 123456789, type: "private" }, new_chat_member: { status: "kicked" } } }, h);
     const convId = ((await req("GET", "/api/comms/inbox/conversations")).body.items as Array<{ id: string }>)[0].id;
@@ -254,7 +259,7 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
     const ch = await connectTelegram();
     const payload = leadLinkPayload(tenantA, lead.id);
     await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(50, `/start ${payload}`, { id: 555, first_name: "Ionel" }), {
-      "x-telegram-bot-api-secret-token": ch.secret,
+      "x-telegram-bot-api-secret-token": ch.header,
     });
     const all = await testDb.select().from(leads).where(eq(leads.tenantId, tenantA));
     expect(all).toHaveLength(1);
@@ -264,7 +269,7 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
 
   it("[blocant] consimțământ retras → nicio trimitere", async () => {
     const ch = await connectTelegram();
-    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(60, "x"), { "x-telegram-bot-api-secret-token": ch.secret });
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(60, "x"), { "x-telegram-bot-api-secret-token": ch.header });
     await testDb.update(leads).set({ consentRevokedAt: new Date() });
     const convId = ((await req("GET", "/api/comms/inbox/conversations")).body.items as Array<{ id: string }>)[0].id;
     calls = [];
@@ -461,7 +466,7 @@ describe("Gmail: în CRM intră doar ce ține de un lead", () => {
 describe("izolarea între workspace-uri", () => {
   it("[blocant] alt workspace nu vede conversația, nu scrie în ea și nu vede canalul", async () => {
     const ch = await connectTelegram();
-    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(70, "secret de afaceri"), { "x-telegram-bot-api-secret-token": ch.secret });
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(70, "secret de afaceri"), { "x-telegram-bot-api-secret-token": ch.header });
     const convId = ((await req("GET", "/api/comms/inbox/conversations")).body.items as Array<{ id: string }>)[0].id;
 
     currentUser = { id: boId, tenantId: tenantB, role: "admin", email: "bo@beta.md", name: "Bo" };
@@ -490,5 +495,77 @@ describe("izolarea între workspace-uri", () => {
     currentUser = { ...currentUser, role: "teacher" };
     const r = await req("POST", "/api/comms/channels", { kind: "telegram", name: "x", credentials: { botToken: TG_TOKEN } });
     expect(r.status).toBe(403);
+  });
+});
+
+// ─── regresiile din revizia de securitate (2026-09-26) ───────────────────────
+
+describe("revizia de securitate", () => {
+  it("[blocant] SEC-1: un părinte/student din workspace nu vede și nu scrie nimic", async () => {
+    const ch = await connectTelegram();
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(80, "date private"), { "x-telegram-bot-api-secret-token": ch.header });
+    const [parent] = await testDb
+      .insert(users)
+      .values({ tenantId: tenantA, email: `p${Date.now()}@alfa.md`, passwordHash: "x", name: "Părinte", role: "parent" })
+      .returning();
+    currentUser = { id: parent.id, tenantId: tenantA, role: "parent", email: parent.email, name: "Părinte" };
+    expect((await req("GET", "/api/comms/inbox/conversations")).status).toBe(403);
+    expect((await req("GET", "/api/comms/channels")).status).toBe(403);
+    calls = [];
+    const [lead] = await testDb.select().from(leads).where(eq(leads.tenantId, tenantA));
+    expect((await req("POST", "/api/comms/inbox/start", { leadId: lead.id, channelId: ch.id, text: "x" })).status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("[blocant] SEC-2: webhook-ul semnat al unui workspace NU atinge numărul WhatsApp al altuia", async () => {
+    const connectWa = async (pnid: string, secret: string) => {
+      responder = (url) => (url.includes("?fields=") ? { body: { display_phone_number: pnid } } : { body: {} });
+      const r = await req("POST", "/api/comms/channels", { kind: "whatsapp", name: "WA", credentials: { accessToken: "t", phoneNumberId: pnid, appSecret: secret } });
+      expect(r.status).toBe(201);
+      return (r.body.channel as { webhookUrl: string }).webhookUrl.split("/").pop()!;
+    };
+    currentUser = { id: boId, tenantId: tenantB, role: "admin", email: "bo@beta.md", name: "Bo" };
+    await connectWa("VICTIM_PNID", "victim-secret");
+    currentUser = { id: anaId, tenantId: tenantA, role: "admin", email: "ana@alfa.md", name: "Ana" };
+    const attackerPath = await connectWa("ATTACKER_PNID", "attacker-secret");
+    const raw = JSON.stringify({
+      entry: [{ changes: [{ value: { metadata: { phone_number_id: "VICTIM_PNID" }, contacts: [{ wa_id: "37369000000", profile: { name: "Fals" } }], messages: [{ from: "37369000000", id: "wamid.FORGED", timestamp: "1790000000", type: "text", text: { body: "phishing" } }] } }] }],
+    });
+    const sig = `sha256=${createHmac("sha256", "attacker-secret").update(raw).digest("hex")}`;
+    const r = await req("POST", `/api/comms/webhooks/whatsapp/${attackerPath}`, raw, { "x-hub-signature-256": sig });
+    expect(r.status).toBe(200);
+    expect(await testDb.select().from(commMessages).where(eq(commMessages.externalId, "wamid.FORGED"))).toHaveLength(0);
+    expect(await testDb.select().from(leads).where(eq(leads.tenantId, tenantB))).toHaveLength(0);
+  });
+
+  it("[blocant] SEC-4: din cutia Gmail a unui coleg nu se poate trimite", async () => {
+    await testDb.insert(leads).values({ tenantId: tenantA, fullName: "Client", stage: "new", email: "client@firma.md", emailNormalized: "client@firma.md" });
+    const [gm] = await testDb
+      .insert(commChannels)
+      .values({ tenantId: tenantA, kind: "gmail", name: "Gmail Ana", status: "active", externalId: "ana@alfa.md", config: { mock: true, email: "ana@alfa.md" }, webhookSecret: "b".repeat(48), connectedBy: anaId })
+      .returning();
+    await req("POST", `/api/comms/channels/${gm.id}/simulate`, { from: "client@firma.md", text: "Accept", subject: "Ofertă" });
+    const convId = ((await req("GET", "/api/comms/inbox/conversations")).body.items as Array<{ id: string }>)[0].id;
+    const [colleague] = await testDb
+      .insert(users)
+      .values({ tenantId: tenantA, email: `m${Date.now()}@alfa.md`, passwordHash: "x", name: "Manager", role: "manager" })
+      .returning();
+    currentUser = { id: colleague.id, tenantId: tenantA, role: "manager", email: colleague.email, name: "Manager" };
+    const detail = await req("GET", `/api/comms/inbox/conversations/${convId}`);
+    expect(detail.status).toBe(200); // citirea e comună (cronologia leadului o arată oricum)
+    expect((detail.body.compose as { blocked: boolean }).blocked).toBe(true);
+    const r = await req("POST", `/api/comms/inbox/conversations/${convId}/messages`, { text: "Scriu în numele Anei", subject: "Re" });
+    expect(r.status).toBe(403);
+    expect(r.body.error).toBe("not_mailbox_owner");
+    currentUser = { id: anaId, tenantId: tenantA, role: "admin", email: "ana@alfa.md", name: "Ana" };
+    expect((await req("POST", `/api/comms/inbox/conversations/${convId}/messages`, { text: "Mulțumesc!", subject: "Re: Ofertă" })).status).toBe(201);
+  });
+
+  it("SEC-3: un agent fără comms.manage nu vede URL-ul de webhook", async () => {
+    await connectTelegram();
+    currentUser = { ...currentUser, role: "teacher" };
+    const list = await req("GET", "/api/comms/channels");
+    expect(list.status).toBe(200);
+    expect((list.body.channels as Array<{ webhookUrl: string | null }>)[0].webhookUrl).toBeNull();
   });
 });
