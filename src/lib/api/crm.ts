@@ -462,7 +462,10 @@ export type CrmInteractionType =
   | "sms"
   | "meeting"
   | "stage_change"
-  | "system";
+  | "system"
+  // COMMS-301: mesajele din inboxul omnicanal
+  | "telegram"
+  | "viber";
 
 export type CrmInteractionDirection = "inbound" | "outbound" | "internal";
 

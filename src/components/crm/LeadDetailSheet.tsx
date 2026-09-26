@@ -38,7 +38,7 @@ import {
   Undo2,
   X,
   FileText,
-  ExternalLink, Eye } from "lucide-react";
+  ExternalLink, Eye, Send } from "lucide-react";
 import {
   DateField,
   Sheet,
@@ -113,6 +113,7 @@ import {
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
 import { LeadContactsTab } from "@/components/crm/LeadContactsTab";
 import { LeadFilesTab } from "@/components/crm/LeadFilesTab";
+import { LeadChannelsPanel } from "@/components/crm/LeadChannelsPanel";
 import { LeadPersonHistoryTab } from "@/components/crm/LeadPersonHistoryTab";
 import { LeadCustomFields } from "@/components/crm/LeadCustomFields";
 import { LeadCadencePanel } from "@/components/crm/LeadCadencePanel";
@@ -167,6 +168,8 @@ const INTERACTION_LABEL: Record<CrmInteractionType, string> = {
   meeting: "Întâlnire",
   stage_change: "Schimbare etapă",
   system: "Act",
+  telegram: "Telegram",
+  viber: "Viber",
 };
 
 /**
@@ -209,6 +212,8 @@ const INTERACTION_ICON: Record<CrmInteractionType, ReactNode> = {
     <MessageCircle className="h-3.5 w-3.5 text-success" aria-hidden="true" />
   ),
   sms: <Smartphone className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
+  telegram: <Send className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
+  viber: <MessageCircle className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
   meeting: <Calendar className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
   stage_change: (
     <ArrowRightLeft
@@ -1376,6 +1381,9 @@ export function LeadDetailSheet({
 
                 {tab === "activitate" && (
                   <div className="flex flex-col gap-6">
+                    {/* COMMS-301: pe unde i se poate scrie leadului (WhatsApp/Telegram/Viber/Gmail).
+                    Mesajele în sine apar mai jos, în cronologie — nu există o a doua istorie. */}
+                    <LeadChannelsPanel leadId={lead.id} />
                     {askNextAction && (
                       <Alert
                         variant="warning"

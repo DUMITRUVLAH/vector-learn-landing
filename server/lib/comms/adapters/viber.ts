@@ -16,7 +16,7 @@
  */
 import type { ChannelAdapter, NormalizedEvent, OutboundMessage, SendResult, AdapterContext, CommMediaItem } from "../types";
 import { CommsError } from "../types";
-import { hmacSha256Hex, obj, readJson, safeEqual, str } from "../util";
+import { hmacSha256Hex, obj, safeEqual, str } from "../util";
 
 const API = "https://chatapi.viber.com/pa";
 

@@ -9,7 +9,7 @@
  */
 import { api } from "@/lib/api";
 
-export type CrmChannel = "call" | "email" | "whatsapp" | "sms" | "meeting" | "note";
+export type CrmChannel = "call" | "email" | "whatsapp" | "sms" | "meeting" | "note" | "telegram" | "viber";
 
 export const CHANNEL_LABELS: Record<CrmChannel, string> = {
   call: "Apel",
@@ -18,6 +18,8 @@ export const CHANNEL_LABELS: Record<CrmChannel, string> = {
   sms: "SMS",
   meeting: "Întâlnire",
   note: "Notiță",
+  telegram: "Telegram",
+  viber: "Viber",
 };
 
 export const DIRECTION_LABELS: Record<string, string> = {

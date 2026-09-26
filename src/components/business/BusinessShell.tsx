@@ -49,7 +49,7 @@ import {
   ChevronDown,
   Search,
   Menu,
-  X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon, UserPlus } from "lucide-react";
+  X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon, UserPlus, Inbox, PlugZap } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { clearOrphanScrollLock } from "@/lib/scrollLockGuard";
@@ -263,6 +263,8 @@ const CRM_NAV_GROUPS: NavGroup[] = [
       { label: "Acasă", href: "/business/crm", icon: Home, tone: "violet" },
       { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare, tone: "sky" },
       { label: "Astăzi", href: "/business/crm/astazi", icon: CalendarClock, tone: "amber" },
+      // COMMS-301: inboxul omnicanal — lângă „Astăzi", fiindcă e tot munca zilei.
+      { label: "Mesaje", href: "/business/crm/mesaje", icon: Inbox, tone: "blue" },
       { label: "Clienți", href: "/business/crm/clienti", icon: Building2, tone: "rose" },
       { label: "Produse", href: "/business/crm/produse", icon: Package, tone: "emerald" },
     ],
@@ -307,6 +309,9 @@ const CRM_NAV_GROUPS: NavGroup[] = [
       { label: "Drepturi", href: "/business/crm/drepturi", icon: ShieldCheck, tone: "teal", crmPermission: "audit.view" },
       { label: "Jurnal", href: "/business/crm/jurnal", icon: HistoryIcon, tone: "violet", crmPermission: "audit.view" },
       { label: "API", href: "/business/crm/api", icon: KeyRound, tone: "rose", crmPermission: "audit.view" },
+      // COMMS-301: fără `crmPermission` — oricine își poate conecta propria cutie Gmail; butoanele
+      // de conectare a canalelor comune cer `comms.manage` pe server.
+      { label: "Canale de mesaje", href: "/business/crm/canale", icon: PlugZap, tone: "blue" },
     ],
   },
 ];

@@ -20,6 +20,8 @@ const CHANNEL_ICONS: Partial<Record<CrmChannel, typeof Phone>> = {
   email: Mail,
   whatsapp: MessageCircle,
   sms: MessageCircle,
+  telegram: MessageCircle,
+  viber: MessageCircle,
   meeting: Users,
 };
 

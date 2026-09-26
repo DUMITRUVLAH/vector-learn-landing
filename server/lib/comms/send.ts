@@ -30,7 +30,7 @@ import { adapterContext, isMockChannel } from "./channelStore";
 import { freshGmailCreds } from "./gmailService";
 import { getAdapter, INTERACTION_TYPE } from "./registry";
 import { CommsError, type CommChannelKind, type OutboundMessage, type SendResult } from "./types";
-import { preview, str } from "./util";
+import { preview } from "./util";
 import { sendRestrictions } from "./rules";
 
 export { WHATSAPP_WINDOW_MS, windowOpen, sendRestrictions } from "./rules";

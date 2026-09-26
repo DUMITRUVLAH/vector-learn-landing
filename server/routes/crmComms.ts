@@ -37,7 +37,7 @@ export const crmCommsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmCommsRoutes.use("/*", requireAuth);
 
 /** Canalele pe care le poate înregistra CRM-ul. Aceleași ca enum-ul din bază. */
-const CHANNELS = ["call", "email", "whatsapp", "sms", "meeting", "note"] as const;
+const CHANNELS = ["call", "email", "whatsapp", "sms", "meeting", "note", "telegram", "viber"] as const;
 
 const emailInput = z.object({
   leadId: z.string().uuid(),
@@ -212,7 +212,7 @@ crmCommsRoutes.get("/feed", async (c) => {
   } else {
     // Implicit arătăm doar COMUNICAREA. `stage_change` și `system` ar îneca
     // fluxul în zgomot generat de aplicație, nu de oameni.
-    filters.push(inArray(leadInteractions.type, ["call", "email", "whatsapp", "sms", "meeting", "note"]));
+    filters.push(inArray(leadInteractions.type, ["call", "email", "whatsapp", "sms", "meeting", "note", "telegram", "viber"]));
   }
   if (ownerId) filters.push(eq(leadInteractions.userId, ownerId));
 
