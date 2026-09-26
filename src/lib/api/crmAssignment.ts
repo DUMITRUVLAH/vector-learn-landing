@@ -45,6 +45,8 @@ export interface CrmAssignmentRule {
   conditions: AutomationCondition[];
   userIds: string[];
   orderIndex: number;
+  /** Scenariul gata făcut din care a pornit; `null` = scrisă de mână. */
+  templateKey?: string | null;
 }
 
 export interface CrmAssignmentRuleInput {
@@ -53,6 +55,7 @@ export interface CrmAssignmentRuleInput {
   strategy: AssignmentStrategy;
   conditions?: AutomationCondition[];
   userIds?: string[];
+  templateKey?: string | null;
 }
 
 export interface CrmAssignmentMember {

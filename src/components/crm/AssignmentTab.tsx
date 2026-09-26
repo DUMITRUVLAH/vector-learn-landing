@@ -11,7 +11,7 @@
  * 2. Scoaterea din tragere e un comutator, nu o ștergere. Omul pleacă în
  *    concediu și se întoarce; contul lui n-are nicio treabă cu asta.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Users, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   Alert,
@@ -45,13 +45,11 @@ import {
   type CrmAssignmentRule,
   type CrmAssignmentRuleInput,
 } from "@/lib/api/crmAssignment";
-import {
-  CONDITION_FIELDS,
-  CONDITION_OP_LABELS,
-  OPS_WITHOUT_VALUE,
-  type AutomationCondition,
-  type ConditionOp,
-} from "@/lib/api/crmAutomations";
+import { ASSIGNMENT_CONDITION_FIELDS, describeCondition, type AutomationCondition } from "@/lib/api/crmAutomations";
+import { getCrmStages } from "@/lib/api/crm";
+import { ASSIGNMENT_SCENARIOS, type AssignmentScenario } from "@/lib/crm/automationScenarios";
+import { AutomationConditionRow, type ConditionChoice } from "@/components/crm/AutomationConditionRow";
+import { ScenarioCard } from "@/components/crm/ScenarioCard";
 
 function errText(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -64,6 +62,47 @@ export function AssignmentTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<CrmAssignmentRule | "new" | null>(null);
+  const [stages, setStages] = useState<ConditionChoice[]>([]);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCrmStages()
+      .then((r) => setStages(r.items.map((s) => ({ value: s.key, label: s.label }))))
+      .catch(() => setStages([]));
+  }, []);
+
+  const byTemplate = useMemo(() => {
+    const map = new Map<string, CrmAssignmentRule>();
+    for (const r of rules) if (r.templateKey) map.set(r.templateKey, r);
+    return map;
+  }, [rules]);
+  const ownRules = rules.filter((r) => !r.templateKey || !ASSIGNMENT_SCENARIOS.some((s) => s.key === r.templateKey));
+
+  /**
+   * Scenariile de distribuire se exclud între ele: regulile se încearcă în ordine și prima care se
+   * potrivește decide, deci două scenarii fără condiții pornite deodată ar însemna că al doilea nu
+   * rulează niciodată — dar ar arăta „Pornit". Pornind unul, le oprim pe celelalte.
+   */
+  async function toggleScenario(scenario: AssignmentScenario, next: boolean) {
+    setBusyKey(scenario.key);
+    setError(null);
+    try {
+      if (next) {
+        for (const other of ASSIGNMENT_SCENARIOS) {
+          const r = byTemplate.get(other.key);
+          if (other.key !== scenario.key && r?.enabled) await updateCrmAssignmentRule(r.id, { enabled: false });
+        }
+      }
+      const installed = byTemplate.get(scenario.key);
+      if (installed) await updateCrmAssignmentRule(installed.id, { enabled: next });
+      else if (next) await createCrmAssignmentRule({ ...scenario.rule, enabled: true, templateKey: scenario.key });
+      await load();
+    } catch (err) {
+      setError(errText(err, "Nu am putut schimba distribuirea."));
+    } finally {
+      setBusyKey(null);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,13 +144,45 @@ export function AssignmentTab() {
     <div className="space-y-6">
       {error && <Alert variant="destructive">{error}</Alert>}
 
-      {/* ── Regulile ─────────────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
+      {/* ── Scenariile gata făcute ─────────────────────────────────────── */}
+      <section className="space-y-3" aria-labelledby="dist-scenarii-titlu">
+        <div>
+          <h2 id="dist-scenarii-titlu" className="text-lg font-semibold">
+            Cine primește lead-urile noi
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Alege un mod de împărțire. Pornești unul — celelalte se opresc singure.
+          </p>
+        </div>
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {ASSIGNMENT_SCENARIOS.map((scenario) => (
+            <li key={scenario.key}>
+              <ScenarioCard
+                title={scenario.title}
+                why={scenario.why}
+                on={!!byTemplate.get(scenario.key)?.enabled}
+                busy={busyKey !== null}
+                onToggle={(next) => void toggleScenario(scenario, next)}
+                onCustomize={() => {
+                  const installed = byTemplate.get(scenario.key);
+                  if (installed) setEditing(installed);
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* ── Regulile scrise de mână ──────────────────────────────────────── */}
+      <section className="space-y-3" aria-labelledby="dist-reguli-titlu">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Cine primește lead-urile noi</h2>
+            <h2 id="dist-reguli-titlu" className="text-lg font-semibold">
+              Reguli cu condiții
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Regulile se încearcă în ordine. Prima care se potrivește decide.
+              Pentru cazuri speciale — de pildă lead-urile din Google Ads la un singur agent. Se încearcă
+              înaintea scenariului pornit, în ordine; prima care se potrivește decide.
             </p>
           </div>
           <Button onClick={() => setEditing("new")}>
@@ -120,15 +191,20 @@ export function AssignmentTab() {
           </Button>
         </div>
 
-        {rules.length === 0 ? (
+        {ownRules.length === 0 ? (
           <EmptyState
+            compact
             icon={<Users className="h-6 w-6" />}
-            title="Distribuirea nu e pornită"
-            description="Fără nicio regulă, lead-urile noi rămân neatribuite și cineva trebuie să le împartă manual."
+            title="Nicio regulă cu condiții"
+            description={
+              rules.some((r) => r.enabled)
+                ? "Lead-urile noi se împart după scenariul pornit mai sus."
+                : "Fără niciun scenariu pornit, lead-urile noi rămân neatribuite și cineva trebuie să le împartă manual."
+            }
           />
         ) : (
           <ul className="space-y-2">
-            {rules.map((rule) => (
+            {ownRules.map((rule) => (
               <li key={rule.id}>
                 <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
@@ -140,13 +216,7 @@ export function AssignmentTab() {
                     <p className="text-sm text-muted-foreground">
                       {rule.conditions.length === 0
                         ? "Se aplică la toate lead-urile noi."
-                        : rule.conditions
-                            .map((c) => {
-                              const f = CONDITION_FIELDS.find((x) => x.value === c.field)?.label ?? c.field;
-                              const op = CONDITION_OP_LABELS[c.op];
-                              return OPS_WITHOUT_VALUE.includes(c.op) ? `${f} ${op}` : `${f} ${op} „${c.value ?? ""}”`;
-                            })
-                            .join(" și ")}
+                        : rule.conditions.map(describeCondition).join(" și ")}
                       {rule.userIds.length > 0 && ` · ${rule.userIds.length} agenți în tragere`}
                     </p>
                   </div>
@@ -270,6 +340,7 @@ export function AssignmentTab() {
         <AssignmentRuleDialog
           rule={editing === "new" ? null : editing}
           members={members}
+          stages={stages}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -284,11 +355,13 @@ export function AssignmentTab() {
 function AssignmentRuleDialog({
   rule,
   members,
+  stages,
   onClose,
   onSaved,
 }: {
   rule: CrmAssignmentRule | null;
   members: CrmAssignmentMember[];
+  stages: ConditionChoice[];
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -365,7 +438,7 @@ function AssignmentRuleDialog({
               onClick={() =>
                 setForm((f) => ({
                   ...f,
-                  conditions: [...(f.conditions ?? []), { field: "source", op: "eq", value: "" }],
+                  conditions: [...(f.conditions ?? []), { field: "source", op: "in", value: "" }],
                 }))
               }
             >
@@ -377,75 +450,20 @@ function AssignmentRuleDialog({
             <p className="text-xs text-muted-foreground">Fără condiții — regula prinde toate lead-urile noi.</p>
           )}
           {conditions.map((c: AutomationCondition, i: number) => (
-            <div key={i} className="flex flex-wrap items-end gap-2">
-              <div className="min-w-[9rem] flex-1 space-y-1">
-                <Label htmlFor={`dist-camp-${i}`}>Câmpul</Label>
-                <Select
-                  id={`dist-camp-${i}`}
-                  value={c.field}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      conditions: (f.conditions ?? []).map((x, j) => (j === i ? { ...x, field: e.target.value } : x)),
-                    }))
-                  }
-                >
-                  {CONDITION_FIELDS.map((f) => (
-                    <option key={f.value} value={f.value}>
-                      {f.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="min-w-[8rem] space-y-1">
-                <Label htmlFor={`dist-op-${i}`}>Compară</Label>
-                <Select
-                  id={`dist-op-${i}`}
-                  value={c.op}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      conditions: (f.conditions ?? []).map((x, j) =>
-                        j === i ? { ...x, op: e.target.value as ConditionOp } : x
-                      ),
-                    }))
-                  }
-                >
-                  {(Object.keys(CONDITION_OP_LABELS) as ConditionOp[]).map((op) => (
-                    <option key={op} value={op}>
-                      {CONDITION_OP_LABELS[op]}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              {!OPS_WITHOUT_VALUE.includes(c.op) && (
-                <div className="min-w-[8rem] flex-1 space-y-1">
-                  <Label htmlFor={`dist-val-${i}`}>Valoarea</Label>
-                  <Input
-                    id={`dist-val-${i}`}
-                    value={String(c.value ?? "")}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        conditions: (f.conditions ?? []).map((x, j) =>
-                          j === i ? { ...x, value: e.target.value } : x
-                        ),
-                      }))
-                    }
-                  />
-                </div>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`Șterge condiția ${i + 1}`}
-                onClick={() =>
-                  setForm((f) => ({ ...f, conditions: (f.conditions ?? []).filter((_, j) => j !== i) }))
-                }
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              </Button>
-            </div>
+            <AutomationConditionRow
+              key={i}
+              condition={c}
+              index={i}
+              idPrefix="dist"
+              fields={ASSIGNMENT_CONDITION_FIELDS}
+              stages={stages}
+              onChange={(next) =>
+                setForm((f) => ({ ...f, conditions: (f.conditions ?? []).map((x, j) => (j === i ? next : x)) }))
+              }
+              onRemove={() =>
+                setForm((f) => ({ ...f, conditions: (f.conditions ?? []).filter((_, j) => j !== i) }))
+              }
+            />
           ))}
         </div>
 

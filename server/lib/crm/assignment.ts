@@ -239,9 +239,17 @@ const NO_RULE_REASON = "Nicio regulă activă nu s-a potrivit cu lead-ul — a r
  */
 export function selectAssignee(input: SelectAssigneeInput): AssignmentDecision {
   const { rules, members, lead, lastAssignedUserId = null } = input;
+  // Regulile CU condiții se încearcă înaintea celor care prind tot (CRM-A02). Altfel o regulă
+  // „toate lead-urile, pe rând" pornită întâi ar face moartă orice regulă specială scrisă după ea
+  // („Google Ads → Maria"), fără nicio urmă — ar arăta „Pornită" și n-ar rula niciodată.
   const sortedRules = [...rules]
     .filter((r) => r.enabled)
-    .sort((a, b) => a.orderIndex - b.orderIndex || a.id.localeCompare(b.id));
+    .sort(
+      (a, b) =>
+        Number(a.conditions.length === 0) - Number(b.conditions.length === 0) ||
+        a.orderIndex - b.orderIndex ||
+        a.id.localeCompare(b.id)
+    );
 
   for (const rule of sortedRules) {
     if (!matchRule(rule, lead)) continue;

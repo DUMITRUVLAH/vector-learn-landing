@@ -69,6 +69,7 @@ const listCrmAssignmentRules = vi.fn();
 const listCrmAssignmentMembers = vi.fn();
 const updateCrmAssignmentMember = vi.fn();
 const createCrmAssignmentRule = vi.fn();
+const updateCrmAssignmentRule = vi.fn();
 vi.mock("@/lib/api/crmAssignment", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/crmAssignment")>("@/lib/api/crmAssignment");
   return {
@@ -77,6 +78,7 @@ vi.mock("@/lib/api/crmAssignment", async () => {
     listCrmAssignmentMembers: (...a: unknown[]) => listCrmAssignmentMembers(...a),
     updateCrmAssignmentMember: (...a: unknown[]) => updateCrmAssignmentMember(...a),
     createCrmAssignmentRule: (...a: unknown[]) => createCrmAssignmentRule(...a),
+    updateCrmAssignmentRule: (...a: unknown[]) => updateCrmAssignmentRule(...a),
   };
 });
 
@@ -210,8 +212,87 @@ describe("pagina de automatizări", () => {
   it("fără nicio regulă, ecranul dă un exemplu concret, nu doar „gol”", async () => {
     listCrmAutomations.mockResolvedValue({ items: [] });
     render(<CrmAutomationsPage />);
-    expect(await screen.findByText(/nicio regulă încă/i)).toBeTruthy();
-    expect(screen.getByText(/de sunat/i)).toBeTruthy();
+    expect(await screen.findByText(/nicio regulă proprie încă/i)).toBeTruthy();
+    expect(screen.getByText(/trimite oferta/i)).toBeTruthy();
+  });
+});
+
+// ─── CRM-A02: scenariile gata făcute ─────────────────────────────────────────
+
+describe("scenariile gata făcute", () => {
+  beforeEach(() => {
+    getCrmStages.mockResolvedValue({ items: STAGES });
+    listCrmAutomations.mockResolvedValue({ items: [] });
+    listCrmAutomationRuns.mockResolvedValue({ items: [] });
+    listCrmAssignmentRules.mockResolvedValue({ items: [] });
+    listCrmAssignmentMembers.mockResolvedValue({ items: [] });
+  });
+
+  it("[blocant] pagina goală arată deja scenariile, fiecare cu comutatorul lui", async () => {
+    render(<CrmAutomationsPage />);
+    expect(await screen.findByText("Scenarii gata făcute")).toBeTruthy();
+    expect(screen.getByLabelText(/pornește scenariul sună fiecare lead nou/i)).toBeTruthy();
+    expect(screen.getByLabelText(/pornește scenariul nu lăsa lead-urile uitate/i)).toBeTruthy();
+  });
+
+  it("[blocant] comutatorul pornește scenariul: creează regula, ținând minte din ce scenariu vine", async () => {
+    createCrmAutomation.mockImplementation(async (body: Record<string, unknown>) => ({
+      id: "n1",
+      orderIndex: 0,
+      createdAt: "2026-09-26T00:00:00.000Z",
+      ...body,
+    }));
+    render(<CrmAutomationsPage />);
+    fireEvent.click(await screen.findByLabelText(/pornește scenariul nu lăsa lead-urile uitate/i));
+    await waitFor(() => expect(createCrmAutomation).toHaveBeenCalled());
+    const body = createCrmAutomation.mock.calls[0][0] as Record<string, unknown>;
+    expect(body.templateKey).toBe("idle-3-days");
+    expect(body.enabled).toBe(true);
+    expect(body.trigger).toEqual({ kind: "lead.idle", idleDays: 3 });
+    expect(await screen.findByLabelText(/oprește scenariul nu lăsa lead-urile uitate/i)).toBeTruthy();
+  });
+
+  it("un scenariu deja pornit apare pornit și NU se mai adaugă a doua oară printre regulile proprii", async () => {
+    listCrmAutomations.mockResolvedValue({
+      items: [
+        {
+          ...RULE,
+          id: "t1",
+          name: "Sună fiecare lead nou în aceeași zi",
+          templateKey: "new-lead-call",
+          conditions: [],
+          actions: [{ type: "create_task", title: "Sună clientul", dueInDays: 0 }],
+        },
+      ],
+    });
+    render(<CrmAutomationsPage />);
+    expect(await screen.findByLabelText(/oprește scenariul sună fiecare lead nou/i)).toBeTruthy();
+    expect(screen.getByText(/nicio regulă proprie încă/i)).toBeTruthy();
+  });
+
+  it("scenariul care cere o etapă „câștigat” spune de ce nu se poate porni, pe o pâlnie fără ea", async () => {
+    render(<CrmAutomationsPage />);
+    expect(await screen.findByText(/n-are o etapă marcată „câștigat”/i)).toBeTruthy();
+    expect((screen.getByLabelText(/pornește scenariul pașii de după vânzare/i) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("„Personalizează” deschide editorul completat, cu fraza de control", async () => {
+    render(<CrmAutomationsPage />);
+    await screen.findByText("Scenarii gata făcute");
+    fireEvent.click(screen.getAllByRole("button", { name: /personalizează/i })[1]);
+    const dialog = await screen.findByRole("dialog");
+    expect((within(dialog).getByLabelText(/după câte zile/i) as HTMLInputElement).value).toBe("3");
+    expect(within(dialog).getByText(/stă neatins 3 zile/i)).toBeTruthy();
+  });
+
+  it("condiția pe sursă se alege din listă cu nume, nu se tastează cheia din bază", async () => {
+    render(<CrmAutomationsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /regulă nouă/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /condiție/i }));
+    expect(within(dialog).getByLabelText("Reclamă Facebook")).toBeTruthy();
+    fireEvent.click(within(dialog).getByLabelText("Instagram"));
+    expect(within(dialog).getByText(/sursă este unul dintre „instagram”/i)).toBeTruthy();
   });
 });
 
@@ -291,8 +372,23 @@ describe("fila de distribuire", () => {
 
   it("fără reguli, ecranul spune ce se întâmplă în lipsa lor", async () => {
     await openTab();
-    expect(screen.getByText(/distribuirea nu e pornită/i)).toBeTruthy();
     expect(screen.getByText(/rămân neatribuite/i)).toBeTruthy();
+  });
+
+  it("[blocant] scenariile de distribuire sunt deja pe ecran și pornirea unuia îl oprește pe celălalt", async () => {
+    listCrmAssignmentRules.mockResolvedValue({
+      items: [
+        { id: "r1", name: "Pe rând, la toată echipa", enabled: true, strategy: "round_robin", conditions: [], userIds: [], orderIndex: 0, templateKey: "dist-round-robin" },
+      ],
+    });
+    updateCrmAssignmentRule.mockResolvedValue({});
+    createCrmAssignmentRule.mockResolvedValue({});
+    await openTab();
+    expect(screen.getByLabelText(/oprește scenariul pe rând, la toată echipa/i)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/pornește scenariul primește cine are loc azi/i));
+    await waitFor(() => expect(createCrmAssignmentRule).toHaveBeenCalled());
+    expect(updateCrmAssignmentRule).toHaveBeenCalledWith("r1", { enabled: false });
+    expect((createCrmAssignmentRule.mock.calls[0][0] as Record<string, unknown>).templateKey).toBe("dist-capacity");
   });
 
   it("fiecare strategie își explică rostul, ca omul să poată alege", async () => {

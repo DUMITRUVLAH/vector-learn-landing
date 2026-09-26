@@ -11,10 +11,14 @@
  * O regulă care face rău trebuie oprită în două secunde; una ștearsă din greșeală
  * nu se mai întoarce.
  *
+ * Al treilea (CRM-A02): pagina nu începe goală. Scenariile pe care le pornește orice
+ * echipă de vânzări stau deja pe ecran, fiecare cu comutatorul lui — omul le aprinde,
+ * nu le inventează. Regulile scrise de mână stau dedesubt, separat.
+ *
  * Jurnalul de rulări e pe același ecran, nu ascuns: „de ce s-a mișcat singur
  * lead-ul meu" e prima întrebare după pornirea automatizărilor.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Zap, Loader2, Plus, Trash2, AlertTriangle, History } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import {
@@ -39,21 +43,25 @@ import {
   deleteCrmAutomation,
   listCrmAutomationRuns,
   describeAutomation,
+  blankAction,
   TRIGGER_LABELS,
   CONDITION_FIELDS,
-  CONDITION_OP_LABELS,
-  OPS_WITHOUT_VALUE,
   ACTION_LABELS,
+  NOTIFY_TARGET_LABELS,
   STRATEGY_LABELS,
   type CrmAutomation,
   type CrmAutomationInput,
   type CrmAutomationRun,
   type AutomationAction,
   type AutomationCondition,
-  type ConditionOp,
+  type NotifyTarget,
   type TriggerKind,
 } from "@/lib/api/crmAutomations";
+import { listCrmAssignmentMembers, type CrmAssignmentMember } from "@/lib/api/crmAssignment";
+import { AUTOMATION_SCENARIOS, type AutomationScenario } from "@/lib/crm/automationScenarios";
 import { AssignmentTab } from "@/components/crm/AssignmentTab";
+import { AutomationConditionRow } from "@/components/crm/AutomationConditionRow";
+import { ScenarioCard } from "@/components/crm/ScenarioCard";
 
 function errText(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -95,12 +103,17 @@ export function CrmAutomationsPage() {
 
 // ─── Reguli ──────────────────────────────────────────────────────────────────
 
+/** Ce editează dialogul: o regulă existentă sau una nouă, eventual pornită dintr-un scenariu. */
+type Editing = { rule: CrmAutomation } | { draft: CrmAutomationInput } | null;
+
 function RulesTab() {
   const [items, setItems] = useState<CrmAutomation[]>([]);
   const [stages, setStages] = useState<CrmStage[]>([]);
+  const [members, setMembers] = useState<CrmAssignmentMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<CrmAutomation | "new" | null>(null);
+  const [editing, setEditing] = useState<Editing>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,6 +127,10 @@ function RulesTab() {
     } finally {
       setLoading(false);
     }
+    // Oamenii contează doar pentru alegerile din editor; fără ei, pagina merge mai departe.
+    listCrmAssignmentMembers()
+      .then((m) => setMembers(m.items))
+      .catch(() => setMembers([]));
   }, []);
 
   useEffect(() => {
@@ -124,6 +141,13 @@ function RulesTab() {
     (key: string) => stages.find((s) => s.key === key)?.label ?? key,
     [stages]
   );
+
+  const byTemplate = useMemo(() => {
+    const map = new Map<string, CrmAutomation>();
+    for (const a of items) if (a.templateKey) map.set(a.templateKey, a);
+    return map;
+  }, [items]);
+  const ownRules = items.filter((a) => !a.templateKey || !AUTOMATION_SCENARIOS.some((s) => s.key === a.templateKey));
 
   async function toggle(auto: CrmAutomation) {
     // Optimist: comutatorul trebuie să răspundă instantaneu — o regulă care
@@ -137,73 +161,148 @@ function RulesTab() {
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between">
-        <p className="text-sm text-muted-foreground">
-          Regulile rulează în ordinea din listă, la fiecare lead nou sau schimbare de etapă.
-        </p>
-        <Button onClick={() => setEditing("new")}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Regulă nouă
-        </Button>
-      </div>
+  async function toggleScenario(scenario: AutomationScenario, next: boolean) {
+    const installed = byTemplate.get(scenario.key);
+    if (installed) {
+      if (installed.enabled !== next) await toggle(installed);
+      return;
+    }
+    if (!next) return;
+    const input = scenario.build(stages);
+    if (!input) return;
+    setBusyKey(scenario.key);
+    setError(null);
+    try {
+      const created = await createCrmAutomation({ ...input, enabled: true, templateKey: scenario.key });
+      setItems((prev) => [...prev, created]);
+    } catch (err) {
+      const list = problemsFrom(err);
+      setError(list.length > 0 ? list.join(" ") : errText(err, "Nu am putut porni scenariul."));
+    } finally {
+      setBusyKey(null);
+    }
+  }
 
+  function customize(scenario: AutomationScenario) {
+    const installed = byTemplate.get(scenario.key);
+    if (installed) return setEditing({ rule: installed });
+    const input = scenario.build(stages);
+    if (input) setEditing({ draft: { ...input, templateKey: scenario.key } });
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16" role="status">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se încarcă regulile" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
       {error && <Alert variant="destructive">{error}</Alert>}
 
-      {loading ? (
-        <div className="flex justify-center py-16" role="status">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se încarcă regulile" />
+      {/* ── Scenariile gata făcute ─────────────────────────────────────── */}
+      <section className="space-y-3" aria-labelledby="scenarii-titlu">
+        <div>
+          <h2 id="scenarii-titlu" className="text-lg font-semibold">
+            Scenarii gata făcute
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Pornește ce ți se potrivește. „Personalizează” schimbă textul, zilele sau condițiile.
+          </p>
         </div>
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={<Zap className="h-6 w-6" />}
-          title="Nicio regulă încă"
-          description="O regulă poate, de pildă, să creeze automat un task „de sunat” la fiecare lead nou de pe site."
-        />
-      ) : (
-        <ul className="space-y-3">
-          {items.map((auto) => (
-            <li key={auto.id}>
-              <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{auto.name}</span>
-                    {!auto.enabled && <Badge variant="secondary">Oprită</Badge>}
-                  </div>
-                  <p className="text-sm text-muted-foreground">{describeAutomation(auto, stageLabel)}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Switch
-                    checked={auto.enabled}
-                    onChange={() => void toggle(auto)}
-                    aria-label={auto.enabled ? `Oprește regula ${auto.name}` : `Pornește regula ${auto.name}`}
-                  />
-                  <Button variant="outline" size="sm" onClick={() => setEditing(auto)}>
-                    Modifică
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Șterge regula ${auto.name}`}
-                    onClick={async () => {
-                      await deleteCrmAutomation(auto.id);
-                      await load();
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </div>
-              </Card>
-            </li>
-          ))}
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {AUTOMATION_SCENARIOS.map((scenario) => {
+            const installed = byTemplate.get(scenario.key);
+            const unavailable = !installed && !scenario.build(stages) ? scenario.missing ?? "Nu se potrivește pâlniei." : null;
+            return (
+              <li key={scenario.key}>
+                <ScenarioCard
+                  title={scenario.title}
+                  why={installed ? describeAutomation(installed, stageLabel) : scenario.why}
+                  on={!!installed?.enabled}
+                  busy={busyKey === scenario.key}
+                  unavailable={unavailable}
+                  onToggle={(next) => void toggleScenario(scenario, next)}
+                  onCustomize={() => customize(scenario)}
+                />
+              </li>
+            );
+          })}
         </ul>
-      )}
+      </section>
+
+      {/* ── Regulile scrise de mână ────────────────────────────────────── */}
+      <section className="space-y-3" aria-labelledby="reguli-titlu">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id="reguli-titlu" className="text-lg font-semibold">
+              Regulile tale
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Rulează în ordinea din listă, la fiecare lead nou, schimbare de etapă sau lead uitat.
+            </p>
+          </div>
+          <Button onClick={() => setEditing({ draft: EMPTY })}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Regulă nouă
+          </Button>
+        </div>
+
+        {ownRules.length === 0 ? (
+          <EmptyState
+            compact
+            icon={<Zap className="h-6 w-6" />}
+            title="Nicio regulă proprie încă"
+            description="Scenariile de mai sus acoperă începutul. Scrie una proprie când ai un caz al tău — de pildă un task „Trimite oferta” când lead-ul intră în „Calificat”."
+          />
+        ) : (
+          <ul className="space-y-3">
+            {ownRules.map((auto) => (
+              <li key={auto.id}>
+                <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{auto.name}</span>
+                      {!auto.enabled && <Badge variant="secondary">Oprită</Badge>}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{describeAutomation(auto, stageLabel)}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Switch
+                      checked={auto.enabled}
+                      onChange={() => void toggle(auto)}
+                      aria-label={auto.enabled ? `Oprește regula ${auto.name}` : `Pornește regula ${auto.name}`}
+                    />
+                    <Button variant="outline" size="sm" onClick={() => setEditing({ rule: auto })}>
+                      Modifică
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Șterge regula ${auto.name}`}
+                      onClick={async () => {
+                        await deleteCrmAutomation(auto.id);
+                        await load();
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {editing && (
         <RuleDialog
-          rule={editing === "new" ? null : editing}
+          rule={"rule" in editing ? editing.rule : null}
+          draft={"draft" in editing ? editing.draft : null}
           stages={stages}
+          members={members}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -225,27 +324,27 @@ const EMPTY: CrmAutomationInput = {
   actions: [{ type: "create_task", title: "" }],
 };
 
-function RuleDialog({
-  rule,
-  stages,
-  onClose,
-  onSaved,
-}: {
+interface RuleDialogProps {
   rule: CrmAutomation | null;
+  draft: CrmAutomationInput | null;
   stages: CrmStage[];
+  members: CrmAssignmentMember[];
   onClose: () => void;
   onSaved: () => void | Promise<void>;
-}) {
+}
+
+function RuleDialog({ rule, draft, stages, members, onClose, onSaved }: RuleDialogProps) {
   const [form, setForm] = useState<CrmAutomationInput>(
     rule
       ? { name: rule.name, enabled: rule.enabled, trigger: rule.trigger, conditions: rule.conditions, actions: rule.actions }
-      : EMPTY
+      : draft ?? EMPTY
   );
   const [saving, setSaving] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const firstStage = stages[0]?.key ?? "new";
+  const stageChoices = useMemo(() => stages.map((s) => ({ value: s.key, label: s.label })), [stages]);
 
   async function save() {
     setSaving(true);
@@ -271,6 +370,8 @@ function RuleDialog({
   function setCondition(i: number, next: AutomationCondition) {
     setForm((f) => ({ ...f, conditions: f.conditions.map((c, j) => (j === i ? next : c)) }));
   }
+
+  const kind = form.trigger.kind;
 
   return (
     <Dialog open onClose={onClose} title={rule ? "Modifică regula" : "Regulă nouă"} size="lg">
@@ -302,15 +403,24 @@ function RuleDialog({
           />
         </div>
 
+        {/* Fraza de control: omul vede ce a scris, înainte să salveze. */}
+        <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" aria-live="polite">
+          {describeAutomation(form, (k) => stages.find((s) => s.key === k)?.label ?? k)}
+        </p>
+
         {/* ── Când ───────────────────────────────────────────────────────── */}
         <div className="space-y-2 rounded-md border border-border p-3">
           <Label htmlFor="reg-cand">Când</Label>
           <Select
             id="reg-cand"
-            value={form.trigger.kind}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, trigger: { kind: e.target.value as TriggerKind, toStage: null } }))
-            }
+            value={kind}
+            onChange={(e) => {
+              const next = e.target.value as TriggerKind;
+              setForm((f) => ({
+                ...f,
+                trigger: next === "lead.idle" ? { kind: next, toStage: null, idleDays: 3 } : { kind: next, toStage: null },
+              }));
+            }}
           >
             {(Object.keys(TRIGGER_LABELS) as TriggerKind[]).map((k) => (
               <option key={k} value={k}>
@@ -318,9 +428,27 @@ function RuleDialog({
               </option>
             ))}
           </Select>
-          {form.trigger.kind === "lead.stage_changed" && (
+          {kind === "lead.idle" && (
+            <div className="w-40 space-y-1">
+              <Label htmlFor="reg-zile">După câte zile</Label>
+              <Input
+                id="reg-zile"
+                type="number"
+                min={1}
+                max={365}
+                value={form.trigger.idleDays ?? ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    trigger: { ...f.trigger, idleDays: e.target.value === "" ? null : Number(e.target.value) },
+                  }))
+                }
+              />
+            </div>
+          )}
+          {(kind === "lead.stage_changed" || kind === "lead.idle") && (
             <div className="space-y-1">
-              <Label htmlFor="reg-etapa">Etapa</Label>
+              <Label htmlFor="reg-etapa">{kind === "lead.idle" ? "Doar în etapa" : "Etapa"}</Label>
               <Select
                 id="reg-etapa"
                 value={form.trigger.toStage ?? ""}
@@ -328,7 +456,7 @@ function RuleDialog({
                   setForm((f) => ({ ...f, trigger: { ...f.trigger, toStage: e.target.value || null } }))
                 }
               >
-                <option value="">Orice etapă</option>
+                <option value="">{kind === "lead.idle" ? "Orice etapă deschisă" : "Orice etapă"}</option>
                 {stages.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.label}
@@ -336,6 +464,12 @@ function RuleDialog({
                 ))}
               </Select>
             </div>
+          )}
+          {kind === "lead.idle" && (
+            <p className="text-xs text-muted-foreground">
+              Se verifică o dată pe zi, dimineața. Un apel, o notiță sau o schimbare pe lead resetează numărătoarea;
+              regula pornește o singură dată pe perioadă de liniște.
+            </p>
           )}
         </div>
 
@@ -347,7 +481,7 @@ function RuleDialog({
               variant="outline"
               size="sm"
               onClick={() =>
-                setForm((f) => ({ ...f, conditions: [...f.conditions, { field: "source", op: "eq", value: "" }] }))
+                setForm((f) => ({ ...f, conditions: [...f.conditions, { field: "source", op: "in", value: "" }] }))
               }
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -358,65 +492,27 @@ function RuleDialog({
             <p className="text-xs text-muted-foreground">Fără condiții — regula se aplică la toate lead-urile.</p>
           )}
           {form.conditions.map((c, i) => (
-            <div key={i} className="flex flex-wrap items-end gap-2">
-              <div className="min-w-[9rem] flex-1 space-y-1">
-                <Label htmlFor={`cond-camp-${i}`}>Câmpul</Label>
-                <Select
-                  id={`cond-camp-${i}`}
-                  value={c.field}
-                  onChange={(e) => setCondition(i, { ...c, field: e.target.value })}
-                >
-                  {CONDITION_FIELDS.map((f) => (
-                    <option key={f.value} value={f.value}>
-                      {f.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="min-w-[8rem] space-y-1">
-                <Label htmlFor={`cond-op-${i}`}>Compară</Label>
-                <Select
-                  id={`cond-op-${i}`}
-                  value={c.op}
-                  onChange={(e) => setCondition(i, { ...c, op: e.target.value as ConditionOp })}
-                >
-                  {(Object.keys(CONDITION_OP_LABELS) as ConditionOp[]).map((op) => (
-                    <option key={op} value={op}>
-                      {CONDITION_OP_LABELS[op]}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              {!OPS_WITHOUT_VALUE.includes(c.op) && (
-                <div className="min-w-[8rem] flex-1 space-y-1">
-                  <Label htmlFor={`cond-val-${i}`}>Valoarea</Label>
-                  <Input
-                    id={`cond-val-${i}`}
-                    value={String(c.value ?? "")}
-                    onChange={(e) => setCondition(i, { ...c, value: e.target.value })}
-                  />
-                </div>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`Șterge condiția ${i + 1}`}
-                onClick={() => setForm((f) => ({ ...f, conditions: f.conditions.filter((_, j) => j !== i) }))}
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              </Button>
-            </div>
+            <AutomationConditionRow
+              key={i}
+              condition={c}
+              index={i}
+              idPrefix="cond"
+              fields={CONDITION_FIELDS}
+              stages={stageChoices}
+              onChange={(next) => setCondition(i, next)}
+              onRemove={() => setForm((f) => ({ ...f, conditions: f.conditions.filter((_, j) => j !== i) }))}
+            />
           ))}
         </div>
 
         {/* ── Atunci ─────────────────────────────────────────────────────── */}
-        <div className="space-y-2 rounded-md border border-border p-3">
+        <div className="space-y-3 rounded-md border border-border p-3">
           <div className="flex items-center justify-between">
             <Label>Atunci</Label>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setForm((f) => ({ ...f, actions: [...f.actions, { type: "add_tag", tag: "" }] }))}
+              onClick={() => setForm((f) => ({ ...f, actions: [...f.actions, blankAction("notify", firstStage)] }))}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               Acțiune
@@ -429,17 +525,7 @@ function RuleDialog({
                 <Select
                   id={`act-tip-${i}`}
                   value={a.type}
-                  onChange={(e) => {
-                    const t = e.target.value as AutomationAction["type"];
-                    const blank: Record<AutomationAction["type"], AutomationAction> = {
-                      create_task: { type: "create_task", title: "" },
-                      move_stage: { type: "move_stage", stageKey: firstStage },
-                      add_tag: { type: "add_tag", tag: "" },
-                      add_note: { type: "add_note", body: "" },
-                      assign: { type: "assign", strategy: "round_robin" },
-                    };
-                    setAction(i, blank[t]);
-                  }}
+                  onChange={(e) => setAction(i, blankAction(e.target.value as AutomationAction["type"], firstStage))}
                 >
                   {(Object.keys(ACTION_LABELS) as AutomationAction["type"][]).map((t) => (
                     <option key={t} value={t}>
@@ -449,90 +535,7 @@ function RuleDialog({
                 </Select>
               </div>
 
-              {a.type === "create_task" && (
-                <>
-                  <div className="min-w-[10rem] flex-1 space-y-1">
-                    <Label htmlFor={`act-titlu-${i}`}>Titlul taskului</Label>
-                    <Input
-                      id={`act-titlu-${i}`}
-                      value={a.title}
-                      onChange={(e) => setAction(i, { ...a, title: e.target.value })}
-                      placeholder="De sunat clientul"
-                    />
-                  </div>
-                  <div className="w-28 space-y-1">
-                    <Label htmlFor={`act-zile-${i}`}>În (zile)</Label>
-                    <Input
-                      id={`act-zile-${i}`}
-                      type="number"
-                      min={0}
-                      value={a.dueInDays ?? ""}
-                      onChange={(e) =>
-                        setAction(i, { ...a, dueInDays: e.target.value === "" ? undefined : Number(e.target.value) })
-                      }
-                    />
-                  </div>
-                </>
-              )}
-
-              {a.type === "move_stage" && (
-                <div className="min-w-[10rem] flex-1 space-y-1">
-                  <Label htmlFor={`act-etapa-${i}`}>Etapa</Label>
-                  <Select
-                    id={`act-etapa-${i}`}
-                    value={a.stageKey}
-                    onChange={(e) => setAction(i, { ...a, stageKey: e.target.value })}
-                  >
-                    {stages.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              )}
-
-              {a.type === "add_tag" && (
-                <div className="min-w-[10rem] flex-1 space-y-1">
-                  <Label htmlFor={`act-eticheta-${i}`}>Eticheta</Label>
-                  <Input
-                    id={`act-eticheta-${i}`}
-                    value={a.tag}
-                    onChange={(e) => setAction(i, { ...a, tag: e.target.value })}
-                  />
-                </div>
-              )}
-
-              {a.type === "add_note" && (
-                <div className="min-w-[12rem] flex-1 space-y-1">
-                  <Label htmlFor={`act-nota-${i}`}>Notița</Label>
-                  <Textarea
-                    id={`act-nota-${i}`}
-                    rows={2}
-                    value={a.body}
-                    onChange={(e) => setAction(i, { ...a, body: e.target.value })}
-                  />
-                </div>
-              )}
-
-              {a.type === "assign" && (
-                <div className="min-w-[10rem] flex-1 space-y-1">
-                  <Label htmlFor={`act-strategie-${i}`}>Cum</Label>
-                  <Select
-                    id={`act-strategie-${i}`}
-                    value={a.strategy ?? "round_robin"}
-                    onChange={(e) =>
-                      setAction(i, { type: "assign", strategy: e.target.value as "round_robin", userId: null })
-                    }
-                  >
-                    {Object.keys(STRATEGY_LABELS).map((s) => (
-                      <option key={s} value={s}>
-                        {STRATEGY_LABELS[s]}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              )}
+              <ActionFields action={a} index={i} stages={stages} members={members} onChange={(next) => setAction(i, next)} />
 
               {form.actions.length > 1 && (
                 <Button
@@ -560,6 +563,150 @@ function RuleDialog({
       </div>
     </Dialog>
   );
+}
+
+interface ActionFieldsProps {
+  action: AutomationAction;
+  index: number;
+  stages: CrmStage[];
+  members: CrmAssignmentMember[];
+  onChange: (next: AutomationAction) => void;
+}
+
+/** Câmpurile specifice fiecărui tip de acțiune. */
+function ActionFields({ action: a, index: i, stages, members, onChange }: ActionFieldsProps) {
+  const people = members.map((m) => (
+    <option key={m.userId} value={m.userId}>
+      {m.name}
+    </option>
+  ));
+
+  switch (a.type) {
+    case "create_task":
+      return (
+        <>
+          <div className="min-w-[10rem] flex-1 space-y-1">
+            <Label htmlFor={`act-titlu-${i}`}>Titlul taskului</Label>
+            <Input
+              id={`act-titlu-${i}`}
+              value={a.title}
+              onChange={(e) => onChange({ ...a, title: e.target.value })}
+              placeholder="De sunat clientul"
+            />
+          </div>
+          <div className="w-24 space-y-1">
+            <Label htmlFor={`act-zile-${i}`}>În (zile)</Label>
+            <Input
+              id={`act-zile-${i}`}
+              type="number"
+              min={0}
+              value={a.dueInDays ?? ""}
+              onChange={(e) => onChange({ ...a, dueInDays: e.target.value === "" ? undefined : Number(e.target.value) })}
+            />
+          </div>
+          <div className="min-w-[10rem] space-y-1">
+            <Label htmlFor={`act-cine-${i}`}>Pentru</Label>
+            <Select
+              id={`act-cine-${i}`}
+              value={a.assignTo ?? ""}
+              onChange={(e) => onChange({ ...a, assignTo: e.target.value || null })}
+            >
+              <option value="">Responsabilul lead-ului</option>
+              {people}
+            </Select>
+          </div>
+        </>
+      );
+
+    case "move_stage":
+      return (
+        <div className="min-w-[10rem] flex-1 space-y-1">
+          <Label htmlFor={`act-etapa-${i}`}>Etapa</Label>
+          <Select id={`act-etapa-${i}`} value={a.stageKey} onChange={(e) => onChange({ ...a, stageKey: e.target.value })}>
+            {stages.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      );
+
+    case "add_tag":
+    case "remove_tag":
+      return (
+        <div className="min-w-[10rem] flex-1 space-y-1">
+          <Label htmlFor={`act-eticheta-${i}`}>Eticheta</Label>
+          <Input id={`act-eticheta-${i}`} value={a.tag} onChange={(e) => onChange({ ...a, tag: e.target.value })} />
+        </div>
+      );
+
+    case "add_note":
+      return (
+        <div className="min-w-[12rem] flex-1 space-y-1">
+          <Label htmlFor={`act-nota-${i}`}>Notița</Label>
+          <Textarea id={`act-nota-${i}`} rows={2} value={a.body} onChange={(e) => onChange({ ...a, body: e.target.value })} />
+        </div>
+      );
+
+    case "notify":
+      return (
+        <>
+          <div className="min-w-[10rem] space-y-1">
+            <Label htmlFor={`act-catre-${i}`}>Pe cine</Label>
+            <Select
+              id={`act-catre-${i}`}
+              value={a.to === "user" ? a.userId ?? "" : a.to}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "assignee" || v === "admins") onChange({ ...a, to: v as NotifyTarget, userId: null });
+                else onChange({ ...a, to: "user", userId: v || null });
+              }}
+            >
+              <option value="assignee">{NOTIFY_TARGET_LABELS.assignee}</option>
+              <option value="admins">{NOTIFY_TARGET_LABELS.admins}</option>
+              {people}
+            </Select>
+          </div>
+          <div className="min-w-[12rem] flex-1 space-y-1">
+            <Label htmlFor={`act-mesaj-${i}`}>Mesajul</Label>
+            <Input
+              id={`act-mesaj-${i}`}
+              value={a.message}
+              placeholder="stă neatins de 3 zile"
+              onChange={(e) => onChange({ ...a, message: e.target.value })}
+            />
+          </div>
+        </>
+      );
+
+    case "assign":
+      return (
+        <div className="min-w-[10rem] flex-1 space-y-1">
+          <Label htmlFor={`act-strategie-${i}`}>Cui</Label>
+          <Select
+            id={`act-strategie-${i}`}
+            value={a.userId ? `user:${a.userId}` : a.strategy ?? "round_robin"}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v.startsWith("user:")) onChange({ type: "assign", userId: v.slice(5), strategy: null });
+              else onChange({ type: "assign", strategy: v as "round_robin", userId: null });
+            }}
+          >
+            {Object.keys(STRATEGY_LABELS).map((s) => (
+              <option key={s} value={s}>
+                {STRATEGY_LABELS[s]}
+              </option>
+            ))}
+            {members.map((m) => (
+              <option key={m.userId} value={`user:${m.userId}`}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      );
+  }
 }
 
 // ─── Jurnalul ────────────────────────────────────────────────────────────────

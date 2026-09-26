@@ -365,6 +365,25 @@ describe("Cum se împarte", () => {
     expect((await applyTo(recomandat.id)).decision.userId).toBe(ana);
     expect((await applyTo(oarecare.id)).decision.userId).toBe(bogdan);
   });
+
+  it("[blocant] o regulă cu condiții scrisă DUPĂ scenariul „pe rând, la toți” tot rulează", async () => {
+    // CRM-A02: scenariul pornit întâi prinde tot. Dacă ordinea ar fi doar cea de creare, regula
+    // „recomandările la Ana" ar arăta „Pornită" și n-ar prinde niciodată nimic.
+    await makeRule(tenantA, { name: "Pe rând, la toată echipa", strategy: "fixed", userIds: [bogdan], orderIndex: 0 });
+    await makeRule(tenantA, {
+      name: "Recomandările la Ana",
+      strategy: "fixed",
+      userIds: [ana],
+      orderIndex: 1,
+      conditions: [{ field: "source", op: "in", value: "referral, phone_in" }],
+    });
+
+    const recomandat = await makeLead(tenantA, "Vine din recomandare", { source: "referral" });
+    const oarecare = await makeLead(tenantA, "Vine de pe site", { source: "webform" });
+
+    expect((await applyTo(recomandat.id)).decision.userId).toBe(ana);
+    expect((await applyTo(oarecare.id)).decision.userId).toBe(bogdan);
+  });
 });
 
 // ─── Capacitate ──────────────────────────────────────────────────────────────
