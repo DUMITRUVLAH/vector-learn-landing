@@ -28,6 +28,8 @@ import {
   Zap,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { InvoicingTabs } from "@/components/fin/ModuleTabs";
+import { useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import {
   listFinInvoices,
@@ -106,7 +108,9 @@ export function FinInvoicesPage() {
   const [loadingAging, setLoadingAging] = useState(true);
   const [statusFilter, setStatusFilter] = useState<FinInvoiceStatus | "">("");
   const [search, setSearch] = useState("");
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const { path } = useRouter();
+  // NAV-05: „Factură nouă" de pe ecranul de start FinDesk deschide direct formularul.
+  const [showCreateModal, setShowCreateModal] = useState(() => /[?&]nou=1\b/.test(path));
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [sendingSfsId, setSendingSfsId] = useState<string | null>(null);
@@ -249,36 +253,34 @@ export function FinInvoicesPage() {
   }
 
   return (
-    <AppShell pageTitle="Facturi B2B — FinDesk">
-      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
-        {/* Page header */}
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Facturi B2B</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              FinDesk — {total} factur{total === 1 ? "ă" : "i"} totale
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => { void loadInvoices(); void loadAging(); }}
-              aria-label="Reîncarcă"
-              className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-            >
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Factură nouă
-            </button>
-          </div>
+    <AppShell
+      pageTitle="Facturi"
+      pageDescription={`Facturile emise către clienți — ${total} factur${total === 1 ? "ă" : "i"} în total.`}
+      actions={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { void loadInvoices(); void loadAging(); }}
+            aria-label="Reîncarcă"
+            className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Factură nouă
+          </button>
         </div>
-
+      }
+    >
+      {/* NAV-02: un singur titlu (cel din antet) și filele modulului Facturare. Pagina avea și
+          propriul <h1>, deci pe ecran apăreau două titluri unul sub altul. */}
+      <InvoicingTabs />
+      <div className="space-y-6">
         {/* Summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard

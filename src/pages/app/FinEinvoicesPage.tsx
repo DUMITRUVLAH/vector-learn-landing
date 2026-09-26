@@ -29,6 +29,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { InvoicingTabs } from "@/components/fin/ModuleTabs";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import {
@@ -257,7 +258,12 @@ export function FinEinvoicesPage() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <AppShell pageTitle="e-Factura Moldova (SFS)">
+    <AppShell
+      pageTitle="Facturi"
+      pageDescription="e-Factura: facturile B2B trimise la SIA e-Factura (SFS) și conexiunea cu SFS."
+    >
+      {/* NAV-02: e-Factura e o filă a modulului Facturare, nu un modul separat. */}
+      <InvoicingTabs />
       {/* Toast */}
       {toast && (
         <div
@@ -279,14 +285,7 @@ export function FinEinvoicesPage() {
         </div>
       )}
 
-      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
-        {/* Page header */}
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">e-Factura Moldova</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Gestionează facturile B2B trimise la SIA e-Factura (SFS) și configurează conexiunea.
-          </p>
-        </div>
+      <div className="space-y-6">
 
         {/* Tabs */}
         <div className="border-b border-border">
@@ -340,7 +339,7 @@ export function FinEinvoicesPage() {
                   Nicio factură trimisă la SFS încă.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Facturare B2B → submite o factură → va apărea aici.
+                  Din fila „Facturi”, trimite o factură la SFS și ea apare aici.
                 </p>
               </div>
             ) : (

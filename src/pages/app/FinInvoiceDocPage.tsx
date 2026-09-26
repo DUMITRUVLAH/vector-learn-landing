@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FileDown, Loader2, AlertCircle, RefreshCw, Plus, Trash2, Search, CheckCircle2 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { InvoicingTabs } from "@/components/fin/ModuleTabs";
 import { cn } from "@/lib/utils";
 import {
   postFinInvoiceDocBlob,
@@ -237,9 +238,11 @@ export function FinInvoiceDocPage() {
 
   return (
     <AppShell
-      pageTitle="Generator Cont de plată — FinDesk"
-      pageDescription="Creează un „Cont de plată” cu client, servicii și prețuri, apoi descarcă-l ca PDF."
+      pageTitle="Facturi"
+      pageDescription="Cont de plată: client, servicii și prețuri, apoi PDF gata de trimis."
     >
+      {/* NAV-02: contul de plată e o filă a modulului Facturare. */}
+      <InvoicingTabs />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
         {/* ── Form ── */}
         <div className="space-y-5">
