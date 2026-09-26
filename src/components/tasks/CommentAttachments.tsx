@@ -5,13 +5,13 @@
 // deschidere — nu se construiesc din URL public: un URL public ar scurge
 // fișierul oricui îl primește, indiferent de workspace.
 
-import { useState } from 'react';
-import { Download, ExternalLink, FileText, Paperclip, X } from 'lucide-react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/tasks/ui';
-import { cn } from '@/lib/utils';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import { toast } from '@/lib/tasks/toast';
-import { attachmentUrl, type CommentAttachment } from '@/lib/tasks/api';
+import { useState } from "react";
+import { Download, ExternalLink, FileText, Paperclip, X } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/tasks/ui";
+import { cn } from "@/lib/utils";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import { toast } from "@/lib/tasks/toast";
+import { attachmentUrl, type CommentAttachment } from "@/lib/tasks/api";
 
 function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -38,8 +38,8 @@ export function CommentAttachments({ taskId, attachments }: CommentAttachmentsPr
 
   if (!attachments || attachments.length === 0) return null;
 
-  const images = attachments.filter((a) => a.type?.startsWith('image/'));
-  const files = attachments.filter((a) => !a.type?.startsWith('image/'));
+  const images = attachments.filter((a) => a.type?.startsWith("image/"));
+  const files = attachments.filter((a) => !a.type?.startsWith("image/"));
 
   return (
     <>
@@ -75,7 +75,7 @@ export function CommentAttachments({ taskId, attachments }: CommentAttachmentsPr
               href={attachmentUrl(taskId, attachment.path)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-accent"
+              className="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-accent/10"
             >
               <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
               <span className="truncate">{attachment.name}</span>
@@ -95,9 +95,9 @@ export function CommentAttachments({ taskId, attachments }: CommentAttachmentsPr
                 <a
                   href={preview.url}
                   download={preview.name}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  title={t('board.attachments.download')}
-                  aria-label={t('board.attachments.download')}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+                  title={t("board.attachments.download")}
+                  aria-label={t("board.attachments.download")}
                 >
                   <Download className="h-4 w-4" />
                 </a>
@@ -105,9 +105,9 @@ export function CommentAttachments({ taskId, attachments }: CommentAttachmentsPr
                   href={preview.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  title={t('board.attachments.openInTab')}
-                  aria-label={t('board.attachments.openInTab')}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+                  title={t("board.attachments.openInTab")}
+                  aria-label={t("board.attachments.openInTab")}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </a>
@@ -138,7 +138,7 @@ export function AttachmentPicker({ files, onChange, disabled, className }: Attac
   const MAX_MB = 10;
 
   return (
-    <div className={cn('space-y-1', className)}>
+    <div className={cn("space-y-1", className)}>
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {files.map((file, index) => (
@@ -151,7 +151,7 @@ export function AttachmentPicker({ files, onChange, disabled, className }: Attac
                 type="button"
                 onClick={() => onChange(files.filter((_, i) => i !== index))}
                 className="text-muted-foreground hover:text-destructive"
-                aria-label={t('board.attachments.remove', { defaultValue: 'Elimină fișierul' })}
+                aria-label={t("board.attachments.remove")}
               >
                 <X className="h-2.5 w-2.5" />
               </button>
@@ -162,12 +162,12 @@ export function AttachmentPicker({ files, onChange, disabled, className }: Attac
 
       <label
         className={cn(
-          'inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground',
-          disabled && 'pointer-events-none opacity-50',
+          "inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground",
+          disabled && "pointer-events-none opacity-50",
         )}
       >
         <Paperclip className="h-3 w-3" />
-        {t('board.attachments.attach')}
+        {t("board.attachments.attach")}
         <input
           type="file"
           multiple
@@ -179,10 +179,10 @@ export function AttachmentPicker({ files, onChange, disabled, className }: Attac
             // oricum propriile limite, dar acolo eroarea e criptică.
             const tooBig = picked.filter((f) => f.size > MAX_MB * 1024 * 1024);
             if (tooBig.length > 0) {
-              toast.error(t('board.attachments.tooBig', { mb: MAX_MB }));
+              toast.error(t("board.attachments.tooBig", { mb: MAX_MB }));
             }
             onChange([...files, ...picked.filter((f) => f.size <= MAX_MB * 1024 * 1024)]);
-            e.target.value = '';
+            e.target.value = "";
           }}
         />
       </label>

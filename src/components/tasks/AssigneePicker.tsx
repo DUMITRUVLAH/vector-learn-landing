@@ -6,9 +6,9 @@
 // și accesul — nu dintr-o listă de oameni filtrată în client. Altfel cele două ar
 // putea diverge și ai vedea în listă oameni cărora serverul le refuză atribuirea.
 
-import { useMemo, useState } from 'react';
-import { Check, Plus, UserRound, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useMemo, useState } from "react";
+import { Check, Plus, UserRound, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Button,
   Input,
@@ -19,22 +19,22 @@ import {
   SheetContent,
   SheetTitle,
   SheetTrigger,
-} from '@/components/tasks/ui';
-import { useIsPhone } from '@/hooks/useIsPhone';
-import { useAssignableUsers } from '@/hooks/useTaskBoards';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import { avatarClass, initialsOf } from '@/lib/tasks/meta';
-import type { AssignableUser } from '@/lib/tasks/types';
+} from "@/components/tasks/ui";
+import { useIsPhone } from "@/hooks/useIsPhone";
+import { useAssignableUsers } from "@/hooks/useTaskBoards";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import { avatarClass, initialsOf } from "@/lib/tasks/meta";
+import type { AssignableUser } from "@/lib/tasks/types";
 
 interface AssigneePickerProps {
   boardId?: string | null;
   value: string[];
   onChange: (userIds: string[]) => void;
   /** `single` ascunde bifele multiple și închide popoverul după alegere. */
-  mode?: 'single' | 'multi';
+  mode?: "single" | "multi";
   disabled?: boolean;
   /** Randare compactă (chip cu avatare) vs. buton cu etichetă. */
-  variant?: 'chip' | 'button';
+  variant?: "chip" | "button";
   /**
    * Setează-l când pickerul stă într-un `Dialog`. Popoverul primește `modal` și
    * e portalat în `body`, DEASUPRA dialogului, deci rotița funcționează în lista
@@ -57,14 +57,14 @@ interface AssigneePickerProps {
  * Structura workspace-ului sunt echipele, nu o organigramă — deci nu există
  * grupuri de „șef" sau „subordonați".
  */
-const RELATION_RANK: Record<NonNullable<AssignableUser['relation']>, number> = {
+const RELATION_RANK: Record<NonNullable<AssignableUser["relation"]>, number> = {
   self: 0,
   teammate: 1,
   company: 2,
 };
 
 function rankOf(person: AssignableUser): number {
-  return RELATION_RANK[person.relation ?? 'company'];
+  return RELATION_RANK[person.relation ?? "company"];
 }
 
 /** A doua linie a rândului: funcția, sau emailul când funcția nu e cunoscută. */
@@ -76,9 +76,9 @@ export function AssigneePicker({
   boardId,
   value,
   onChange,
-  mode = 'multi',
+  mode = "multi",
   disabled = false,
-  variant = 'button',
+  variant = "button",
   inDialog = false,
   placeholder,
   className,
@@ -86,7 +86,7 @@ export function AssigneePicker({
   const { t } = useTasksT();
   const isMobile = useIsPhone();
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const { data: people = [], isLoading } = useAssignableUsers(boardId);
 
   /**
@@ -96,9 +96,7 @@ export function AssigneePicker({
    */
   const candidates = useMemo(
     () =>
-      people
-        .filter((p) => p.is_active !== false || value.includes(p.user_id))
-        .sort((a, b) => rankOf(a) - rankOf(b)),
+      people.filter((p) => p.is_active !== false || value.includes(p.user_id)).sort((a, b) => rankOf(a) - rankOf(b)),
     [people, value],
   );
 
@@ -106,9 +104,7 @@ export function AssigneePicker({
     const q = query.trim().toLowerCase();
     if (!q) return candidates;
     return candidates.filter(
-      (p) =>
-        p.full_name.toLowerCase().includes(q) ||
-        (secondaryOf(p) ?? '').toLowerCase().includes(q),
+      (p) => p.full_name.toLowerCase().includes(q) || (secondaryOf(p) ?? "").toLowerCase().includes(q),
     );
   }, [candidates, query]);
 
@@ -119,13 +115,13 @@ export function AssigneePicker({
    * ordinea nu mai contează.
    */
   const groups = useMemo(() => {
-    if (query.trim()) return [{ key: 'search' as const, people: filtered }];
-    const near = filtered.filter((p) => p.relation && p.relation !== 'company');
-    const rest = filtered.filter((p) => !p.relation || p.relation === 'company');
-    const out: { key: 'team' | 'company' | 'search'; people: typeof filtered }[] = [];
-    if (near.length > 0) out.push({ key: 'team', people: near });
-    if (rest.length > 0) out.push({ key: 'company', people: rest });
-    return out.length > 0 ? out : [{ key: 'search' as const, people: filtered }];
+    if (query.trim()) return [{ key: "search" as const, people: filtered }];
+    const near = filtered.filter((p) => p.relation && p.relation !== "company");
+    const rest = filtered.filter((p) => !p.relation || p.relation === "company");
+    const out: { key: "team" | "company" | "search"; people: typeof filtered }[] = [];
+    if (near.length > 0) out.push({ key: "team", people: near });
+    if (rest.length > 0) out.push({ key: "company", people: rest });
+    return out.length > 0 ? out : [{ key: "search" as const, people: filtered }];
   }, [filtered, query]);
 
   // Din lista întreagă, nu doar din cei care pot fi aleși: un responsabil cu
@@ -136,7 +132,7 @@ export function AssigneePicker({
   );
 
   const toggle = (userId: string) => {
-    if (mode === 'single') {
+    if (mode === "single") {
       onChange(value[0] === userId ? [] : [userId]);
       setOpen(false);
       return;
@@ -145,19 +141,19 @@ export function AssigneePicker({
   };
 
   const trigger =
-    variant === 'chip' ? (
+    variant === "chip" ? (
       <button
         type="button"
         disabled={disabled}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:opacity-50',
+          "inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:opacity-50",
           className,
         )}
       >
         {selected.length === 0 ? (
           <>
             <Plus className="h-3 w-3" />
-            {t('board.assignee.add')}
+            {t("board.assignee.add")}
           </>
         ) : (
           <>
@@ -165,7 +161,7 @@ export function AssigneePicker({
               <span
                 key={p!.user_id}
                 className={cn(
-                  'inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold',
+                  "inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold",
                   avatarClass(p!.user_id),
                 )}
               >
@@ -181,17 +177,13 @@ export function AssigneePicker({
         type="button"
         variant="outline"
         disabled={disabled}
-        className={cn('w-full justify-start gap-2 font-normal', className)}
+        className={cn("w-full justify-start gap-2 font-normal", className)}
       >
         <UserRound className="h-4 w-4 text-muted-foreground" />
         {selected.length === 0 ? (
-          <span className="truncate text-muted-foreground">
-            {placeholder ?? t('board.assignee.placeholder')}
-          </span>
+          <span className="truncate text-muted-foreground">{placeholder ?? t("board.assignee.placeholder")}</span>
         ) : (
-          <span className="truncate">
-            {selected.map((p) => p!.full_name).join(', ')}
-          </span>
+          <span className="truncate">{selected.map((p) => p!.full_name).join(", ")}</span>
         )}
       </Button>
     );
@@ -204,13 +196,13 @@ export function AssigneePicker({
           autoFocus={!isMobile}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('board.assignee.search')}
-          aria-label={t('board.assignee.search')}
+          placeholder={t("board.assignee.search")}
+          aria-label={t("board.assignee.search")}
           className="h-8 text-sm"
         />
       </div>
 
-      {value.length > 0 && mode === 'multi' && (
+      {value.length > 0 && mode === "multi" && (
         <div className="flex flex-wrap gap-1 border-b p-2">
           {selected.map((p) => (
             <span
@@ -222,9 +214,8 @@ export function AssigneePicker({
                 type="button"
                 onClick={() => toggle(p!.user_id)}
                 className="text-muted-foreground hover:text-foreground"
-                aria-label={t('board.assignee.remove', {
+                aria-label={t("board.assignee.remove", {
                   name: p!.full_name,
-                  defaultValue: 'Scoate {name}',
                 })}
               >
                 <X className="h-3 w-3" />
@@ -236,62 +227,52 @@ export function AssigneePicker({
 
       <div
         className={cn(
-          'overflow-y-auto overscroll-contain p-1',
-          isMobile ? 'min-h-0 flex-1 pb-[env(safe-area-inset-bottom)]' : 'max-h-64',
+          "overflow-y-auto overscroll-contain p-1",
+          isMobile ? "min-h-0 flex-1 pb-[env(safe-area-inset-bottom)]" : "max-h-64",
         )}
       >
-          {isLoading && (
-            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-              {t('board.loading')}
-            </p>
-          )}
-          {!isLoading && filtered.length === 0 && (
-            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-              {t('board.assignee.empty')}
-            </p>
-          )}
-          {groups.map((group) => (
-            <div key={group.key}>
-              {group.key !== 'search' && (
-                <p className="px-2 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t(`board.assignee.groups.${group.key}`)}
-                </p>
-              )}
-              {group.people.map((person) => {
-                const isSelected = value.includes(person.user_id);
-                const secondary = secondaryOf(person);
-                return (
-                  <button
-                    key={person.user_id}
-                    type="button"
-                    onClick={() => toggle(person.user_id)}
+        {isLoading && <p className="px-2 py-3 text-center text-xs text-muted-foreground">{t("board.loading")}</p>}
+        {!isLoading && filtered.length === 0 && (
+          <p className="px-2 py-3 text-center text-xs text-muted-foreground">{t("board.assignee.empty")}</p>
+        )}
+        {groups.map((group) => (
+          <div key={group.key}>
+            {group.key !== "search" && (
+              <p className="px-2 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t(`board.assignee.groups.${group.key}`)}
+              </p>
+            )}
+            {group.people.map((person) => {
+              const isSelected = value.includes(person.user_id);
+              const secondary = secondaryOf(person);
+              return (
+                <button
+                  key={person.user_id}
+                  type="button"
+                  onClick={() => toggle(person.user_id)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/10",
+                    isSelected && "bg-accent/10",
+                  )}
+                >
+                  <span
                     className={cn(
-                      'flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent',
-                      isSelected && 'bg-accent',
+                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                      avatarClass(person.user_id),
                     )}
                   >
-                    <span
-                      className={cn(
-                        'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
-                        avatarClass(person.user_id),
-                      )}
-                    >
-                      {initialsOf(person.full_name)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">{person.full_name}</span>
-                      {secondary && (
-                        <span className="block truncate text-[11px] text-muted-foreground">
-                          {secondary}
-                        </span>
-                      )}
-                    </span>
-                    {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+                    {initialsOf(person.full_name)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px]">{person.full_name}</span>
+                    {secondary && <span className="block truncate text-[11px] text-muted-foreground">{secondary}</span>}
+                  </span>
+                  {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </>
   );
@@ -312,7 +293,7 @@ export function AssigneePicker({
           className="z-[80] flex max-h-[85dvh] flex-col gap-0 rounded-t-2xl p-0"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
-          <SheetTitle className="sr-only">{t('board.assignee.search')}</SheetTitle>
+          <SheetTitle className="sr-only">{t("board.assignee.search")}</SheetTitle>
           {body}
         </SheetContent>
       </Sheet>

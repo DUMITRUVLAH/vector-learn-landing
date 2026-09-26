@@ -11,28 +11,20 @@
 // ordine în rusă decât în română, pe aceleași date (aceeași lecție ca la
 // simbolurile de pontaj, CLAUDE.md #18).
 
-import type { BoardTask, TaskPriority, TaskStatus } from './types';
-import { dueDay } from './grouping';
+import type { BoardTask, TaskPriority, TaskStatus } from "./types";
+import { dueDay } from "./grouping";
 
-export const SORT_KEYS = [
-  'manual',
-  'due_date',
-  'priority',
-  'title',
-  'status',
-  'assignee',
-  'created_at',
-] as const;
+export const SORT_KEYS = ["manual", "due_date", "priority", "title", "status", "assignee", "created_at"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 
-export type SortDir = 'asc' | 'desc';
+export type SortDir = "asc" | "desc";
 
 export interface SortState {
   key: SortKey;
   dir: SortDir;
 }
 
-export const DEFAULT_SORT: SortState = { key: 'manual', dir: 'asc' };
+export const DEFAULT_SORT: SortState = { key: "manual", dir: "asc" };
 
 /**
  * Curăță o stare de sortare venită dintr-o VEDERE SALVATĂ.
@@ -48,10 +40,9 @@ export const DEFAULT_SORT: SortState = { key: 'manual', dir: 'asc' };
 export function normalizeSort(raw: unknown): SortState {
   const value = (raw ?? {}) as Partial<SortState>;
   const key = SORT_KEYS.includes(value.key as SortKey) ? (value.key as SortKey) : DEFAULT_SORT.key;
-  const dir = value.dir === 'asc' || value.dir === 'desc' ? value.dir : DEFAULT_SORT.dir;
+  const dir = value.dir === "asc" || value.dir === "desc" ? value.dir : DEFAULT_SORT.dir;
   return { key, dir };
 }
-
 
 /** Urgent primul. Rang numeric, nu etichetă — vezi nota de sus. */
 const PRIORITY_RANK: Record<TaskPriority, number> = {
@@ -84,23 +75,23 @@ export interface SortContext {
  */
 function sortValue(task: BoardTask, key: SortKey, ctx: SortContext): string | number | null {
   switch (key) {
-    case 'manual':
+    case "manual":
       return task.position ?? 0;
-    case 'due_date':
+    case "due_date":
       return dueDay(task);
-    case 'priority':
+    case "priority":
       return PRIORITY_RANK[task.priority] ?? 99;
-    case 'status':
+    case "status":
       return STATUS_RANK[task.status] ?? 99;
-    case 'title':
+    case "title":
       // `localeCompare` se aplică mai jos; aici doar normalizăm pentru „gol".
       return task.title?.trim() ? task.title : null;
-    case 'assignee': {
+    case "assignee": {
       const first = (task.assignees ?? [])[0];
       if (!first) return null;
       return ctx.names?.[first] ?? null;
     }
-    case 'created_at':
+    case "created_at":
       return task.created_at ?? null;
     default:
       return null;
@@ -115,12 +106,8 @@ function sortValue(task: BoardTask, key: SortKey, ctx: SortContext): string | nu
  * manuală. Sortând pe prioritate, cardurile de aceeași prioritate rămân în
  * ordinea în care le-a pus omul pe board; e exact ce se așteaptă și e gratis.
  */
-export function sortTasks(
-  tasks: BoardTask[],
-  sort: SortState,
-  ctx: SortContext = {},
-): BoardTask[] {
-  const sign = sort.dir === 'desc' ? -1 : 1;
+export function sortTasks(tasks: BoardTask[], sort: SortState, ctx: SortContext = {}): BoardTask[] {
+  const sign = sort.dir === "desc" ? -1 : 1;
 
   return [...tasks].sort((a, b) => {
     const va = sortValue(a, sort.key, ctx);
@@ -131,10 +118,10 @@ export function sortTasks(
     if (va === null) return 1;
     if (vb === null) return -1;
 
-    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sign;
+    if (typeof va === "number" && typeof vb === "number") return (va - vb) * sign;
     // `localeCompare` fără forțarea unei limbi: folosește locale-ul rulării, deci
     // „Ș" se așază unde trebuie și în română, și în rusă.
-    return String(va).localeCompare(String(vb), undefined, { sensitivity: 'base' }) * sign;
+    return String(va).localeCompare(String(vb), undefined, { sensitivity: "base" }) * sign;
   });
 }
 
@@ -142,14 +129,14 @@ export function sortTasks(
 export function defaultDirFor(key: SortKey): SortDir {
   // Pentru termen și prioritate, „cel mai presant întâi" e ce vrea oricine —
   // adică ascendent pe rang. Pentru „creat", cel mai nou întâi.
-  return key === 'created_at' ? 'desc' : 'asc';
+  return key === "created_at" ? "desc" : "asc";
 }
 
 /** Următoarea stare la clic pe antetul unei coloane. */
 export function toggleSort(current: SortState, key: SortKey): SortState {
   if (current.key !== key) return { key, dir: defaultDirFor(key) };
   if (current.dir === defaultDirFor(key)) {
-    return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' };
+    return { key, dir: current.dir === "asc" ? "desc" : "asc" };
   }
   // Al treilea clic scoate sortarea și readuce ordinea manuală.
   return { ...DEFAULT_SORT };
@@ -159,7 +146,7 @@ export function toggleSort(current: SortState, key: SortKey): SortState {
 // Grupare (swimlanes)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const GROUP_KEYS = ['none', 'assignee', 'priority', 'tag'] as const;
+export const GROUP_KEYS = ["none", "assignee", "priority", "tag"] as const;
 export type GroupKey = (typeof GROUP_KEYS)[number];
 
 export interface TaskGroup {
@@ -190,11 +177,11 @@ export function groupTasks(
   key: GroupKey,
   ctx: SortContext & { unassignedLabel?: string } = {},
 ): TaskGroup[] {
-  if (key === 'none') {
-    return [{ id: 'all', label: '', isUnassigned: false, tasks }];
+  if (key === "none") {
+    return [{ id: "all", label: "", isUnassigned: false, tasks }];
   }
 
-  const unassignedLabel = ctx.unassignedLabel ?? '—';
+  const unassignedLabel = ctx.unassignedLabel ?? "—";
   const groups = new Map<string, TaskGroup>();
   const push = (id: string, label: string, isUnassigned: boolean, task: BoardTask) => {
     let g = groups.get(id);
@@ -206,15 +193,15 @@ export function groupTasks(
   };
 
   for (const task of tasks) {
-    if (key === 'assignee') {
+    if (key === "assignee") {
       const people = task.assignees ?? [];
-      if (people.length === 0) push('__none__', unassignedLabel, true, task);
+      if (people.length === 0) push("__none__", unassignedLabel, true, task);
       else for (const uid of people) push(uid, ctx.names?.[uid] ?? unassignedLabel, false, task);
-    } else if (key === 'priority') {
+    } else if (key === "priority") {
       push(task.priority, task.priority, false, task);
-    } else if (key === 'tag') {
+    } else if (key === "tag") {
       const tags = task.tags ?? [];
-      if (tags.length === 0) push('__none__', unassignedLabel, true, task);
+      if (tags.length === 0) push("__none__", unassignedLabel, true, task);
       else for (const tag of tags) push(tag, tag, false, task);
     }
   }
@@ -223,10 +210,10 @@ export function groupTasks(
   out.sort((a, b) => {
     // Banda „fără" e ultima, întotdeauna.
     if (a.isUnassigned !== b.isUnassigned) return a.isUnassigned ? 1 : -1;
-    if (key === 'priority') {
+    if (key === "priority") {
       return (PRIORITY_RANK[a.id as TaskPriority] ?? 99) - (PRIORITY_RANK[b.id as TaskPriority] ?? 99);
     }
-    return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+    return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
   });
   return out;
 }

@@ -163,8 +163,8 @@ export function Calendar({
                       choose(day);
                     }}
                     className={cn(
-                      "inline-flex h-9 w-9 items-center justify-center rounded-md p-0 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      isToday(day) && !isSelected && "bg-accent text-accent-foreground",
+                      "inline-flex h-9 w-9 items-center justify-center rounded-md p-0 text-sm font-normal transition-colors hover:bg-accent/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isToday(day) && !isSelected && "bg-accent/10 text-primary",
                       outside && "text-muted-foreground opacity-50",
                       isSelected &&
                         "bg-primary text-primary-foreground opacity-100 hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",

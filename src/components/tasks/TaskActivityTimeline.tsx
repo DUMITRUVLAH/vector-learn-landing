@@ -5,13 +5,13 @@
 // responsabilii" nu spunea pe cine, „a schimbat statusul" nu spunea din ce în
 // ce. Aici se rezolvă id-urile în nume și se arată tranziția.
 
-import { format, formatDistanceToNow, isToday, isYesterday, parseISO } from 'date-fns';
-import type { Locale } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import { groupActivityByDay, readActivity } from '@/lib/tasks/activity';
-import { avatarClass, initialsOf, PRIORITY_META } from '@/lib/tasks/meta';
-import type { AssignableUser, TaskActivity, TaskBoard, TaskList } from '@/lib/tasks/types';
+import { format, formatDistanceToNow, isToday, isYesterday, parseISO } from "date-fns";
+import type { Locale } from "date-fns";
+import { cn } from "@/lib/utils";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import { groupActivityByDay, readActivity } from "@/lib/tasks/activity";
+import { avatarClass, initialsOf, PRIORITY_META } from "@/lib/tasks/meta";
+import type { AssignableUser, TaskActivity, TaskBoard, TaskList } from "@/lib/tasks/types";
 
 interface Props {
   entries: TaskActivity[];
@@ -24,30 +24,29 @@ interface Props {
 export function TaskActivityTimeline({ entries, people, lists, boards, locale }: Props) {
   const { t } = useTasksT();
 
-  const numeOm = (id: string | null | undefined) =>
-    (id && people[id]?.full_name) || t('board.detail.unknownUser');
+  const numeOm = (id: string | null | undefined) => (id && people[id]?.full_name) || t("board.detail.unknownUser");
 
   /** Id → etichetă citibilă, pe tipul de câmp. Necunoscutul rămâne vizibil, nu dispare. */
   const eticheta = (action: string, value: string | null): string | null => {
     if (!value) return null;
     switch (action) {
-      case 'status_changed':
+      case "status_changed":
         return t(`status.${value}`, { defaultValue: value });
-      case 'priority_changed':
+      case "priority_changed":
         return t(`priority.${value}`, { defaultValue: PRIORITY_META[value as never] ? value : value });
-      case 'list_changed':
-        return lists.find((l) => l.id === value)?.name ?? t('board.detail.unknownList');
-      case 'board_changed':
-        return boards.find((b) => b.id === value)?.name ?? t('board.quickAdd.personal');
-      case 'due_date_changed':
-        return format(parseISO(value), 'd MMM yyyy', { locale });
+      case "list_changed":
+        return lists.find((l) => l.id === value)?.name ?? t("board.detail.unknownList");
+      case "board_changed":
+        return boards.find((b) => b.id === value)?.name ?? t("board.quickAdd.personal");
+      case "due_date_changed":
+        return format(parseISO(value), "d MMM yyyy", { locale });
       default:
         return value;
     }
   };
 
   if (entries.length === 0) {
-    return <p className="text-xs text-muted-foreground">{t('board.detail.noActivity')}</p>;
+    return <p className="text-xs text-muted-foreground">{t("board.detail.noActivity")}</p>;
   }
 
   return (
@@ -58,10 +57,10 @@ export function TaskActivityTimeline({ entries, people, lists, boards, locale }:
           <div key={day}>
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               {isToday(data)
-                ? t('board.activity.today')
+                ? t("board.activity.today")
                 : isYesterday(data)
-                  ? t('board.activity.yesterday')
-                  : format(data, 'd MMMM yyyy', { locale })}
+                  ? t("board.activity.yesterday")
+                  : format(data, "d MMMM yyyy", { locale })}
             </p>
 
             <ul className="space-y-2.5">
@@ -73,19 +72,18 @@ export function TaskActivityTimeline({ entries, people, lists, boards, locale }:
                   <li key={entry.id} className="flex items-start gap-2.5">
                     <span
                       className={cn(
-                        'mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold',
-                        avatarClass(entry.actor_id ?? 'necunoscut'),
+                        "mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold",
+                        avatarClass(entry.actor_id ?? "necunoscut"),
                       )}
                     >
                       {initialsOf(numeOm(entry.actor_id))}
                     </span>
 
                     <div className="min-w-0 flex-1 text-xs leading-relaxed">
-                      <span className="font-medium text-foreground">{numeOm(entry.actor_id)}</span>{' '}
+                      <span className="font-medium text-foreground">{numeOm(entry.actor_id)}</span>{" "}
                       <span className="text-muted-foreground">
                         {t(`board.activity.${citit.key}`, { defaultValue: entry.action })}
                       </span>
-
                       {/* Cine a intrat și cine a ieșit — informația pentru care
                           există jurnalul, aruncată până acum. */}
                       {(citit.added.length > 0 || citit.removed.length > 0) && (
@@ -108,7 +106,6 @@ export function TaskActivityTimeline({ entries, people, lists, boards, locale }:
                           ))}
                         </span>
                       )}
-
                       {(de || la) && (
                         <span className="ml-1 inline-flex flex-wrap items-center gap-1 align-middle">
                           {de && (
@@ -123,10 +120,9 @@ export function TaskActivityTimeline({ entries, people, lists, boards, locale }:
                           )}
                         </span>
                       )}
-
                       <span
                         className="ml-1.5 whitespace-nowrap text-[10px] text-muted-foreground/70"
-                        title={format(parseISO(entry.created_at), 'd MMM yyyy, HH:mm', { locale })}
+                        title={format(parseISO(entry.created_at), "d MMM yyyy, HH:mm", { locale })}
                       >
                         {formatDistanceToNow(parseISO(entry.created_at), { addSuffix: true, locale })}
                       </span>

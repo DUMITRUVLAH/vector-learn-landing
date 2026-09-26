@@ -4,16 +4,14 @@
 // Sub-taskurile apar sub părinte, indentate, nu ca rânduri separate: altfel un
 // task cu opt subtaskuri ar umple lista și ar ascunde restul boardului.
 
-import { Fragment, useMemo, useState } from 'react';
-import { format, parseISO } from 'date-fns';
-import type { Locale } from 'date-fns';
-import {
-  CalendarIcon, CheckCircle2, ChevronDown, ChevronRight, Circle, CornerDownRight, Plus,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { getDateFnsLocale } from '@/lib/tasks/dateLocale';
-import { toast } from '@/lib/tasks/toast';
-import { useTasksT } from '@/lib/tasks/useTasksT';
+import { Fragment, useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
+import type { Locale } from "date-fns";
+import { CalendarIcon, CheckCircle2, ChevronDown, ChevronRight, Circle, CornerDownRight, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getDateFnsLocale } from "@/lib/tasks/dateLocale";
+import { toast } from "@/lib/tasks/toast";
+import { useTasksT } from "@/lib/tasks/useTasksT";
 import {
   Button,
   Calendar,
@@ -26,16 +24,16 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/tasks/ui';
-import { AssigneePicker } from './AssigneePicker';
-import { useIsPhone } from '@/hooks/useIsPhone';
-import { AssigneeAvatars } from './AssigneeAvatars';
-import { useCreateTask, useUpdateTask } from '@/hooks/useTaskBoards';
-import { OVERDUE_TEXT, PRIORITY_META } from '@/lib/tasks/meta';
-import { isOverdue, todayIso, toDueDateIso } from '@/lib/tasks/grouping';
-import { DEFAULT_SORT, sortTasks, type GroupKey, type SortState } from '@/lib/tasks/sorting';
-import { TASK_PRIORITIES } from '@/lib/tasks/types';
-import type { AssignableUser, BoardTask, TaskList, TaskPriority } from '@/lib/tasks/types';
+} from "@/components/tasks/ui";
+import { AssigneePicker } from "./AssigneePicker";
+import { useIsPhone } from "@/hooks/useIsPhone";
+import { AssigneeAvatars } from "./AssigneeAvatars";
+import { useCreateTask, useUpdateTask } from "@/hooks/useTaskBoards";
+import { OVERDUE_TEXT, PRIORITY_META } from "@/lib/tasks/meta";
+import { isOverdue, todayIso, toDueDateIso } from "@/lib/tasks/grouping";
+import { DEFAULT_SORT, sortTasks, type GroupKey, type SortState } from "@/lib/tasks/sorting";
+import { TASK_PRIORITIES } from "@/lib/tasks/types";
+import type { AssignableUser, BoardTask, TaskList, TaskPriority } from "@/lib/tasks/types";
 
 interface BoardListViewProps {
   boardId: string;
@@ -78,7 +76,7 @@ export function BoardListView({
   const [hotRow, setHotRow] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [addingIn, setAddingIn] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState('');
+  const [newTitle, setNewTitle] = useState("");
 
   /** id → nume, pentru sortarea/gruparea pe responsabil. */
   const names = useMemo(() => {
@@ -125,25 +123,25 @@ export function BoardListView({
     const title = newTitle.trim();
     if (!title) return;
     try {
-      setNewTitle('');
+      setNewTitle("");
       await createTask.mutateAsync({ title, board_id: boardId, list_id: listId });
     } catch (error) {
-      console.error('[tasks] quick add', error);
-      toast.error((error as { message?: string })?.message || t('board.toast.saveFailed'));
+      console.error("[tasks] quick add", error);
+      toast.error((error as { message?: string })?.message || t("board.toast.saveFailed"));
     }
   };
 
   const renderRow = (task: BoardTask, depth = 0) => {
     const overdue = isOverdue(task, today);
-    const isDone = task.status === 'done';
+    const isDone = task.status === "done";
     const due = task.due_date ? parseISO(task.due_date) : undefined;
 
     return (
       <Fragment key={task.id}>
         <div
           className={cn(
-            'group flex items-center gap-2 border-b px-3 py-2 transition-colors last:border-0 hover:bg-accent',
-            depth > 0 && 'bg-muted/20',
+            "group flex items-center gap-2 border-b px-3 py-2 transition-colors last:border-0 hover:bg-accent/10",
+            depth > 0 && "bg-muted/20",
           )}
           style={{ paddingLeft: `${12 + depth * 24}px` }}
           /* Mouse-ul ajunge pe rând înaintea clicului, deci controalele reale
@@ -155,28 +153,19 @@ export function BoardListView({
 
           <button
             type="button"
-            onClick={() =>
-              updateTask.mutate({ id: task.id, patch: { status: isDone ? 'todo' : 'done' } })
-            }
+            onClick={() => updateTask.mutate({ id: task.id, patch: { status: isDone ? "todo" : "done" } })}
             className="-m-2 shrink-0 rounded p-2 text-muted-foreground transition-colors hover:text-emerald-600"
-            aria-label={t(
-              isDone ? 'board.card.toggleUndone' : 'board.card.toggleDone',
-              { title: task.title },
-            )}
+            aria-label={t(isDone ? "board.card.toggleUndone" : "board.card.toggleDone", { title: task.title })}
           >
-            {isDone ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            ) : (
-              <Circle className="h-4 w-4" />
-            )}
+            {isDone ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4" />}
           </button>
 
           <button
             type="button"
             onClick={() => onOpenTask(task.id)}
             className={cn(
-              'min-w-0 flex-1 truncate text-left text-sm hover:underline',
-              isDone && 'text-muted-foreground line-through',
+              "min-w-0 flex-1 truncate text-left text-sm hover:underline",
+              isDone && "text-muted-foreground line-through",
             )}
           >
             {task.title}
@@ -214,7 +203,7 @@ export function BoardListView({
                   overdue={overdue}
                   locale={dateLocale}
                   disabled={false}
-                  emptyLabel={t('board.detail.noDate')}
+                  emptyLabel={t("board.detail.noDate")}
                   onChange={(d) =>
                     updateTask.mutate({
                       id: task.id,
@@ -225,13 +214,13 @@ export function BoardListView({
               ) : (
                 <span
                   className={cn(
-                    'flex h-6 w-[92px] items-center gap-1 px-1.5 text-[11px]',
-                    overdue ? OVERDUE_TEXT : 'text-muted-foreground',
+                    "flex h-6 w-[92px] items-center gap-1 px-1.5 text-[11px]",
+                    overdue ? OVERDUE_TEXT : "text-muted-foreground",
                   )}
                 >
                   <CalendarIcon className="h-3 w-3 shrink-0" />
                   <span className="truncate">
-                    {due ? format(due, 'd MMM', { locale: dateLocale }) : t('board.detail.noDate')}
+                    {due ? format(due, "d MMM", { locale: dateLocale }) : t("board.detail.noDate")}
                   </span>
                 </span>
               )}
@@ -239,16 +228,11 @@ export function BoardListView({
               {canEdit && hotRow === task.id ? (
                 <Select
                   value={task.priority}
-                  onValueChange={(v) =>
-                    updateTask.mutate({ id: task.id, patch: { priority: v as TaskPriority } })
-                  }
+                  onValueChange={(v) => updateTask.mutate({ id: task.id, patch: { priority: v as TaskPriority } })}
                 >
                   <SelectTrigger
-                    className={cn(
-                      'h-6 w-[92px] border px-1.5 text-[11px]',
-                      PRIORITY_META[task.priority].chip,
-                    )}
-                    aria-label={t('board.detail.priority')}
+                    className={cn("h-6 w-[92px] border px-1.5 text-[11px]", PRIORITY_META[task.priority].chip)}
+                    aria-label={t("board.detail.priority")}
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -263,7 +247,7 @@ export function BoardListView({
               ) : (
                 <span
                   className={cn(
-                    'flex h-6 w-[92px] items-center rounded-md border px-1.5 text-[11px]',
+                    "flex h-6 w-[92px] items-center rounded-md border px-1.5 text-[11px]",
                     PRIORITY_META[task.priority].chip,
                   )}
                 >
@@ -282,11 +266,11 @@ export function BoardListView({
           >
             <AssigneeAvatars userIds={task.assignees ?? []} index={assignableIndex} size="xs" max={2} />
             {due && (
-              <span className={cn('tabular-nums', overdue && 'font-medium text-red-700')}>
-                {format(due, 'd MMM', { locale: dateLocale })}
+              <span className={cn("tabular-nums", overdue && "font-medium text-red-700")}>
+                {format(due, "d MMM", { locale: dateLocale })}
               </span>
             )}
-            <span className={cn('rounded px-1.5 py-0.5', PRIORITY_META[task.priority].chip)}>
+            <span className={cn("rounded px-1.5 py-0.5", PRIORITY_META[task.priority].chip)}>
               {t(`priority.${task.priority}`)}
             </span>
           </div>
@@ -299,7 +283,7 @@ export function BoardListView({
 
   const renderGroup = (key: string, name: string, items: BoardTask[], listId: string | null) => {
     const isCollapsed = collapsed[key];
-    const doneCount = items.filter((task) => task.status === 'done').length;
+    const doneCount = items.filter((task) => task.status === "done").length;
 
     return (
       <div key={key} className="overflow-hidden rounded-2xl border bg-card">
@@ -322,25 +306,25 @@ export function BoardListView({
         {!isCollapsed && (
           <>
             {items.length === 0 && (
-              <p className="px-4 py-3 text-xs text-muted-foreground">{t('board.list.emptyGroup')}</p>
+              <p className="px-4 py-3 text-xs text-muted-foreground">{t("board.list.emptyGroup")}</p>
             )}
             {items.map((task) => renderRow(task))}
 
-            {canEdit && (
-              addingIn === key ? (
+            {canEdit &&
+              (addingIn === key ? (
                 <div className="border-t px-3 py-2">
                   <Input
                     autoFocus
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === "Enter") {
                         e.preventDefault();
                         quickAdd(listId);
                       }
-                      if (e.key === 'Escape') {
+                      if (e.key === "Escape") {
                         setAddingIn(null);
-                        setNewTitle('');
+                        setNewTitle("");
                       }
                     }}
                     /*
@@ -353,8 +337,8 @@ export function BoardListView({
                     onBlur={() => {
                       if (!newTitle.trim()) setAddingIn(null);
                     }}
-                    placeholder={t('board.card.newPlaceholder')}
-                    aria-label={t('board.card.newPlaceholder')}
+                    placeholder={t("board.card.newPlaceholder")}
+                    aria-label={t("board.card.newPlaceholder")}
                     className="h-8 border-0 px-0 text-sm shadow-none focus-visible:ring-0"
                   />
                 </div>
@@ -363,15 +347,14 @@ export function BoardListView({
                   type="button"
                   onClick={() => {
                     setAddingIn(key);
-                    setNewTitle('');
+                    setNewTitle("");
                   }}
-                  className="flex w-full items-center gap-1.5 border-t px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="flex w-full items-center gap-1.5 border-t px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  {t('board.card.add')}
+                  {t("board.card.add")}
                 </button>
-              )
-            )}
+              ))}
           </>
         )}
       </div>
@@ -380,7 +363,7 @@ export function BoardListView({
 
   return (
     <div className="space-y-3">
-      {unsorted.length > 0 && renderGroup('__unsorted__', t('board.unsorted'), unsorted, null)}
+      {unsorted.length > 0 && renderGroup("__unsorted__", t("board.unsorted"), unsorted, null)}
       {lists.map((list) => renderGroup(list.id, list.name, byList[list.id] ?? [], list.id))}
     </div>
   );
@@ -395,20 +378,13 @@ interface DueCellProps {
   onChange: (d: Date | undefined) => void;
 }
 
-function DueCell({
-  value,
-  overdue,
-  locale,
-  disabled,
-  emptyLabel,
-  onChange,
-}: DueCellProps) {
+function DueCell({ value, overdue, locale, disabled, emptyLabel, onChange }: DueCellProps) {
   const [open, setOpen] = useState(false);
 
   if (disabled) {
     return (
-      <span className={cn('w-[86px] text-[11px]', overdue ? OVERDUE_TEXT : 'text-muted-foreground')}>
-        {value ? format(value, 'd MMM', { locale }) : '—'}
+      <span className={cn("w-[86px] text-[11px]", overdue ? OVERDUE_TEXT : "text-muted-foreground")}>
+        {value ? format(value, "d MMM", { locale }) : "—"}
       </span>
     );
   }
@@ -420,12 +396,12 @@ function DueCell({
           variant="ghost"
           size="sm"
           className={cn(
-            'h-6 w-[92px] justify-start gap-1 px-1.5 text-[11px] font-normal',
-            overdue ? OVERDUE_TEXT : 'text-muted-foreground',
+            "h-6 w-[92px] justify-start gap-1 px-1.5 text-[11px] font-normal",
+            overdue ? OVERDUE_TEXT : "text-muted-foreground",
           )}
         >
           <CalendarIcon className="h-3 w-3" />
-          {value ? format(value, 'd MMM', { locale }) : emptyLabel}
+          {value ? format(value, "d MMM", { locale }) : emptyLabel}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="end">

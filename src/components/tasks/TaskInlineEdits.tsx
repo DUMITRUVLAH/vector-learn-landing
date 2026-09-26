@@ -6,19 +6,19 @@
 // celule care are deja `onClick` — fără asta, orice editare ar deschide și
 // task-ul pe dedesubt.
 
-import { useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { format, parseISO } from 'date-fns';
-import { CalendarIcon, Flag } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { getDateFnsLocale } from '@/lib/tasks/dateLocale';
-import { toast } from '@/lib/tasks/toast';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from '@/components/tasks/ui';
-import { useAssignableUsers, useUpdateTask } from '@/hooks/useTaskBoards';
-import { OVERDUE_TEXT, PRIORITY_META, STATUS_META, avatarClass, initialsOf } from '@/lib/tasks/meta';
-import { toDueDateIso, todayIso } from '@/lib/tasks/grouping';
-import { TASK_PRIORITIES, TASK_STATUSES } from '@/lib/tasks/types';
-import type { BoardTask, TaskPriority, TaskStatus } from '@/lib/tasks/types';
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { format, parseISO } from "date-fns";
+import { CalendarIcon, Flag } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getDateFnsLocale } from "@/lib/tasks/dateLocale";
+import { toast } from "@/lib/tasks/toast";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from "@/components/tasks/ui";
+import { useAssignableUsers, useUpdateTask } from "@/hooks/useTaskBoards";
+import { OVERDUE_TEXT, PRIORITY_META, STATUS_META, avatarClass, initialsOf } from "@/lib/tasks/meta";
+import { toDueDateIso, todayIso } from "@/lib/tasks/grouping";
+import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/tasks/types";
+import type { BoardTask, TaskPriority, TaskStatus } from "@/lib/tasks/types";
 
 /** Oprește propagarea către rândul/celula care ar deschide detaliile. */
 const stop = (e: MouseEvent | KeyboardEvent) => e.stopPropagation();
@@ -46,7 +46,7 @@ export function InlineStatusChip({ task, className }: InlineChipProps) {
           onClick={stop}
           onPointerDown={stop}
           className={cn(
-            'shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition-shadow hover:ring-1 hover:ring-border',
+            "shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition-shadow hover:ring-1 hover:ring-border",
             STATUS_META[task.status].chip,
             className,
           )}
@@ -63,16 +63,16 @@ export function InlineStatusChip({ task, className }: InlineChipProps) {
               stop(e);
               update.mutate(
                 { id: task.id, patch: { status } },
-                { onError: () => toast.error(t('board.toast.saveFailed')) },
+                { onError: () => toast.error(t("board.toast.saveFailed")) },
               );
               setOpen(false);
             }}
             className={cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted',
-              task.status === status && 'bg-muted font-medium',
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted",
+              task.status === status && "bg-muted font-medium",
             )}
           >
-            <span className={cn('inline-block h-2 w-2 rounded-full', STATUS_META[status].dot)} />
+            <span className={cn("inline-block h-2 w-2 rounded-full", STATUS_META[status].dot)} />
             {t(`status.${status}`)}
           </button>
         ))}
@@ -94,8 +94,7 @@ export function InlineAssigneesChip({ task, boardId, className }: InlineAssignee
   const update = useUpdateTask();
 
   const current = task.assignees ?? [];
-  const nameOf = (id: string) =>
-    people.find((p) => p.user_id === id)?.full_name ?? t('board.detail.unknownUser');
+  const nameOf = (id: string) => people.find((p) => p.user_id === id)?.full_name ?? t("board.detail.unknownUser");
   // Un cont dezactivat nu mai primește task-uri; dacă e deja responsabil,
   // rămâne în listă, bifat, ca să poată fi scos.
   const offered = people.filter((p) => p.is_active !== false || current.includes(p.user_id));
@@ -104,7 +103,7 @@ export function InlineAssigneesChip({ task, boardId, className }: InlineAssignee
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
     update.mutate(
       { id: task.id, patch: { assignees: next } },
-      { onError: () => toast.error(t('board.toast.saveFailed')) },
+      { onError: () => toast.error(t("board.toast.saveFailed")) },
     );
   };
 
@@ -115,8 +114,8 @@ export function InlineAssigneesChip({ task, boardId, className }: InlineAssignee
           type="button"
           onClick={stop}
           onPointerDown={stop}
-          aria-label={t('board.detail.assignees')}
-          className={cn('flex shrink-0 -space-x-1.5', className)}
+          aria-label={t("board.detail.assignees")}
+          className={cn("flex shrink-0 -space-x-1.5", className)}
         >
           {current.length === 0 ? (
             <span className="flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-[11px] text-muted-foreground">
@@ -128,7 +127,7 @@ export function InlineAssigneesChip({ task, boardId, className }: InlineAssignee
                 key={id}
                 title={nameOf(id)}
                 className={cn(
-                  'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ring-card',
+                  "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ring-card",
                   avatarClass(id),
                 )}
               >
@@ -145,7 +144,7 @@ export function InlineAssigneesChip({ task, boardId, className }: InlineAssignee
       </PopoverTrigger>
       <PopoverContent align="end" className="max-h-72 w-60 overflow-y-auto p-1" {...stopPointer}>
         {offered.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">{t('board.assignee.empty')}</p>
+          <p className="px-2 py-2 text-xs text-muted-foreground">{t("board.assignee.empty")}</p>
         ) : (
           offered.map((person) => {
             const picked = current.includes(person.user_id);
@@ -158,13 +157,13 @@ export function InlineAssigneesChip({ task, boardId, className }: InlineAssignee
                   toggle(person.user_id);
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted',
-                  picked && 'bg-muted',
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted",
+                  picked && "bg-muted",
                 )}
               >
                 <span
                   className={cn(
-                    'flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold',
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold",
                     avatarClass(person.user_id),
                   )}
                 >
@@ -190,14 +189,14 @@ export function InlineDueChip({ task, className }: InlineChipProps) {
   const update = useUpdateTask();
 
   const due = task.due_date ? parseISO(task.due_date) : undefined;
-  const isDone = task.status === 'done';
+  const isDone = task.status === "done";
   // Fără termen e la fel de important ca un termen depășit — de aceea și el roșu.
   const alarming = !isDone && (!task.due_date || task.due_date.slice(0, 10) < todayIso());
 
   const save = (value: string | null) => {
     update.mutate(
       { id: task.id, patch: { due_date: value } },
-      { onError: () => toast.error(t('board.toast.saveFailed')) },
+      { onError: () => toast.error(t("board.toast.saveFailed")) },
     );
     setOpen(false);
   };
@@ -209,15 +208,15 @@ export function InlineDueChip({ task, className }: InlineChipProps) {
           type="button"
           onClick={stop}
           onPointerDown={stop}
-          aria-label={t('board.detail.dueDate')}
+          aria-label={t("board.detail.dueDate")}
           className={cn(
-            'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-shadow hover:ring-1 hover:ring-border',
+            "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-shadow hover:ring-1 hover:ring-border",
             alarming && OVERDUE_TEXT,
             className,
           )}
         >
           <CalendarIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          {due ? <span>{format(due, 'd MMM', { locale })}</span> : <span>{t('board.detail.noDate')}</span>}
+          {due ? <span>{format(due, "d MMM", { locale })}</span> : <span>{t("board.detail.noDate")}</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-auto p-0" {...stopPointer}>
@@ -240,7 +239,7 @@ export function InlineDueChip({ task, className }: InlineChipProps) {
                 save(null);
               }}
             >
-              {t('board.calendar.clearDue')}
+              {t("board.calendar.clearDue")}
             </Button>
           </div>
         )}
@@ -264,14 +263,14 @@ export function InlinePriorityChip({ task, className }: InlineChipProps) {
           type="button"
           onClick={stop}
           onPointerDown={stop}
-          aria-label={t('board.detail.priority')}
+          aria-label={t("board.detail.priority")}
           className={cn(
-            'inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition-shadow hover:ring-1 hover:ring-border',
+            "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition-shadow hover:ring-1 hover:ring-border",
             PRIORITY_META[current].chip,
             className,
           )}
         >
-          <Flag className={cn('h-3 w-3', PRIORITY_META[current].flag)} />
+          <Flag className={cn("h-3 w-3", PRIORITY_META[current].flag)} />
           {t(`priority.${current}`)}
         </button>
       </PopoverTrigger>
@@ -284,16 +283,16 @@ export function InlinePriorityChip({ task, className }: InlineChipProps) {
               stop(e);
               update.mutate(
                 { id: task.id, patch: { priority } },
-                { onError: () => toast.error(t('board.toast.saveFailed')) },
+                { onError: () => toast.error(t("board.toast.saveFailed")) },
               );
               setOpen(false);
             }}
             className={cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted',
-              current === priority && 'bg-muted font-medium',
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted",
+              current === priority && "bg-muted font-medium",
             )}
           >
-            <Flag className={cn('h-3 w-3', PRIORITY_META[priority].flag)} />
+            <Flag className={cn("h-3 w-3", PRIORITY_META[priority].flag)} />
             {t(`priority.${priority}`)}
           </button>
         ))}

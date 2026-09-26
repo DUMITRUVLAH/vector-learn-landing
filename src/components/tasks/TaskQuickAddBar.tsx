@@ -1,15 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Loader2, Plus } from 'lucide-react';
-import {
-  Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/tasks/ui';
-import { useBoards, useCreateTask } from '@/hooks/useTaskBoards';
-import { toast } from '@/lib/tasks/toast';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import type { BoardTask } from '@/lib/tasks/types';
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Loader2, Plus } from "lucide-react";
+import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/tasks/ui";
+import { useBoards, useCreateTask } from "@/hooks/useTaskBoards";
+import { toast } from "@/lib/tasks/toast";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import type { BoardTask } from "@/lib/tasks/types";
 
 /** Sentinela din Select pentru „fără board” — taskul rămâne personal. */
-const PERSONAL = '__personal__';
+const PERSONAL = "__personal__";
 
 interface TaskQuickAddBarProps {
   /** Pe „Taskurile mele” noul task trebuie să rămână vizibil după creare. */
@@ -27,16 +25,12 @@ interface TaskQuickAddBarProps {
  * Boardul e opțional: dacă nu alegi niciunul, taskul rămâne personal
  * (`board_id: null`) — nu-l forțăm pe primul board din listă.
  */
-export function TaskQuickAddBar({
-  assigneeId,
-  defaultBoardId = null,
-  onCreated,
-}: TaskQuickAddBarProps) {
+export function TaskQuickAddBar({ assigneeId, defaultBoardId = null, onCreated }: TaskQuickAddBarProps) {
   const { t } = useTasksT();
   const { data: boards = [] } = useBoards();
   const createTask = useCreateTask();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState("");
   const [boardId, setBoardId] = useState(defaultBoardId ?? PERSONAL);
 
   useEffect(() => {
@@ -55,30 +49,25 @@ export function TaskQuickAddBar({
         board_id: boardId === PERSONAL ? null : boardId,
         assignees: assigneeId ? [assigneeId] : [],
       });
-      setTitle('');
+      setTitle("");
       onCreated?.(created);
       window.requestAnimationFrame(() => inputRef.current?.focus());
-      toast.success(t('board.quickAdd.created'));
+      toast.success(t("board.quickAdd.created"));
     } catch (error) {
-      console.error('[tasks] quick add', error);
-      toast.error((error as { message?: string })?.message || t('board.toast.saveFailed'));
+      console.error("[tasks] quick add", error);
+      toast.error((error as { message?: string })?.message || t("board.toast.saveFailed"));
     }
   };
 
   return (
-    <form
-      onSubmit={submit}
-      className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-2 shadow-sm"
-    >
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-2 shadow-sm">
       <input
         ref={inputRef}
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         maxLength={300}
-        placeholder={
-          assigneeId ? t('board.quickAdd.forMePlaceholder') : t('board.quickAdd.placeholder')
-        }
-        aria-label={t('board.quickAdd.titleLabel')}
+        placeholder={assigneeId ? t("board.quickAdd.forMePlaceholder") : t("board.quickAdd.placeholder")}
+        aria-label={t("board.quickAdd.titleLabel")}
         className="h-8 w-full min-w-0 bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground sm:w-auto sm:min-w-[220px] sm:flex-1"
       />
       {/*
@@ -92,16 +81,16 @@ export function TaskQuickAddBar({
         Pe telefon selectorul și butonul împart un rând: cu `w-full` bara
         creștea la trei rânduri suprapuse și împingea lista sub fold.
       */}
-      <span className="shrink-0 text-xs text-muted-foreground">{t('board.quickAdd.into')}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{t("board.quickAdd.into")}</span>
       <Select value={boardId} onValueChange={setBoardId}>
         <SelectTrigger
           className="h-8 min-w-0 flex-1 gap-1 rounded-md border-0 bg-transparent px-1.5 text-xs font-medium shadow-none hover:bg-muted focus:ring-0 focus:ring-offset-0 sm:w-auto sm:flex-none"
-          aria-label={t('board.quickAdd.boardLabel')}
+          aria-label={t("board.quickAdd.boardLabel")}
         >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={PERSONAL}>{t('board.quickAdd.personal')}</SelectItem>
+          <SelectItem value={PERSONAL}>{t("board.quickAdd.personal")}</SelectItem>
           {boards.map((board) => (
             <SelectItem key={board.id} value={board.id}>
               {board.name}
@@ -109,18 +98,9 @@ export function TaskQuickAddBar({
           ))}
         </SelectContent>
       </Select>
-      <Button
-        type="submit"
-        size="sm"
-        className="h-8 gap-1.5"
-        disabled={!title.trim() || createTask.isPending}
-      >
-        {createTask.isPending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Plus className="h-3.5 w-3.5" />
-        )}
-        {t('board.quickAdd.add')}
+      <Button type="submit" size="sm" className="h-8 gap-1.5" disabled={!title.trim() || createTask.isPending}>
+        {createTask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+        {t("board.quickAdd.add")}
       </Button>
     </form>
   );

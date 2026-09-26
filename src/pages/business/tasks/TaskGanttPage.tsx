@@ -8,25 +8,25 @@
 // Milestone = romb, fără durată: un reper („lansare", „audit") nu se întinde pe
 // mai multe zile chiar dacă are și `start_date`, și `due_date`.
 
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from '@/lib/tasks/router';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import { format, parseISO } from 'date-fns';
-import { Diamond, Flag, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { getDateFnsLocale } from '@/lib/tasks/dateLocale';
-import { TasksLayout } from '@/components/tasks/TasksLayout';
-import { Button, Card, CardContent, ScrollArea, ScrollBar } from '@/components/tasks/ui';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
-import { TaskFilterBar } from '@/components/tasks/TaskFilterBar';
-import { TaskSortControl } from '@/components/tasks/TaskSortControl';
-import { TaskLoadError } from '@/components/tasks/TaskLoadError';
-import { useAllTasks, useAssignableIndex, useUpdateTask, useBoardNames } from '@/hooks/useTaskBoards';
-import { EMPTY_FILTERS, filterTasks, type TaskFilterState } from '@/lib/tasks/filters';
-import { buildGanttLayout, monthTicks } from '@/lib/tasks/gantt';
-import { DEFAULT_SORT, sortTasks, type SortState } from '@/lib/tasks/sorting';
-import { todayIso } from '@/lib/tasks/grouping';
-import { STATUS_META, boardDotClass } from '@/lib/tasks/meta';
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "@/lib/tasks/router";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import { format, parseISO } from "date-fns";
+import { Diamond, Flag, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getDateFnsLocale } from "@/lib/tasks/dateLocale";
+import { TasksLayout } from "@/components/tasks/TasksLayout";
+import { Button, Card, CardContent, ScrollArea, ScrollBar } from "@/components/tasks/ui";
+import { TaskDetailModal } from "@/components/tasks/TaskDetailModal";
+import { TaskFilterBar } from "@/components/tasks/TaskFilterBar";
+import { TaskSortControl } from "@/components/tasks/TaskSortControl";
+import { TaskLoadError } from "@/components/tasks/TaskLoadError";
+import { useAllTasks, useAssignableIndex, useUpdateTask } from "@/hooks/useTaskBoards";
+import { EMPTY_FILTERS, filterTasks, type TaskFilterState } from "@/lib/tasks/filters";
+import { buildGanttLayout, monthTicks } from "@/lib/tasks/gantt";
+import { DEFAULT_SORT, sortTasks, type SortState } from "@/lib/tasks/sorting";
+import { todayIso } from "@/lib/tasks/grouping";
+import { STATUS_META, boardDotClass } from "@/lib/tasks/meta";
 
 const ZOOM_LEVELS = { compact: 14, normal: 26, wide: 44 } as const;
 type Zoom = keyof typeof ZOOM_LEVELS;
@@ -38,13 +38,11 @@ export function TaskGanttPage() {
   const [params, setParams] = useSearchParams();
 
   const [filters, setFilters] = useState<TaskFilterState>({ ...EMPTY_FILTERS, includeDone: true });
-  const [zoom, setZoom] = useState<Zoom>('normal');
+  const [zoom, setZoom] = useState<Zoom>("normal");
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
 
   const { data: tasks = [], isLoading, isError, refetch } = useAllTasks();
   const updateTask = useUpdateTask();
-
-  const boardNames = useBoardNames();
 
   const assignableIndex = useAssignableIndex(null);
   const names = useMemo(() => {
@@ -58,11 +56,11 @@ export function TaskGanttPage() {
   const filtered = useMemo(() => {
     const base = filterTasks(tasks, filters, today);
     // Pe `manual` lăsăm Ganttul să-și aranjeze rândurile cronologic, ca înainte.
-    return sort.key === 'manual' ? base : sortTasks(base, sort, { names });
+    return sort.key === "manual" ? base : sortTasks(base, sort, { names });
   }, [tasks, filters, today, sort, names]);
 
   const layout = useMemo(
-    () => buildGanttLayout(filtered, { today, preserveOrder: sort.key !== 'manual' }),
+    () => buildGanttLayout(filtered, { today, preserveOrder: sort.key !== "manual" }),
     [filtered, today, sort.key],
   );
 
@@ -81,25 +79,20 @@ export function TaskGanttPage() {
   useEffect(() => setVisibleCount(GANTT_PAGE), [filters, tasks.length]);
   const visibleRows = layout.rows.slice(0, visibleCount);
   const hiddenRows = layout.rows.length - visibleRows.length;
-  const ticks = useMemo(
-    () => monthTicks(layout.from, layout.totalDays),
-    [layout.from, layout.totalDays],
-  );
+  const ticks = useMemo(() => monthTicks(layout.from, layout.totalDays), [layout.from, layout.totalDays]);
 
   const dayWidth = ZOOM_LEVELS[zoom];
   const gridWidth = layout.totalDays * dayWidth;
   const todayOffset =
     today >= layout.from && today <= layout.to
-      ? Math.round(
-          (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${layout.from}T00:00:00Z`)) / 86_400_000,
-        )
+      ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${layout.from}T00:00:00Z`)) / 86_400_000)
       : null;
 
-  const openTaskId = params.get('task');
-  const openTask = openTaskId ? tasks.find((task) => task.id === openTaskId) ?? null : null;
+  const openTaskId = params.get("task");
+  const openTask = openTaskId ? (tasks.find((task) => task.id === openTaskId) ?? null) : null;
   const setOpenTask = (taskId: string | null) => {
-    if (taskId) params.set('task', taskId);
-    else params.delete('task');
+    if (taskId) params.set("task", taskId);
+    else params.delete("task");
     setParams(params, { replace: true });
   };
 
@@ -107,9 +100,9 @@ export function TaskGanttPage() {
     <TasksLayout>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">{t('board.gantt.title')}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">{t("board.gantt.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t('board.gantt.subtitle', { count: layout.rows.length })}
+            {t("board.gantt.subtitle", { count: layout.rows.length })}
           </p>
         </div>
 
@@ -121,8 +114,8 @@ export function TaskGanttPage() {
                 type="button"
                 onClick={() => setZoom(level)}
                 className={cn(
-                  'rounded px-2.5 py-1 text-xs font-medium transition-colors',
-                  zoom === level ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  zoom === level ? "bg-primary text-primary-foreground" : "text-muted-foreground",
                 )}
               >
                 {t(`board.gantt.zoom.${level}`)}
@@ -152,10 +145,8 @@ export function TaskGanttPage() {
             <div className="rounded-2xl pastel-lavender p-3">
               <Flag className="h-6 w-6 text-violet-600" />
             </div>
-            <p className="font-medium">{t('board.gantt.emptyTitle')}</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              {t('board.gantt.emptyDescription')}
-            </p>
+            <p className="font-medium">{t("board.gantt.emptyTitle")}</p>
+            <p className="max-w-md text-sm text-muted-foreground">{t("board.gantt.emptyDescription")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -166,7 +157,7 @@ export function TaskGanttPage() {
                   lățime ar fi ilizibile și oricum axa se citește pe luni. */}
               <div className="flex border-b bg-muted/30">
                 <div className="w-[220px] shrink-0 border-r px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t('board.gantt.taskColumn')}
+                  {t("board.gantt.taskColumn")}
                 </div>
                 <div className="relative" style={{ width: gridWidth }}>
                   {ticks.map((tick) => (
@@ -175,7 +166,7 @@ export function TaskGanttPage() {
                       className="absolute top-0 border-l px-1.5 py-2 text-[11px] font-medium capitalize"
                       style={{ left: tick.offsetDays * dayWidth }}
                     >
-                      {format(parseISO(tick.iso), 'LLL yyyy', { locale })}
+                      {format(parseISO(tick.iso), "LLL yyyy", { locale })}
                     </div>
                   ))}
                   <div className="py-2 text-[11px] opacity-0">.</div>
@@ -191,7 +182,7 @@ export function TaskGanttPage() {
                 )}
 
                 {visibleRows.map((row) => (
-                  <div key={row.task.id} className="flex border-b last:border-0 hover:bg-accent">
+                  <div key={row.task.id} className="flex border-b last:border-0 hover:bg-accent/10">
                     <div className="flex w-[220px] shrink-0 items-center gap-2 border-r px-3 py-2">
                       <button
                         type="button"
@@ -202,15 +193,13 @@ export function TaskGanttPage() {
                           })
                         }
                         className={cn(
-                          'shrink-0 transition-colors',
-                          row.isMilestone
-                            ? 'text-violet-600'
-                            : 'text-muted-foreground/40 hover:text-violet-600',
+                          "shrink-0 transition-colors",
+                          row.isMilestone ? "text-violet-600" : "text-muted-foreground/40 hover:text-violet-600",
                         )}
-                        title={t('board.gantt.toggleMilestone')}
-                        aria-label={t('board.gantt.toggleMilestone')}
+                        title={t("board.gantt.toggleMilestone")}
+                        aria-label={t("board.gantt.toggleMilestone")}
                       >
-                        <Diamond className={cn('h-3.5 w-3.5', row.isMilestone && 'fill-current')} />
+                        <Diamond className={cn("h-3.5 w-3.5", row.isMilestone && "fill-current")} />
                       </button>
                       <button
                         type="button"
@@ -238,7 +227,7 @@ export function TaskGanttPage() {
                           type="button"
                           onClick={() => setOpenTask(row.task.id)}
                           className={cn(
-                            'absolute top-2 flex h-4 items-center rounded px-1.5 text-[10px] text-white transition-opacity hover:opacity-80',
+                            "absolute top-2 flex h-4 items-center rounded px-1.5 text-[10px] text-white transition-opacity hover:opacity-80",
                             STATUS_META[row.task.status].bar,
                           )}
                           style={{
@@ -247,9 +236,7 @@ export function TaskGanttPage() {
                           }}
                           title={`${row.from} → ${row.to}`}
                         >
-                          {row.spanDays * dayWidth > 70 && (
-                            <span className="truncate">{row.task.title}</span>
-                          )}
+                          {row.spanDays * dayWidth > 70 && <span className="truncate">{row.task.title}</span>}
                         </button>
                       )}
                     </div>
@@ -262,14 +249,14 @@ export function TaskGanttPage() {
 
           {hiddenRows > 0 && (
             <div className="flex items-center justify-center gap-3 border-t px-4 py-3 text-xs text-muted-foreground">
-              <span>{t('board.gantt.hiddenRows', { count: hiddenRows })}</span>
+              <span>{t("board.gantt.hiddenRows", { count: hiddenRows })}</span>
               <Button
                 variant="outline"
                 size="sm"
                 className="h-7 text-xs"
                 onClick={() => setVisibleCount((n) => n + GANTT_PAGE)}
               >
-                {t('board.gantt.showMore')}
+                {t("board.gantt.showMore")}
               </Button>
             </div>
           )}
@@ -279,21 +266,17 @@ export function TaskGanttPage() {
       {layout.undated.length > 0 && (
         <Card className="mt-4 rounded-2xl">
           <CardContent className="p-4">
-            <h2 className="mb-2 text-sm font-semibold">
-              {t('board.gantt.undated', { count: layout.undated.length })}
-            </h2>
-            <p className="mb-3 text-xs text-muted-foreground">{t('board.gantt.undatedHint')}</p>
+            <h2 className="mb-2 text-sm font-semibold">{t("board.gantt.undated", { count: layout.undated.length })}</h2>
+            <p className="mb-3 text-xs text-muted-foreground">{t("board.gantt.undatedHint")}</p>
             <div className="flex flex-wrap gap-1.5">
               {layout.undated.slice(0, 30).map((task) => (
                 <button
                   key={task.id}
                   type="button"
                   onClick={() => setOpenTask(task.id)}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors hover:bg-accent/10"
                 >
-                  {task.board_id && (
-                    <span className={cn('h-1.5 w-1.5 rounded', boardDotClass(task.board_id))} />
-                  )}
+                  {task.board_id && <span className={cn("h-1.5 w-1.5 rounded", boardDotClass(task.board_id))} />}
                   <span className="max-w-[220px] truncate">{task.title}</span>
                 </button>
               ))}

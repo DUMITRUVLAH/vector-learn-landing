@@ -10,6 +10,8 @@ type TFunc = (key: string) => string;
 interface DbError {
   code?: string;
   status?: number;
+  /** Corpul răspunsului (`ApiError.body`): serverul pune în `detail` explicația concretă. */
+  body?: { detail?: unknown };
   message?: string;
   details?: string;
   hint?: string;
@@ -70,8 +72,18 @@ const PATTERNS: Array<{ match: RegExp; key: string }> = [
  */
 export function taskErrorMessage(error: unknown, t: TFunc, fallbackKey = 'board.toast.saveFailed'): string {
   const err = (error ?? {}) as DbError;
+  const detail = typeof err.body?.detail === 'string' ? err.body.detail.trim() : '';
+  // Datele invalide au o explicație concretă de la server („Data de început nu poate fi după
+  // termen") — mai utilă decât „date invalide", cât timp e o propoziție scurtă.
+  if (err.code === 'invalid_data' && detail && detail.length <= 160) return detail;
   if (err.code && CODES[err.code]) return t(CODES[err.code]);
-  const raw = `${err.message ?? ''} ${err.details ?? ''}`.trim();
+  // Codurile tehnice (rețea, 5xx, timeout) nu spun nimic omului: mesajul generic al acțiunii.
+  if (err.code && /^(http_\d+|server_error|server_timeout|request_timeout|storage_unavailable)$/.test(err.code)) {
+    return t(fallbackKey);
+  }
+  const raw = `${typeof err.message === 'string' ? err.message : ''} ${typeof err.details === 'string' ? err.details : ''}`
+    .replace(/\[object Object\]/g, '')
+    .trim();
 
   for (const { match, key } of PATTERNS) {
     if (match.test(raw)) return t(key);

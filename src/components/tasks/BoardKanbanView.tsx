@@ -9,49 +9,92 @@
 // Drop pe un CARD = inserare înaintea lui; drop pe COLOANĂ = la coadă. În ambele
 // cazuri se scrie o singură poziție, nu se renumerotează coloana.
 
-import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
+import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, pointerWithin,
-  useDraggable, useDroppable, useSensor, useSensors,
-  type DragEndEvent, type DragStartEvent,
-} from '@dnd-kit/core';
-import { format, parseISO } from 'date-fns';
-import type { Locale } from 'date-fns';
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { format, parseISO } from "date-fns";
+import type { Locale } from "date-fns";
 import {
-  Archive, ArchiveRestore, ArrowLeftRight, ArrowRightLeft, CalendarDays, CheckCircle2,
-  ChevronDown, ChevronRight, Circle,
-  Copy, ListChecks,
-  ListPlus, MessageSquare, MoreHorizontal, Plus, SortAsc,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useTasksT, type TasksT } from '@/lib/tasks/useTasksT';
-import { toast } from '@/lib/tasks/toast';
-import { RecurrenceBadge } from '@/components/tasks/RecurrenceBadge';
-import { getDateFnsLocale } from '@/lib/tasks/dateLocale';
+  Archive,
+  ArchiveRestore,
+  ArrowLeftRight,
+  ArrowRightLeft,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Copy,
+  ListChecks,
+  ListPlus,
+  MessageSquare,
+  MoreHorizontal,
+  Plus,
+  SortAsc,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useTasksT, type TasksT } from "@/lib/tasks/useTasksT";
+import { toast } from "@/lib/tasks/toast";
+import { RecurrenceBadge } from "@/components/tasks/RecurrenceBadge";
+import { getDateFnsLocale } from "@/lib/tasks/dateLocale";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Button,
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub,
-  DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
   Input,
   Textarea,
-} from '@/components/tasks/ui';
-import { AssigneeAvatars } from '@/components/tasks/AssigneeAvatars';
+} from "@/components/tasks/ui";
+import { AssigneeAvatars } from "@/components/tasks/AssigneeAvatars";
 import {
-  useArchiveList, useArchivedLists, useBulkCreateTasks, useCommentCounts, useCreateTask,
-  useListOperations, useListTaskCount, useMoveTask, useUnarchiveList, useUpdateTask,
-} from '@/hooks/useTaskBoards';
-import { positionForDrop, positionForNewTask } from '@/lib/tasks/positions';
-import { taskErrorMessage } from '@/lib/tasks/errors';
-import { OVERDUE_TEXT, PRIORITY_META, listTone } from '@/lib/tasks/meta';
-import { isOverdue, subtaskCounts, todayIso } from '@/lib/tasks/grouping';
-import {
-  DEFAULT_SORT, groupTasks, sortTasks, type GroupKey, type SortState,
-} from '@/lib/tasks/sorting';
-import { parseTag, TAG_COLORS } from '@/lib/tasks/tags';
-import type { AssignableUser, BoardTask, TaskList } from '@/lib/tasks/types';
+  useArchiveList,
+  useArchivedLists,
+  useBulkCreateTasks,
+  useCommentCounts,
+  useCreateTask,
+  useListOperations,
+  useListTaskCount,
+  useMoveTask,
+  useUnarchiveList,
+  useUpdateTask,
+} from "@/hooks/useTaskBoards";
+import { positionForDrop, positionForNewTask } from "@/lib/tasks/positions";
+import { taskErrorMessage } from "@/lib/tasks/errors";
+import { OVERDUE_TEXT, PRIORITY_META, listTone } from "@/lib/tasks/meta";
+import { isOverdue, subtaskCounts, todayIso } from "@/lib/tasks/grouping";
+import { DEFAULT_SORT, groupTasks, sortTasks, type GroupKey, type SortState } from "@/lib/tasks/sorting";
+import { parseTag, TAG_COLORS } from "@/lib/tasks/tags";
+import type { AssignableUser, BoardTask, TaskList } from "@/lib/tasks/types";
 
 interface BoardKanbanViewProps {
   boardId: string;
@@ -68,7 +111,7 @@ interface BoardKanbanViewProps {
 }
 
 /** Coloana virtuală pentru cardurile fără listă (import-uri, task-uri vechi). */
-const UNSORTED = '__unsorted__';
+const UNSORTED = "__unsorted__";
 
 export function BoardKanbanView({
   boardId,
@@ -79,7 +122,7 @@ export function BoardKanbanView({
   onAddList,
   canEdit,
   sort = DEFAULT_SORT,
-  group = 'none',
+  group = "none",
 }: BoardKanbanViewProps) {
   const { t, i18n } = useTasksT();
   const dateLocale = getDateFnsLocale(i18n.language);
@@ -102,18 +145,18 @@ export function BoardKanbanView({
     (task: BoardTask) =>
       updateTask.mutate({
         id: task.id,
-        patch: { status: task.status === 'done' ? 'todo' : 'done' },
+        patch: { status: task.status === "done" ? "todo" : "done" },
       }),
     [updateTask.mutate],
   );
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [addingIn, setAddingIn] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState('');
+  const [newTitle, setNewTitle] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
+  const [renameValue, setRenameValue] = useState("");
   const [bulkIn, setBulkIn] = useState<string | null>(null);
-  const [bulkText, setBulkText] = useState('');
+  const [bulkText, setBulkText] = useState("");
   const [archiving, setArchiving] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({});
@@ -168,14 +211,11 @@ export function BoardKanbanView({
    * drag & drop trebuie să fie unice PER BANDĂ, nu per card (vezi `instanceId`).
    */
   const lanes = useMemo(
-    () =>
-      group === 'none'
-        ? null
-        : groupTasks(topLevel, group, { names, unassignedLabel: t('group.unassigned') }),
+    () => (group === "none" ? null : groupTasks(topLevel, group, { names, unassignedLabel: t("group.unassigned") })),
     [topLevel, group, names, t],
   );
 
-  const draggedTask = draggedId ? topLevel.find((task) => task.id === draggedId) ?? null : null;
+  const draggedTask = draggedId ? (topLevel.find((task) => task.id === draggedId) ?? null) : null;
 
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggedId(null);
@@ -188,22 +228,18 @@ export function BoardKanbanView({
     const task = topLevel.find((item) => item.id === (activeData?.taskId ?? active.id));
     if (!task) return;
 
-    const overData = over.data.current as
-      | { type: 'card' | 'column'; listId: string; taskId?: string }
-      | undefined;
+    const overData = over.data.current as { type: "card" | "column"; listId: string; taskId?: string } | undefined;
     if (!overData) return;
 
     const targetListId = overData.listId === UNSORTED ? null : overData.listId;
-    const targetList = targetListId ? lists.find((l) => l.id === targetListId) ?? null : null;
+    const targetList = targetListId ? (lists.find((l) => l.id === targetListId) ?? null) : null;
 
     // Pozițiile coloanei țintă FĂRĂ cardul mutat — altfel calculul „între vecini"
     // s-ar raporta la locul lui vechi și cardul ar sări înapoi.
     const siblings = (columns[overData.listId] ?? []).filter((item) => item.id !== task.id);
     let index = siblings.length;
-    if (overData.type === 'card') {
-      const overIndex = siblings.findIndex(
-        (item) => item.id === (overData.taskId ?? over.id),
-      );
+    if (overData.type === "card") {
+      const overIndex = siblings.findIndex((item) => item.id === (overData.taskId ?? over.id));
       if (overIndex >= 0) index = overIndex;
     }
     const position = positionForDrop(
@@ -223,12 +259,12 @@ export function BoardKanbanView({
       },
       {
         onError: (error) => {
-          console.error('[tasks] move', error);
+          console.error("[tasks] move", error);
           // Motivul refuzului („dependențele nu sunt gata", „are nevoie de
           // aprobare") spune exact ce blochează — e mai util decât un text generic.
           // Serverul îl trimite ca un cod (`needs_approval`), deci trece prin
           // `taskErrorMessage`, care îl traduce — afișat brut, omul ar citi codul.
-          toast.error(taskErrorMessage(error, t, 'board.toast.moveFailed'));
+          toast.error(taskErrorMessage(error, t, "board.toast.moveFailed"));
         },
       },
     );
@@ -237,7 +273,7 @@ export function BoardKanbanView({
   const quickAdd = async (listId: string) => {
     const title = newTitle.trim();
     if (!title) return;
-    setNewTitle('');
+    setNewTitle("");
     try {
       // Sus, nu jos. Fără poziție explicită, serverul pune `MAX + 1024`,
       // adică la coadă — pe o coloană lungă taskul dispărea sub fold exact în
@@ -252,7 +288,7 @@ export function BoardKanbanView({
       const surori = (columns[listId] ?? []).map((item) => item.position);
       const position = positionForNewTask(surori);
       if (position === 0) {
-        console.error('[tasks] pozițiile din capul coloanei s-au epuizat', { listId });
+        console.error("[tasks] pozițiile din capul coloanei s-au epuizat", { listId });
       }
       await createTask.mutateAsync({
         title,
@@ -261,8 +297,8 @@ export function BoardKanbanView({
         position,
       });
     } catch (error) {
-      console.error('[tasks] quick add', error);
-      toast.error(taskErrorMessage(error, t, 'board.toast.saveFailed'));
+      console.error("[tasks] quick add", error);
+      toast.error(taskErrorMessage(error, t, "board.toast.saveFailed"));
     }
   };
 
@@ -278,13 +314,8 @@ export function BoardKanbanView({
     const all = columns[key] ?? [];
     const items = lane ? all.filter((task) => lane.taskIds.has(task.id)) : all;
     return (
-      <KanbanColumn
-        key={`${lane?.id ?? 'all'}-${key}`}
-        listId={key}
-        laneId={lane?.id}
-        className="w-[280px] shrink-0"
-      >
-        <div className={cn('group/col flex h-full flex-col rounded-2xl', listTone(color).columnBg)}>
+      <KanbanColumn key={`${lane?.id ?? "all"}-${key}`} listId={key} laneId={lane?.id} className="w-[280px] shrink-0">
+        <div className={cn("group/col flex h-full flex-col rounded-2xl", listTone(color).columnBg)}>
           <div className="flex items-center gap-2 px-3 py-2.5">
             {renaming === key ? (
               <Input
@@ -292,11 +323,11 @@ export function BoardKanbanView({
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && listId && renameValue.trim()) {
+                  if (e.key === "Enter" && listId && renameValue.trim()) {
                     listOps.rename.mutate({ id: listId, name: renameValue.trim() });
                     setRenaming(null);
                   }
-                  if (e.key === 'Escape') setRenaming(null);
+                  if (e.key === "Escape") setRenaming(null);
                 }}
                 onBlur={() => {
                   if (listId && renameValue.trim() && renameValue.trim() !== name) {
@@ -309,7 +340,7 @@ export function BoardKanbanView({
             ) : (
               <h3
                 className={cn(
-                  'flex min-w-0 items-center gap-1 truncate rounded-md px-2 py-1 text-[13px] font-semibold',
+                  "flex min-w-0 items-center gap-1 truncate rounded-md px-2 py-1 text-[13px] font-semibold",
                   listTone(color).headerChip,
                 )}
               >
@@ -320,7 +351,7 @@ export function BoardKanbanView({
                 {isDoneList && (
                   <CheckCircle2
                     className="h-3.5 w-3.5 shrink-0 text-emerald-600"
-                    aria-label={t('board.list.isDoneList')}
+                    aria-label={t("board.list.isDoneList")}
                   />
                 )}
                 <span className="truncate">{name}</span>
@@ -333,10 +364,10 @@ export function BoardKanbanView({
                 type="button"
                 onClick={() => {
                   setAddingIn(key);
-                  setNewTitle('');
+                  setNewTitle("");
                 }}
                 className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus:opacity-100 group-hover/col:opacity-100"
-                aria-label={t('board.card.add')}
+                aria-label={t("board.card.add")}
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>
@@ -344,12 +375,7 @@ export function BoardKanbanView({
             {canEdit && listId && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    aria-label={t('board.list.menu', { name })}
-                  >
+                  <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={t("board.list.menu", { name })}>
                     <MoreHorizontal className="h-3.5 w-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -361,54 +387,41 @@ export function BoardKanbanView({
                     }}
                   >
                     <ListPlus className="mr-2 h-3.5 w-3.5" />
-                    {t('board.list.rename')}
+                    {t("board.list.rename")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
                       setBulkIn(listId);
-                      setBulkText('');
+                      setBulkText("");
                     }}
                   >
                     <Plus className="mr-2 h-3.5 w-3.5" />
-                    {t('board.list.bulkAdd')}
+                    {t("board.list.bulkAdd")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      listOps.setDoneList.mutate({ id: listId, isDone: !isDoneList })
-                    }
-                  >
-                    <CheckCircle2
-                      className={cn('mr-2 h-3.5 w-3.5', isDoneList && 'text-emerald-600')}
-                    />
-                    {t(isDoneList ? 'board.list.unsetDoneList' : 'board.list.setDoneList')}
+                  <DropdownMenuItem onClick={() => listOps.setDoneList.mutate({ id: listId, isDone: !isDoneList })}>
+                    <CheckCircle2 className={cn("mr-2 h-3.5 w-3.5", isDoneList && "text-emerald-600")} />
+                    {t(isDoneList ? "board.list.unsetDoneList" : "board.list.setDoneList")}
                   </DropdownMenuItem>
 
                   <DropdownMenuSeparator />
 
-                  <DropdownMenuItem
-                    onClick={() => listOps.reorder.mutate({ lists, listId, direction: -1 })}
-                  >
+                  <DropdownMenuItem onClick={() => listOps.reorder.mutate({ lists, listId, direction: -1 })}>
                     <ArrowLeftRight className="mr-2 h-3.5 w-3.5" />
-                    {t('board.list.moveLeft')}
+                    {t("board.list.moveLeft")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => listOps.reorder.mutate({ lists, listId, direction: 1 })}
-                  >
+                  <DropdownMenuItem onClick={() => listOps.reorder.mutate({ lists, listId, direction: 1 })}>
                     <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
-                    {t('board.list.moveRight')}
+                    {t("board.list.moveRight")}
                   </DropdownMenuItem>
 
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
                       <SortAsc className="mr-2 h-3.5 w-3.5" />
-                      {t('board.list.sortBy')}
+                      {t("board.list.sortBy")}
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
-                      {(['due_date', 'priority', 'title', 'created_at'] as const).map((key) => (
-                        <DropdownMenuItem
-                          key={key}
-                          onClick={() => listOps.sort.mutate({ listId, key })}
-                        >
+                      {(["due_date", "priority", "title", "created_at"] as const).map((key) => (
+                        <DropdownMenuItem key={key} onClick={() => listOps.sort.mutate({ listId, key })}>
                           {t(`board.list.sortKeys.${key}`)}
                         </DropdownMenuItem>
                       ))}
@@ -419,7 +432,7 @@ export function BoardKanbanView({
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger>
                         <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
-                        {t('board.list.moveAll')}
+                        {t("board.list.moveAll")}
                       </DropdownMenuSubTrigger>
                       <DropdownMenuSubContent>
                         {lists
@@ -427,9 +440,7 @@ export function BoardKanbanView({
                           .map((l) => (
                             <DropdownMenuItem
                               key={l.id}
-                              onClick={() =>
-                                listOps.moveAll.mutate({ fromListId: listId, toListId: l.id })
-                              }
+                              onClick={() => listOps.moveAll.mutate({ fromListId: listId, toListId: l.id })}
                             >
                               {l.name}
                             </DropdownMenuItem>
@@ -439,12 +450,10 @@ export function BoardKanbanView({
                   )}
 
                   <DropdownMenuItem
-                    onClick={() =>
-                      listOps.duplicate.mutate({ listId, copySuffix: t('board.list.copySuffix') })
-                    }
+                    onClick={() => listOps.duplicate.mutate({ listId, copySuffix: t("board.list.copySuffix") })}
                   >
                     <Copy className="mr-2 h-3.5 w-3.5" />
-                    {t('board.list.duplicate')}
+                    {t("board.list.duplicate")}
                   </DropdownMenuItem>
 
                   <DropdownMenuSeparator />
@@ -461,7 +470,7 @@ export function BoardKanbanView({
                   */}
                   <DropdownMenuItem onSelect={() => setArchiving(listId)}>
                     <Archive className="mr-2 h-3.5 w-3.5" />
-                    {t('board.actions.archiveList')}
+                    {t("board.actions.archiveList")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -475,21 +484,21 @@ export function BoardKanbanView({
               parte decât locul în care îl scriai — iar pe o coloană lungă,
               butonul „+" din antet deschidea un input aflat sub fold.
             */}
-            {canEdit && (
-              addingIn === key ? (
+            {canEdit &&
+              (addingIn === key ? (
                 <div className="rounded-xl border bg-card p-2">
                   <Input
                     autoFocus
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === "Enter") {
                         e.preventDefault();
                         quickAdd(key);
                       }
-                      if (e.key === 'Escape') {
+                      if (e.key === "Escape") {
                         setAddingIn(null);
-                        setNewTitle('');
+                        setNewTitle("");
                       }
                     }}
                     /*
@@ -502,7 +511,7 @@ export function BoardKanbanView({
                     onBlur={() => {
                       if (!newTitle.trim()) setAddingIn(null);
                     }}
-                    placeholder={t('board.card.newPlaceholder')}
+                    placeholder={t("board.card.newPlaceholder")}
                     className="h-8 border-0 px-1 text-sm shadow-none focus-visible:ring-0"
                   />
                 </div>
@@ -511,18 +520,17 @@ export function BoardKanbanView({
                   type="button"
                   onClick={() => {
                     setAddingIn(key);
-                    setNewTitle('');
+                    setNewTitle("");
                   }}
                   className="flex w-full items-center gap-1.5 rounded-xl px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  {t('board.card.add')}
+                  {t("board.card.add")}
                 </button>
-              )
-            )}
+              ))}
             {items.length === 0 && addingIn !== key && (
               <p className="rounded-xl border border-dashed py-6 text-center text-[11px] text-muted-foreground">
-                {t('board.dropHere')}
+                {t("board.dropHere")}
               </p>
             )}
             {items.map((task) => (
@@ -567,10 +575,10 @@ export function BoardKanbanView({
           {lanes.map((lane) => {
             const collapsedLane = collapsedLanes[lane.id];
             const label =
-              group === 'priority'
+              group === "priority"
                 ? t(`priority.${lane.id}`)
                 : lane.isUnassigned
-                  ? t(group === 'tag' ? 'group.untagged' : 'group.unassigned')
+                  ? t(group === "tag" ? "group.untagged" : "group.unassigned")
                   : lane.label;
             const taskIds = new Set(lane.tasks.map((task) => task.id));
 
@@ -578,11 +586,9 @@ export function BoardKanbanView({
               <div key={lane.id} className="shrink-0">
                 <button
                   type="button"
-                  onClick={() =>
-                    setCollapsedLanes((c) => ({ ...c, [lane.id]: !c[lane.id] }))
-                  }
-                  className="mb-2 flex items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-accent"
-                  aria-label={collapsedLane ? t('group.expand') : t('group.collapse')}
+                  onClick={() => setCollapsedLanes((c) => ({ ...c, [lane.id]: !c[lane.id] }))}
+                  className="mb-2 flex items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-accent/10"
+                  aria-label={collapsedLane ? t("group.expand") : t("group.collapse")}
                 >
                   {collapsedLane ? (
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -590,15 +596,13 @@ export function BoardKanbanView({
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   )}
                   <span className="text-sm font-semibold">{label}</span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {lane.tasks.length}
-                  </span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">{lane.tasks.length}</span>
                 </button>
 
                 {!collapsedLane && (
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {(columns[UNSORTED]?.length ?? 0) > 0 &&
-                      renderColumn(UNSORTED, t('board.unsorted'), 'pastel-peach', false, null, {
+                      renderColumn(UNSORTED, t("board.unsorted"), "pastel-peach", false, null, {
                         id: lane.id,
                         taskIds,
                       })}
@@ -615,101 +619,102 @@ export function BoardKanbanView({
           })}
         </div>
       ) : (
-      <div className="flex h-full gap-3 overflow-x-auto px-4 pb-4 pt-1">
-        {/* Cardurile fără coloană apar doar dacă există — altfel ar fi o coloană
+        <div className="flex h-full gap-3 overflow-x-auto px-4 pb-4 pt-1">
+          {/* Cardurile fără coloană apar doar dacă există — altfel ar fi o coloană
             goală permanentă pe fiecare board. */}
-        {(columns[UNSORTED]?.length ?? 0) > 0 &&
-          renderColumn(UNSORTED, t('board.unsorted'), 'pastel-peach', false, null)}
+          {(columns[UNSORTED]?.length ?? 0) > 0 &&
+            renderColumn(UNSORTED, t("board.unsorted"), "pastel-peach", false, null)}
 
-        {lists.map((list) =>
-          renderColumn(list.id, list.name, list.color, list.is_done_list, list.id),
-        )}
+          {lists.map((list) => renderColumn(list.id, list.name, list.color, list.is_done_list, list.id))}
 
-        {canEdit && (
-          <div className="flex h-fit w-[240px] shrink-0 flex-col gap-2">
-            <button
-              type="button"
-              onClick={onAddList}
-              className="flex items-center gap-2 rounded-2xl border border-dashed px-3 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-            >
-              <Plus className="h-4 w-4" />
-              {t('board.addList')}
-            </button>
+          {canEdit && (
+            <div className="flex h-fit w-[240px] shrink-0 flex-col gap-2">
+              <button
+                type="button"
+                onClick={onAddList}
+                className="flex items-center gap-2 rounded-2xl border border-dashed px-3 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+              >
+                <Plus className="h-4 w-4" />
+                {t("board.addList")}
+              </button>
 
-            {/*
+              {/*
               Coloanele arhivate ascund cardurile din ele. Fără intrarea asta,
               `unarchiveList` rămânea cod mort și cardurile dispăreau definitiv
               din board. Apare doar când chiar există ceva arhivat — nu ținem un
               element de UI permanent gol.
             */}
-            {archivedLists.length > 0 && (
-              <div className="rounded-2xl border bg-muted/30 p-2">
-                <button
-                  type="button"
-                  onClick={() => setShowArchived((v) => !v)}
-                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                  aria-expanded={showArchived}
-                >
-                  <Archive className="h-3.5 w-3.5" />
-                  {t('board.archivedLists.title')} ({archivedLists.length})
-                </button>
-                {showArchived && (
-                  <ul className="mt-1 space-y-1">
-                    {archivedLists.map((list) => (
-                      <li key={list.id} className="flex items-center gap-1.5">
-                        <span className="min-w-0 flex-1 truncate text-xs">{list.name}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            unarchiveList.mutate(list.id, {
-                              onSuccess: () => toast.success(t('board.toast.listRestored')),
-                              onError: (error) => {
-                                console.error('[tasks] unarchive list', error);
-                                toast.error(taskErrorMessage(error, t));
-                              },
-                            })
-                          }
-                          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
-                          aria-label={t('board.actions.restoreList')}
-                          title={t('board.actions.restoreList')}
-                        >
-                          <ArchiveRestore className="h-3.5 w-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+              {archivedLists.length > 0 && (
+                <div className="rounded-2xl border bg-muted/30 p-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchived((v) => !v)}
+                    className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    aria-expanded={showArchived}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                    {t("board.archivedLists.title")} ({archivedLists.length})
+                  </button>
+                  {showArchived && (
+                    <ul className="mt-1 space-y-1">
+                      {archivedLists.map((list) => (
+                        <li key={list.id} className="flex items-center gap-1.5">
+                          <span className="min-w-0 flex-1 truncate text-xs">{list.name}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              unarchiveList.mutate(list.id, {
+                                onSuccess: () => toast.success(t("board.toast.listRestored")),
+                                onError: (error) => {
+                                  console.error("[tasks] unarchive list", error);
+                                  toast.error(taskErrorMessage(error, t));
+                                },
+                              })
+                            }
+                            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                            aria-label={t("board.actions.restoreList")}
+                            title={t("board.actions.restoreList")}
+                          >
+                            <ArchiveRestore className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       <Dialog open={!!bulkIn} onOpenChange={(open) => !open && setBulkIn(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{t('board.list.bulkAdd')}</DialogTitle>
+            <DialogTitle>{t("board.list.bulkAdd")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">{t('board.list.bulkHint')}</p>
+            <p className="text-sm text-muted-foreground">{t("board.list.bulkHint")}</p>
             <Textarea
               autoFocus
               rows={8}
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
-              placeholder={t('board.list.bulkPlaceholder')}
+              placeholder={t("board.list.bulkPlaceholder")}
               className="text-sm"
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkIn(null)}>
-              {t('board.actions.cancel')}
+              {t("board.actions.cancel")}
             </Button>
             <Button
               disabled={!bulkText.trim() || bulkCreate.isPending}
               onClick={() => {
-                const titles = bulkText.split('\n').map((line) => line.trim()).filter(Boolean);
+                const titles = bulkText
+                  .split("\n")
+                  .map((line) => line.trim())
+                  .filter(Boolean);
                 bulkCreate.mutate(
                   {
                     titles,
@@ -718,20 +723,20 @@ export function BoardKanbanView({
                   },
                   {
                     onSuccess: (created) => {
-                      toast.success(t('board.list.bulkCreated', { count: created.length }));
+                      toast.success(t("board.list.bulkCreated", { count: created.length }));
                       setBulkIn(null);
-                      setBulkText('');
+                      setBulkText("");
                     },
                     onError: (error) => {
-                      console.error('[tasks] bulk add', error);
-                      toast.error(t('board.toast.saveFailed'));
+                      console.error("[tasks] bulk add", error);
+                      toast.error(t("board.toast.saveFailed"));
                     },
                   },
                 );
               }}
             >
-              {t('board.list.bulkCreate', {
-                count: bulkText.split('\n').filter((line) => line.trim()).length,
+              {t("board.list.bulkCreate", {
+                count: bulkText.split("\n").filter((line) => line.trim()).length,
               })}
             </Button>
           </DialogFooter>
@@ -749,30 +754,30 @@ export function BoardKanbanView({
       <AlertDialog open={!!archiving} onOpenChange={(open) => !open && setArchiving(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('board.archiveList.title')}</AlertDialogTitle>
+            <AlertDialogTitle>{t("board.archiveList.title")}</AlertDialogTitle>
             <AlertDialogDescription>
               {archivingCount > 0
-                ? t('board.archiveList.withTasks', { count: archivingCount })
-                : t('board.archiveList.description')}
+                ? t("board.archiveList.withTasks", { count: archivingCount })
+                : t("board.archiveList.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('board.actions.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel>{t("board.actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 const target = archiving;
                 setArchiving(null);
                 if (!target) return;
                 archiveList.mutate(target, {
-                  onSuccess: () => toast.success(t('board.toast.listArchived')),
+                  onSuccess: () => toast.success(t("board.toast.listArchived")),
                   onError: (error) => {
-                    console.error('[tasks] archive list', error);
+                    console.error("[tasks] archive list", error);
                     toast.error(taskErrorMessage(error, t));
                   },
                 });
               }}
             >
-              {t('board.actions.archiveList')}
+              {t("board.actions.archiveList")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -789,18 +794,13 @@ interface KanbanColumnProps {
   laneId?: string;
 }
 
-function KanbanColumn({
-  listId,
-  children,
-  className,
-  laneId,
-}: KanbanColumnProps) {
+function KanbanColumn({ listId, children, className, laneId }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
-    id: `column-${laneId ?? 'all'}-${listId}`,
-    data: { type: 'column', listId },
+    id: `column-${laneId ?? "all"}-${listId}`,
+    data: { type: "column", listId },
   });
   return (
-    <div ref={setNodeRef} className={cn(className, isOver && 'ring-2 ring-primary/40 rounded-2xl')}>
+    <div ref={setNodeRef} className={cn(className, isOver && "ring-2 ring-primary/40 rounded-2xl")}>
       {children}
     </div>
   );
@@ -853,26 +853,29 @@ const KanbanCard = memo(function KanbanCard({
   instanceId,
 }: KanbanCardProps) {
   const dndId = instanceId ?? task.id;
-  const { setNodeRef: setDragRef, attributes, listeners, isDragging } = useDraggable({
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({
     id: dndId,
-    data: { type: 'card', listId, taskId: task.id },
+    data: { type: "card", listId, taskId: task.id },
   });
   const { setNodeRef: setDropRef } = useDroppable({
     id: dndId,
-    data: { type: 'card', listId, taskId: task.id },
+    data: { type: "card", listId, taskId: task.id },
   });
 
   const overdue = isOverdue(task, today);
-  const isDone = task.status === 'done';
+  const isDone = task.status === "done";
   const tags = (task.tags ?? []).slice(0, 2).map(parseTag);
   /* Ce ACȚIUNE face bifa, nu titlul: cititorul de ecran anunța titlul, deci se
      putea marca din greșeală un task ca terminat. */
-  const toggleLabel = t(isDone ? 'board.card.toggleUndone' : 'board.card.toggleDone', {
+  const toggleLabel = t(isDone ? "board.card.toggleUndone" : "board.card.toggleDone", {
     title: task.title,
   });
-  const subtasksLabel = subtasks
-    ? t('board.card.subtasks', { done: subtasks.done, total: subtasks.total })
-    : undefined;
+  const subtasksLabel = subtasks ? t("board.card.subtasks", { done: subtasks.done, total: subtasks.total }) : undefined;
 
   return (
     <div
@@ -890,7 +893,7 @@ const KanbanCard = memo(function KanbanCard({
         // `KeyboardSensor` (Space pornește tragerea, săgețile o mută). Fără
         // compunerea asta, `onKeyDown`-ul propriu îl suprascria pe cel din
         // `{...listeners}` — cardul se anunța „draggable" și Space nu făcea nimic.
-        if (e.key === 'Enter' && e.target === e.currentTarget) {
+        if (e.key === "Enter" && e.target === e.currentTarget) {
           e.preventDefault();
           onOpen(task.id);
           return;
@@ -900,8 +903,8 @@ const KanbanCard = memo(function KanbanCard({
       className={cn(
         // `touch-none` e cerut de dnd-kit pe elementul tras: fără el browserul
         // consumă gestul ca scroll și tragerea se anulează.
-        'group cursor-grab touch-none rounded-xl border bg-card p-2.5 text-left shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
-        isDragging && 'opacity-40',
+        "group cursor-grab touch-none rounded-xl border bg-card p-2.5 text-left shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing",
+        isDragging && "opacity-40",
       )}
     >
       <div className="flex items-start gap-2">
@@ -917,26 +920,32 @@ const KanbanCard = memo(function KanbanCard({
           aria-label={toggleLabel}
           className="mt-0.5 shrink-0 rounded p-1 -m-1 text-muted-foreground transition-colors hover:text-emerald-600"
         >
-          {isDone ? (
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          ) : (
-            <Circle className="h-4 w-4" />
-          )}
+          {isDone ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4" />}
         </button>
 
-        <p className={cn('min-w-0 flex-1 whitespace-normal break-words text-sm font-semibold leading-snug', isDone && 'text-muted-foreground line-through')}>
+        <p
+          className={cn(
+            "min-w-0 flex-1 whitespace-normal break-words text-sm font-semibold leading-snug",
+            isDone && "text-muted-foreground line-through",
+          )}
+        >
           {task.title}
         </p>
       </div>
 
-      {(task.task_set || task.source_module !== 'manual') && (
+      {(task.task_set || task.source_module !== "manual") && (
         <p className="mt-1 flex items-center gap-1 pl-6 text-[10px] text-muted-foreground">
           <ListChecks className="h-2.5 w-2.5 shrink-0" />
           <span className="truncate">{task.task_set || task.source_module}</span>
         </p>
       )}
 
-      {(tags.length > 0 || task.due_date || task.assignees?.length || commentCount > 0 || task.is_recurring || subtasks) && (
+      {(tags.length > 0 ||
+        task.due_date ||
+        task.assignees?.length ||
+        commentCount > 0 ||
+        task.is_recurring ||
+        subtasks) && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-6">
           {tags.map((tag) => {
             const palette = TAG_COLORS[tag.color] ?? TAG_COLORS.gray;
@@ -951,26 +960,23 @@ const KanbanCard = memo(function KanbanCard({
             );
           })}
 
-          {task.priority !== 'medium' && (
+          {task.priority !== "medium" && (
             <span
-              className={cn(
-                'rounded border px-1 py-0.5 text-[10px] font-medium',
-                PRIORITY_META[task.priority].chip,
-              )}
+              className={cn("rounded border px-1 py-0.5 text-[10px] font-medium", PRIORITY_META[task.priority].chip)}
             >
-              {task.priority === 'urgent' ? '!!' : task.priority === 'high' ? '!' : '↓'}
+              {task.priority === "urgent" ? "!!" : task.priority === "high" ? "!" : "↓"}
             </span>
           )}
 
           {task.due_date && (
             <span
               className={cn(
-                'inline-flex items-center gap-1 text-[10px]',
-                overdue ? OVERDUE_TEXT : 'text-muted-foreground',
+                "inline-flex items-center gap-1 text-[10px]",
+                overdue ? OVERDUE_TEXT : "text-muted-foreground",
               )}
             >
               <CalendarDays className="h-2.5 w-2.5" />
-              {format(parseISO(task.due_date), 'd MMM', { locale })}
+              {format(parseISO(task.due_date), "d MMM", { locale })}
             </span>
           )}
 
@@ -984,8 +990,8 @@ const KanbanCard = memo(function KanbanCard({
           {subtasks && (
             <span
               className={cn(
-                'inline-flex items-center gap-0.5 text-[10px] tabular-nums',
-                subtasks.done === subtasks.total ? 'text-emerald-600' : 'text-muted-foreground',
+                "inline-flex items-center gap-0.5 text-[10px] tabular-nums",
+                subtasks.done === subtasks.total ? "text-emerald-600" : "text-muted-foreground",
               )}
               title={subtasksLabel}
             >
@@ -1001,7 +1007,7 @@ const KanbanCard = memo(function KanbanCard({
             </span>
           )}
 
-          {task.source_module !== 'manual' && (
+          {task.source_module !== "manual" && (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
               <ListChecks className="h-2.5 w-2.5" />
               {task.source_module}

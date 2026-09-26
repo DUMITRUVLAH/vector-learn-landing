@@ -428,7 +428,8 @@ const taskPatchSchema = z.object({
 });
 
 tasksRoutes.patch("/tasks/:id", zValidator("json", taskPatchSchema), async (c) => {
-  const { completed_at: _ignored, ...patch } = c.req.valid("json");
+  const patch = { ...c.req.valid("json") };
+  delete patch.completed_at;
   const task = await svc.updateTask(ctxOf(c), idParam(c), patch);
   return c.json({ task: taskDto(task) });
 });

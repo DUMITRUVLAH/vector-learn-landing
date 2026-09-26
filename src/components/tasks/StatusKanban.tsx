@@ -6,26 +6,34 @@
 // între coloane schimbă statusul, iar `updateTask` duce cardul și în coloana
 // potrivită din boardul lui — sincronizarea se întâmplă acolo, nu aici.
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from "react";
 import {
-  DndContext, KeyboardSensor, PointerSensor, TouchSensor, pointerWithin, useDraggable, useDroppable,
-  useSensor, useSensors, type DragEndEvent,
-} from '@dnd-kit/core';
-import { format, parseISO } from 'date-fns';
-import type { Locale } from 'date-fns';
-import { CheckCircle2, Circle, ListChecks, Plus } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useTasksT, type TasksT } from '@/lib/tasks/useTasksT';
-import { toast } from '@/lib/tasks/toast';
-import { Input } from '@/components/tasks/ui';
-import { getDateFnsLocale } from '@/lib/tasks/dateLocale';
-import { AssigneeAvatars } from '@/components/tasks/AssigneeAvatars';
-import { useCreateTask, useUpdateTask } from '@/hooks/useTaskBoards';
-import { taskErrorMessage } from '@/lib/tasks/errors';
-import { isOverdue, todayIso } from '@/lib/tasks/grouping';
-import { OVERDUE_TEXT, PRIORITY_META, STATUS_META, boardDotClass } from '@/lib/tasks/meta';
-import { TASK_STATUSES } from '@/lib/tasks/types';
-import type { AssignableUser, BoardTask, TaskStatus } from '@/lib/tasks/types';
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { format, parseISO } from "date-fns";
+import type { Locale } from "date-fns";
+import { CheckCircle2, Circle, ListChecks, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useTasksT, type TasksT } from "@/lib/tasks/useTasksT";
+import { toast } from "@/lib/tasks/toast";
+import { Input } from "@/components/tasks/ui";
+import { getDateFnsLocale } from "@/lib/tasks/dateLocale";
+import { AssigneeAvatars } from "@/components/tasks/AssigneeAvatars";
+import { useCreateTask, useUpdateTask } from "@/hooks/useTaskBoards";
+import { taskErrorMessage } from "@/lib/tasks/errors";
+import { isOverdue, todayIso } from "@/lib/tasks/grouping";
+import { OVERDUE_TEXT, PRIORITY_META, STATUS_META, boardDotClass } from "@/lib/tasks/meta";
+import { TASK_STATUSES } from "@/lib/tasks/types";
+import type { AssignableUser, BoardTask, TaskStatus } from "@/lib/tasks/types";
 
 interface StatusKanbanProps {
   tasks: BoardTask[];
@@ -62,7 +70,7 @@ export function StatusKanban({
   const updateTask = useUpdateTask();
   const createTask = useCreateTask();
   const [addingIn, setAddingIn] = useState<TaskStatus | null>(null);
-  const [newTitle, setNewTitle] = useState('');
+  const [newTitle, setNewTitle] = useState("");
 
   // Fără `TouchSensor`, pe telefon browserul consumă gestul ca scroll și emite
   // `pointercancel` — cardurile nu se pot muta cu degetul.
@@ -74,7 +82,10 @@ export function StatusKanban({
 
   const byStatus = useMemo(() => {
     const grouped: Record<TaskStatus, BoardTask[]> = {
-      todo: [], in_progress: [], pending: [], done: [],
+      todo: [],
+      in_progress: [],
+      pending: [],
+      done: [],
     };
     for (const task of tasks) {
       if (task.parent_task_id) continue;
@@ -86,7 +97,7 @@ export function StatusKanban({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
-    const nextStatus = String(over.id).replace('status-', '') as TaskStatus;
+    const nextStatus = String(over.id).replace("status-", "") as TaskStatus;
     const task = tasks.find((item) => item.id === active.id);
     if (!task || task.status === nextStatus) return;
 
@@ -94,8 +105,8 @@ export function StatusKanban({
       { id: task.id, patch: { status: nextStatus } },
       {
         onError: (error) => {
-          console.error('[tasks] status change', error);
-          toast.error(taskErrorMessage(error, t, 'board.toast.moveFailed'));
+          console.error("[tasks] status change", error);
+          toast.error(taskErrorMessage(error, t, "board.toast.moveFailed"));
         },
       },
     );
@@ -107,13 +118,13 @@ export function StatusKanban({
    * dinainte nu se mai ştie odată ce task-ul a fost închis.
    */
   const toggleDone = (task: BoardTask) => {
-    const nextStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done';
+    const nextStatus: TaskStatus = task.status === "done" ? "todo" : "done";
     updateTask.mutate(
       { id: task.id, patch: { status: nextStatus } },
       {
         onError: (error) => {
-          console.error('[tasks] toggle done', error);
-          toast.error(taskErrorMessage(error, t, 'board.toast.saveFailed'));
+          console.error("[tasks] toggle done", error);
+          toast.error(taskErrorMessage(error, t, "board.toast.saveFailed"));
         },
       },
     );
@@ -122,15 +133,15 @@ export function StatusKanban({
   const quickAdd = async (status: TaskStatus) => {
     const title = newTitle.trim();
     if (!title) return;
-    setNewTitle('');
+    setNewTitle("");
     setAddingIn(null);
     try {
       // Fără board explicit: serverul îl pune pe boardul implicit al
       // workspace-ului. Vederile astea sunt transversale, n-au un board „curent".
       await createTask.mutateAsync({ title, status, assignees: quickAddAssignees ?? [] });
     } catch (error) {
-      console.error('[tasks] status quick add', error);
-      toast.error(taskErrorMessage(error, t, 'board.toast.saveFailed'));
+      console.error("[tasks] status quick add", error);
+      toast.error(taskErrorMessage(error, t, "board.toast.saveFailed"));
     }
   };
 
@@ -146,7 +157,7 @@ export function StatusKanban({
             canAdd={canQuickAdd}
             onStartAdd={() => {
               setAddingIn(status);
-              setNewTitle('');
+              setNewTitle("");
             }}
           >
             {byStatus[status].map((task) => (
@@ -171,11 +182,11 @@ export function StatusKanban({
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === "Enter") {
                         e.preventDefault();
                         quickAdd(status);
                       }
-                      if (e.key === 'Escape') setAddingIn(null);
+                      if (e.key === "Escape") setAddingIn(null);
                     }}
                     /*
                       Blur-ul PĂSTREAZĂ ce ai scris, NU creează rândul. Varianta veche
@@ -187,7 +198,7 @@ export function StatusKanban({
                     onBlur={() => {
                       if (!newTitle.trim()) setAddingIn(null);
                     }}
-                    placeholder={t('board.card.newPlaceholder')}
+                    placeholder={t("board.card.newPlaceholder")}
                     className="h-8 border-0 px-1 text-sm shadow-none focus-visible:ring-0"
                   />
                 </div>
@@ -196,12 +207,12 @@ export function StatusKanban({
                   type="button"
                   onClick={() => {
                     setAddingIn(status);
-                    setNewTitle('');
+                    setNewTitle("");
                   }}
                   className="flex w-full items-center gap-1.5 rounded-xl px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  {t('board.card.add')}
+                  {t("board.card.add")}
                 </button>
               ))}
           </StatusColumn>
@@ -220,32 +231,20 @@ interface StatusColumnProps {
   children: ReactNode;
 }
 
-function StatusColumn({
-  status,
-  label,
-  count,
-  canAdd,
-  onStartAdd,
-  children,
-}: StatusColumnProps) {
+function StatusColumn({ status, label, count, canAdd, onStartAdd, children }: StatusColumnProps) {
   const { t } = useTasksT();
   const { setNodeRef, isOver } = useDroppable({ id: `status-${status}` });
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        'group/col w-[270px] shrink-0 rounded-2xl p-2',
+        "group/col w-[270px] shrink-0 rounded-2xl p-2",
         STATUS_META[status].columnBg,
-        isOver && 'ring-2 ring-primary/40',
+        isOver && "ring-2 ring-primary/40",
       )}
     >
       <div className="flex items-center gap-2 px-1 pb-2">
-        <h3
-          className={cn(
-            'rounded-md px-2 py-1 text-[13px] font-semibold',
-            STATUS_META[status].headerChip,
-          )}
-        >
+        <h3 className={cn("rounded-md px-2 py-1 text-[13px] font-semibold", STATUS_META[status].headerChip)}>
           {label}
         </h3>
         <span className="text-[11px] tabular-nums text-muted-foreground">{count}</span>
@@ -263,7 +262,7 @@ function StatusColumn({
       </div>
       {count === 0 && (
         <p className="mb-2 rounded-xl border border-dashed py-6 text-center text-[11px] text-muted-foreground">
-          {t('board.dropHere')}
+          {t("board.dropHere")}
         </p>
       )}
       <div className="space-y-2">{children}</div>
@@ -294,7 +293,7 @@ function StatusCard({
 }: StatusCardProps) {
   const { t } = useTasksT();
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: task.id });
-  const isDone = task.status === 'done';
+  const isDone = task.status === "done";
   return (
     /*
       Tot cardul e handle de tragere, nu doar titlul: pe un card de 3 rânduri,
@@ -313,7 +312,7 @@ function StatusCard({
         // Enter deschide; restul tastelor merg la `KeyboardSensor` (Space
         // pornește tragerea). Fără asta, handler-ul propriu îl suprascria pe
         // cel din `{...listeners}` și cardul „draggable" nu se putea muta.
-        if (e.key === 'Enter' && e.target === e.currentTarget) {
+        if (e.key === "Enter" && e.target === e.currentTarget) {
           e.preventDefault();
           onOpen();
           return;
@@ -321,8 +320,8 @@ function StatusCard({
         listeners?.onKeyDown?.(e);
       }}
       className={cn(
-        'cursor-grab touch-none rounded-xl border bg-card p-2.5 text-left shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
-        isDragging && 'opacity-40',
+        "cursor-grab touch-none rounded-xl border bg-card p-2.5 text-left shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing",
+        isDragging && "opacity-40",
       )}
     >
       <div className="flex items-start gap-2">
@@ -337,50 +336,44 @@ function StatusCard({
           aria-label={task.title}
           className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-emerald-600"
         >
-          {isDone ? (
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          ) : (
-            <Circle className="h-4 w-4" />
-          )}
+          {isDone ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4" />}
         </button>
         <p
           className={cn(
-            'min-w-0 flex-1 whitespace-normal break-words text-sm font-semibold leading-snug',
-            isDone && 'text-muted-foreground line-through',
+            "min-w-0 flex-1 whitespace-normal break-words text-sm font-semibold leading-snug",
+            isDone && "text-muted-foreground line-through",
           )}
         >
           {task.title}
         </p>
       </div>
-      {(task.task_set || task.source_module !== 'manual') && (
-        <p className="mt-1 truncate pl-6 text-[10px] text-muted-foreground">
-          {task.task_set || task.source_module}
-        </p>
+      {(task.task_set || task.source_module !== "manual") && (
+        <p className="mt-1 truncate pl-6 text-[10px] text-muted-foreground">{task.task_set || task.source_module}</p>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6">
         {boardName && task.board_id && (
           <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-            <span className={cn('h-1.5 w-1.5 rounded', boardDotClass(task.board_id))} />
+            <span className={cn("h-1.5 w-1.5 rounded", boardDotClass(task.board_id))} />
             {boardName}
           </span>
         )}
-        {task.priority !== 'medium' && (
-          <span className={cn('rounded border px-1 py-0.5 text-[10px]', PRIORITY_META[task.priority].chip)}>
-            {task.priority === 'urgent' ? '!!' : task.priority === 'high' ? '!' : '↓'}
+        {task.priority !== "medium" && (
+          <span className={cn("rounded border px-1 py-0.5 text-[10px]", PRIORITY_META[task.priority].chip)}>
+            {task.priority === "urgent" ? "!!" : task.priority === "high" ? "!" : "↓"}
           </span>
         )}
         {task.due_date && (
-          <span className={cn('text-[10px]', overdue ? OVERDUE_TEXT : 'text-muted-foreground')}>
-            {format(parseISO(task.due_date), 'd MMM', { locale })}
+          <span className={cn("text-[10px]", overdue ? OVERDUE_TEXT : "text-muted-foreground")}>
+            {format(parseISO(task.due_date), "d MMM", { locale })}
           </span>
         )}
         {subtasks && (
           <span
             className={cn(
-              'inline-flex items-center gap-0.5 text-[10px] tabular-nums',
-              subtasks.done === subtasks.total ? 'text-emerald-600' : 'text-muted-foreground',
+              "inline-flex items-center gap-0.5 text-[10px] tabular-nums",
+              subtasks.done === subtasks.total ? "text-emerald-600" : "text-muted-foreground",
             )}
-            title={t('board.card.subtasks', { done: subtasks.done, total: subtasks.total })}
+            title={t("board.card.subtasks", { done: subtasks.done, total: subtasks.total })}
           >
             <ListChecks className="h-2.5 w-2.5" />
             {subtasks.done}/{subtasks.total}
@@ -405,12 +398,8 @@ function StatusCard({
 }
 
 /** „Ana Popescu", „Ana Popescu +2" sau „Nimeni alocat". */
-function assigneeLabel(
-  ids: string[],
-  index: Record<string, AssignableUser>,
-  t: TasksT,
-): string {
-  if (ids.length === 0) return t('board.assignee.placeholder');
-  const first = index[ids[0]]?.full_name ?? t('board.detail.unknownUser');
+function assigneeLabel(ids: string[], index: Record<string, AssignableUser>, t: TasksT): string {
+  if (ids.length === 0) return t("board.assignee.placeholder");
+  const first = index[ids[0]]?.full_name ?? t("board.detail.unknownUser");
   return ids.length > 1 ? `${first} +${ids.length - 1}` : first;
 }

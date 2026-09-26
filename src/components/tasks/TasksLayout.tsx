@@ -139,7 +139,7 @@ function GlobalTaskSearch({ onNavigate, t }: { onNavigate: (to: string) => void;
                 setRaw("");
                 onNavigate(taskPath(task));
               }}
-              className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+              className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/10 focus-visible:bg-accent/10 focus-visible:outline-none"
             >
               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_META[task.status].dot)} aria-hidden="true" />
               <span className="truncate">{task.title}</span>

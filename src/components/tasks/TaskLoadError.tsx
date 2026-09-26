@@ -1,6 +1,6 @@
-import { AlertTriangle, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/tasks/ui';
-import { useTasksT } from '@/lib/tasks/useTasksT';
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/tasks/ui";
+import { useTasksT } from "@/lib/tasks/useTasksT";
 
 interface TaskLoadErrorProps {
   onRetry?: () => void;
@@ -20,15 +20,13 @@ export function TaskLoadError({ onRetry }: TaskLoadErrorProps) {
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-14 text-center">
       <AlertTriangle className="h-7 w-7 text-amber-500" />
       <div>
-        <p className="font-medium">{t('board.state.errorTitle')}</p>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-          {t('board.state.errorDescription')}
-        </p>
+        <p className="font-medium">{t("board.state.errorTitle")}</p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{t("board.state.errorDescription")}</p>
       </div>
       {onRetry && (
         <Button variant="outline" size="sm" className="mt-1 gap-1.5" onClick={onRetry}>
           <RefreshCw className="h-3.5 w-3.5" />
-          {t('board.state.retry')}
+          {t("board.state.retry")}
         </Button>
       )}
     </div>

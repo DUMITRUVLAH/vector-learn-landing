@@ -8,8 +8,8 @@
 // la termen. Cu una singură → bară de o zi (nu presupunem durata). Milestone →
 // romb, fără lățime.
 
-import { dueDay } from './grouping';
-import type { BoardTask } from './types';
+import { dueDay } from "./grouping";
+import type { BoardTask } from "./types";
 
 export interface GanttRow {
   task: BoardTask;
@@ -109,9 +109,7 @@ export function buildGanttLayout(
       isMilestone: task.is_milestone === true,
     }))
     .sort((a, b) =>
-      opts.preserveOrder
-        ? 0
-        : a.from.localeCompare(b.from) || a.task.title.localeCompare(b.task.title),
+      opts.preserveOrder ? 0 : a.from.localeCompare(b.from) || a.task.title.localeCompare(b.task.title),
     );
 
   return { from, to, totalDays: daysBetween(from, to) + 1, rows, undated };
@@ -120,7 +118,7 @@ export function buildGanttLayout(
 /** Marcajele de lună de pe antet: prima zi vizibilă a fiecărei luni. */
 export function monthTicks(from: string, totalDays: number): { iso: string; offsetDays: number }[] {
   const ticks: { iso: string; offsetDays: number }[] = [];
-  let seen = '';
+  let seen = "";
   for (let i = 0; i < totalDays; i++) {
     const iso = addDays(from, i);
     const month = iso.slice(0, 7);

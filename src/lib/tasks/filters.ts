@@ -5,19 +5,10 @@
 //
 // Etichetele NU stau aici — se traduc în UI prin `t()`; aici rămân doar cheile.
 
-import { dueDay } from './grouping';
-import type { BoardTask, TaskPriority, TaskStatus } from './types';
+import { dueDay } from "./grouping";
+import type { BoardTask, TaskPriority, TaskStatus } from "./types";
 
-export const PERIOD_PRESETS = [
-  'all',
-  'overdue',
-  'today',
-  'tomorrow',
-  'week',
-  'month',
-  'nodate',
-  'custom',
-] as const;
+export const PERIOD_PRESETS = ["all", "overdue", "today", "tomorrow", "week", "month", "nodate", "custom"] as const;
 export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
 
 /**
@@ -27,7 +18,7 @@ export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
  * se putea exprima: un om cu task-uri personale nu avea cum să le izoleze, iar
  * selectorul nici măcar nu oferea opțiunea.
  */
-export const PERSONAL_BOARD_FILTER = '__personal__';
+export const PERSONAL_BOARD_FILTER = "__personal__";
 
 export interface TaskFilterState {
   /** id de board, `PERSONAL_BOARD_FILTER` pentru cele fără board, `null` = toate. */
@@ -49,7 +40,7 @@ export interface TaskFilterState {
   includeDone?: boolean;
 }
 
-export const EMPTY_FILTERS: TaskFilterState = { period: 'all' };
+export const EMPTY_FILTERS: TaskFilterState = { period: "all" };
 
 export function activeFilterCount(f: TaskFilterState): number {
   let n = 0;
@@ -58,7 +49,7 @@ export function activeFilterCount(f: TaskFilterState): number {
   if (f.status) n++;
   if (f.priority) n++;
   if (f.tag) n++;
-  if (f.period && f.period !== 'all') n++;
+  if (f.period && f.period !== "all") n++;
   if (f.search && f.search.trim()) n++;
   return n;
 }
@@ -70,25 +61,25 @@ function addDaysIso(iso: string, days: number): string {
 }
 
 function matchesPeriod(task: BoardTask, f: TaskFilterState, today: string): boolean {
-  const period = f.period ?? 'all';
-  if (period === 'all') return true;
+  const period = f.period ?? "all";
+  if (period === "all") return true;
 
   const day = dueDay(task);
-  if (period === 'nodate') return !day;
+  if (period === "nodate") return !day;
   if (!day) return false;
 
   switch (period) {
-    case 'overdue':
-      return day < today && task.status !== 'done';
-    case 'today':
+    case "overdue":
+      return day < today && task.status !== "done";
+    case "today":
       return day === today;
-    case 'tomorrow':
+    case "tomorrow":
       return day === addDaysIso(today, 1);
-    case 'week':
+    case "week":
       return day >= today && day <= addDaysIso(today, 7);
-    case 'month':
+    case "month":
       return day.slice(0, 7) === today.slice(0, 7);
-    case 'custom':
+    case "custom":
       if (f.from && day < f.from) return false;
       if (f.to && day > f.to) return false;
       return true;
@@ -108,26 +99,25 @@ function matchesPerson(task: BoardTask, person: string): boolean {
  * NFD desparte litera de semnul combinant, apoi îl aruncăm.
  */
 export function searchKey(raw: string): string {
-  return raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 /** Eticheta stocată e „label" sau „label|culoare" — comparăm doar label-ul. */
 function tagLabel(raw: string): string {
-  const i = raw.lastIndexOf('|');
+  const i = raw.lastIndexOf("|");
   return (i === -1 ? raw : raw.slice(0, i)).trim().toLowerCase();
 }
 
-export function filterTasks(
-  tasks: BoardTask[],
-  f: TaskFilterState,
-  today: string,
-): BoardTask[] {
+export function filterTasks(tasks: BoardTask[], f: TaskFilterState, today: string): BoardTask[] {
   const wantedTag = f.tag ? tagLabel(f.tag) : null;
-  const needle = f.search?.trim() ? searchKey(f.search.trim()) : '';
+  const needle = f.search?.trim() ? searchKey(f.search.trim()) : "";
 
   return tasks.filter((t) => {
     if (!f.includeSubtasks && t.parent_task_id) return false;
-    if (!f.includeDone && t.status === 'done' && f.status !== 'done') return false;
+    if (!f.includeDone && t.status === "done" && f.status !== "done") return false;
     if (f.boardId === PERSONAL_BOARD_FILTER) {
       if (t.board_id) return false;
     } else if (f.boardId && t.board_id !== f.boardId) return false;
@@ -136,7 +126,7 @@ export function filterTasks(
     if (f.priority && t.priority !== f.priority) return false;
     if (wantedTag && !(t.tags ?? []).some((raw) => tagLabel(raw) === wantedTag)) return false;
     if (needle) {
-      const haystack = searchKey(`${t.title} ${t.description ?? ''} ${t.task_set ?? ''}`);
+      const haystack = searchKey(`${t.title} ${t.description ?? ""} ${t.task_set ?? ""}`);
       if (!haystack.includes(needle)) return false;
     }
     if (!matchesPeriod(t, f, today)) return false;
@@ -157,7 +147,7 @@ export function filterTasks(
 export function workloadByAssignee(tasks: BoardTask[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const t of tasks) {
-    if (t.status === 'done') continue;
+    if (t.status === "done") continue;
     const people = t.assignees?.length ? t.assignees : t.assigned_to ? [t.assigned_to] : [];
     if (people.length === 0) {
       out.__unassigned = (out.__unassigned ?? 0) + 1;
@@ -175,7 +165,7 @@ export function workloadByAssignee(tasks: BoardTask[]): Record<string, number> {
  * deloc — un singur caracter ar aduce jumătate din bază.
  */
 export function sanitizeSearchQuery(raw: string): string | null {
-  const clean = raw.trim().replace(/[,()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = raw.trim().replace(/[,()]/g, " ").replace(/\s+/g, " ").trim();
   return clean.length >= 2 ? clean : null;
 }
 
@@ -190,7 +180,7 @@ export function plannedAdhocCounts(tasks: BoardTask[]): { planned: number; adhoc
   let adhoc = 0;
   for (const task of tasks) {
     if (task.parent_task_id) continue;
-    if (task.source_template_id || task.source_module === 'template') planned++;
+    if (task.source_template_id || task.source_module === "template") planned++;
     else adhoc++;
   }
   return { planned, adhoc };
@@ -211,7 +201,7 @@ export function taskSetProgress(tasks: BoardTask[]): TaskSetProgress[] {
     if (!name || task.parent_task_id) continue;
     const group = (groups[name] ??= { done: 0, total: 0 });
     group.total++;
-    if (task.status === 'done') group.done++;
+    if (task.status === "done") group.done++;
   }
   return Object.entries(groups)
     .map(([name, value]) => ({

@@ -7,14 +7,14 @@
 // task-ul, deci apăsarea lui se termina cu „nu ai dreptul" pe propriul task —
 // exact butonul-activ-care-eșuează din CLAUDE.md #24.
 
-import type { BoardTask, TaskBoard } from './types';
+import type { BoardTask, TaskBoard } from "./types";
 
 export interface TaskRightsContext {
   userId: string | null | undefined;
   isHRAdmin: boolean;
   isSuperAdmin: boolean;
   /** Boardul task-ului, dacă e cunoscut. `can_edit` vine din `hr_task_list_boards`. */
-  board?: Pick<TaskBoard, 'id' | 'created_by' | 'can_edit'> | null;
+  board?: Pick<TaskBoard, "id" | "created_by" | "can_edit"> | null;
 }
 
 /**
@@ -26,7 +26,7 @@ export interface TaskRightsContext {
  * creatorului lui.
  */
 export function canFullyEditTask(
-  task: Pick<BoardTask, 'created_by' | 'board_id'> | null | undefined,
+  task: Pick<BoardTask, "created_by" | "board_id"> | null | undefined,
   ctx: TaskRightsContext,
 ): boolean {
   if (!task) return false;
@@ -45,7 +45,7 @@ export function canFullyEditTask(
 
 /** Responsabilul poate elimina doar un subtask pe care este alocat. */
 export function canDeleteSubtask(
-  task: Pick<BoardTask, 'created_by' | 'board_id' | 'parent_task_id' | 'assignees'> | null | undefined,
+  task: Pick<BoardTask, "created_by" | "board_id" | "parent_task_id" | "assignees"> | null | undefined,
   ctx: TaskRightsContext,
 ): boolean {
   if (!task || !ctx.userId || !task.parent_task_id) return false;
@@ -57,4 +57,4 @@ export function canDeleteSubtask(
  * Ce poate face un responsabil fără drept deplin: să mute progresul. Îl ținem
  * explicit ca lista de câmpuri permise să fie citibilă dintr-un singur loc.
  */
-export const ASSIGNEE_EDITABLE_FIELDS = ['status', 'actual_minutes'] as const;
+export const ASSIGNEE_EDITABLE_FIELDS = ["status", "actual_minutes"] as const;

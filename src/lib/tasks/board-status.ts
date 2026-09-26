@@ -7,7 +7,7 @@
 // mapează la statusuri (mapare tolerantă la diacritice și majuscule, fiindcă
 // utilizatorii își redenumesc coloanele).
 
-import type { TaskStatus } from './types';
+import type { TaskStatus } from "./types";
 
 /** Numele coloanelor create implicit pe fiecare board nou. */
 export const DEFAULT_LISTS: {
@@ -17,10 +17,10 @@ export const DEFAULT_LISTS: {
   color: string;
   maps_to_status: TaskStatus;
 }[] = [
-  { name: 'De făcut', position: 1024, is_done_list: false, color: 'pastel-sky', maps_to_status: 'todo' },
-  { name: 'În lucru', position: 2048, is_done_list: false, color: 'pastel-lavender', maps_to_status: 'in_progress' },
-  { name: 'În așteptare', position: 3072, is_done_list: false, color: 'pastel-peach', maps_to_status: 'pending' },
-  { name: 'Gata', position: 4096, is_done_list: true, color: 'pastel-mint', maps_to_status: 'done' },
+  { name: "De făcut", position: 1024, is_done_list: false, color: "pastel-sky", maps_to_status: "todo" },
+  { name: "În lucru", position: 2048, is_done_list: false, color: "pastel-lavender", maps_to_status: "in_progress" },
+  { name: "În așteptare", position: 3072, is_done_list: false, color: "pastel-peach", maps_to_status: "pending" },
+  { name: "Gata", position: 4096, is_done_list: true, color: "pastel-mint", maps_to_status: "done" },
 ];
 
 /**
@@ -34,10 +34,15 @@ export const DEFAULT_LIST_KEYS: {
   color: string;
   maps_to_status: TaskStatus;
 }[] = [
-  { key: 'board.defaultLists.todo', is_done_list: false, color: 'pastel-sky', maps_to_status: 'todo' },
-  { key: 'board.defaultLists.inProgress', is_done_list: false, color: 'pastel-lavender', maps_to_status: 'in_progress' },
-  { key: 'board.defaultLists.pending', is_done_list: false, color: 'pastel-peach', maps_to_status: 'pending' },
-  { key: 'board.defaultLists.done', is_done_list: true, color: 'pastel-mint', maps_to_status: 'done' },
+  { key: "board.defaultLists.todo", is_done_list: false, color: "pastel-sky", maps_to_status: "todo" },
+  {
+    key: "board.defaultLists.inProgress",
+    is_done_list: false,
+    color: "pastel-lavender",
+    maps_to_status: "in_progress",
+  },
+  { key: "board.defaultLists.pending", is_done_list: false, color: "pastel-peach", maps_to_status: "pending" },
+  { key: "board.defaultLists.done", is_done_list: true, color: "pastel-mint", maps_to_status: "done" },
 ];
 
 function normalize(name: string): string {
@@ -45,9 +50,9 @@ function normalize(name: string): string {
   // „În așteptare" și „In asteptare" devin același lucru.
   return name
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -58,11 +63,10 @@ function normalize(name: string): string {
 export function statusFromListName(name: string | null | undefined): TaskStatus | null {
   if (!name) return null;
   const n = normalize(name);
-  if (['de facut', 'backlog', 'todo', 'de realizat', 'nou'].includes(n)) return 'todo';
-  if (['in lucru', 'in progres', 'in progress', 'in curs'].includes(n)) return 'in_progress';
-  if (['in asteptare', 'asteptare', 'pending', 'blocat', 'review', 'de revizuit'].includes(n))
-    return 'pending';
-  if (['gata', 'done', 'finalizat', 'terminat', 'complet'].includes(n)) return 'done';
+  if (["de facut", "backlog", "todo", "de realizat", "nou"].includes(n)) return "todo";
+  if (["in lucru", "in progres", "in progress", "in curs"].includes(n)) return "in_progress";
+  if (["in asteptare", "asteptare", "pending", "blocat", "review", "de revizuit"].includes(n)) return "pending";
+  if (["gata", "done", "finalizat", "terminat", "complet"].includes(n)) return "done";
   return null;
 }
 
@@ -80,10 +84,10 @@ export function moveStatusPatch(
   targetList: { is_done_list: boolean; name?: string; maps_to_status?: TaskStatus | null } | null,
   now: () => string = () => new Date().toISOString(),
 ): MovePatch {
-  const wasDone = currentStatus === 'done';
+  const wasDone = currentStatus === "done";
 
   if (targetList?.is_done_list) {
-    return wasDone ? {} : { status: 'done', completed_at: now() };
+    return wasDone ? {} : { status: "done", completed_at: now() };
   }
 
   // `maps_to_status` (migrația v13) e sursa de adevăr. Numele coloanei e text
@@ -91,12 +95,12 @@ export function moveStatusPatch(
   // care lucra în rusă pierdea tăcut sincronizarea Kanban ↔ status.
   const mapped = targetList?.maps_to_status ?? statusFromListName(targetList?.name);
   if (mapped && mapped !== currentStatus) {
-    return { status: mapped, completed_at: mapped === 'done' ? now() : null };
+    return { status: mapped, completed_at: mapped === "done" ? now() : null };
   }
 
   // Scos din coloana terminală, dar în una fără nume cunoscut: nu mai e gata.
   if (wasDone && targetList && !targetList.is_done_list) {
-    return { status: 'in_progress', completed_at: null };
+    return { status: "in_progress", completed_at: null };
   }
 
   return {};
@@ -117,19 +121,17 @@ export function listIdForStatus(
   const doneList = lists.find((l) => l.is_done_list);
   const firstNonDone = lists.find((l) => !l.is_done_list);
 
-  if (nextStatus === 'done') {
+  if (nextStatus === "done") {
     if (doneList && currentListId !== doneList.id) return doneList.id;
     return undefined;
   }
 
   // Un status cu coloană proprie pe board → cardul se duce acolo.
-  const named = lists.find(
-    (l) => !l.is_done_list && (l.maps_to_status ?? statusFromListName(l.name)) === nextStatus,
-  );
+  const named = lists.find((l) => !l.is_done_list && (l.maps_to_status ?? statusFromListName(l.name)) === nextStatus);
   if (named && currentListId !== named.id) return named.id;
 
   // Ieșirea din „Gata" fără coloană dedicată: revine în prima coloană activă.
-  if (currentStatus === 'done' && doneList && currentListId === doneList.id && firstNonDone) {
+  if (currentStatus === "done" && doneList && currentListId === doneList.id && firstNonDone) {
     return firstNonDone.id;
   }
   return undefined;

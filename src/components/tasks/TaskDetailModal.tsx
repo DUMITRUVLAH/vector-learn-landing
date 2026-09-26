@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/tasks/ui';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
-import type { BoardTask, TaskList } from '@/lib/tasks/types';
+import { useEffect } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/tasks/ui";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import { TaskDetailPanel } from "@/components/tasks/TaskDetailPanel";
+import type { BoardTask, TaskList } from "@/lib/tasks/types";
 
 interface TaskDetailModalProps {
   task: BoardTask;
@@ -36,11 +36,11 @@ function usePinnedViewport() {
       if (vv.height < window.innerHeight - 4) return;
       if (window.scrollY !== 0) window.scrollTo(0, 0);
     };
-    vv.addEventListener('resize', pin);
-    vv.addEventListener('scroll', pin);
+    vv.addEventListener("resize", pin);
+    vv.addEventListener("scroll", pin);
     return () => {
-      vv.removeEventListener('resize', pin);
-      vv.removeEventListener('scroll', pin);
+      vv.removeEventListener("resize", pin);
+      vv.removeEventListener("scroll", pin);
       // Și la închiderea cartonașului: dacă tastatura tocmai a dispărut, ecranul
       // de dedesubt ar rămâne derulat degeaba.
       if (window.scrollY !== 0) window.scrollTo(0, 0);
@@ -86,7 +86,7 @@ export function TaskDetailModal(props: TaskDetailModalProps) {
         Centrarea se întoarce de la `sm` în sus, unde e o fereastră, nu un ecran.
       */}
       <DialogContent className="grid left-0 top-0 h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden rounded-none p-0 data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:left-[50%] sm:top-[50%] sm:h-[min(92dvh,860px)] sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-1rem)] sm:max-w-[720px] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-2xl sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%] [&>button]:hidden">
-        <DialogTitle className="sr-only">{t('board.detail.dialogTitle')}</DialogTitle>
+        <DialogTitle className="sr-only">{t("board.detail.dialogTitle")}</DialogTitle>
         <TaskDetailPanel {...props} asModal />
       </DialogContent>
     </Dialog>

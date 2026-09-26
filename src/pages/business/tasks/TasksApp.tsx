@@ -21,7 +21,7 @@ import { useTasksMe } from "@/hooks/useTaskBoards";
 import { RESERVED_SEGMENTS, TASKS_BOARDS, boardIdFromPath, useTasksPathname } from "@/lib/tasks/router";
 import { useTasksT } from "@/lib/tasks/useTasksT";
 
-export const tasksQueryClient = new QueryClient({
+const tasksQueryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // O singură reîncercare: un refuz de drept (403) nu devine acceptat la a treia încercare.

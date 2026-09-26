@@ -5,10 +5,10 @@
 // iar ocurențele viitoare nu există ca rânduri — se nasc abia la finalizarea
 // celei curente. Deci marcajul e singurul semn că seria continuă.
 
-import { Repeat } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useTasksT } from '@/lib/tasks/useTasksT';
-import { parseRecurrence } from '@/lib/tasks/recurrence';
+import { Repeat } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useTasksT } from "@/lib/tasks/useTasksT";
+import { parseRecurrence } from "@/lib/tasks/recurrence";
 
 /** Rezumatul regulii, gata de pus în `title` sau lângă iconiță. */
 export function useRecurrenceLabel(rule: string | null | undefined): string {
@@ -17,10 +17,10 @@ export function useRecurrenceLabel(rule: string | null | undefined): string {
   const frecventa = t(`board.recurrence.${parsed.frequency}`).toLowerCase();
   const baza =
     parsed.interval === 1
-      ? t('board.recurrence.summary.simple', { frequency: frecventa })
-      : t('board.recurrence.summary.every', { count: parsed.interval, frequency: frecventa });
-  if (parsed.frequency !== 'weekly' || parsed.days.length === 0) return baza;
-  const zile = parsed.days.map((day) => t(`board.recurrence.days.${day}`)).join(', ');
+      ? t("board.recurrence.summary.simple", { frequency: frecventa })
+      : t("board.recurrence.summary.every", { count: parsed.interval, frequency: frecventa });
+  if (parsed.frequency !== "weekly" || parsed.days.length === 0) return baza;
+  const zile = parsed.days.map((day) => t(`board.recurrence.days.${day}`)).join(", ");
   return `${baza} · ${zile}`;
 }
 
@@ -35,10 +35,7 @@ export function RecurrenceBadge({ rule, className, withText = false }: Recurrenc
   return (
     // `title` nativ, nu Tooltip: pe un board sunt sute de carduri, iar
     // fiecare Tooltip e o rădăcină cu context și portal.
-    <span
-      className={cn('inline-flex items-center gap-1 text-[10px] text-muted-foreground', className)}
-      title={label}
-    >
+    <span className={cn("inline-flex items-center gap-1 text-[10px] text-muted-foreground", className)} title={label}>
       <Repeat className="h-2.5 w-2.5 shrink-0" />
       {withText && <span className="truncate">{label}</span>}
     </span>

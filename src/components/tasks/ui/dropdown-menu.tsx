@@ -36,7 +36,7 @@ import {
 const PANEL =
   "z-[80] min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground outline-none animate-in fade-in-0 zoom-in-95";
 const ITEM =
-  "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
+  "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent/10 hover:text-primary focus:bg-accent/10 focus:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
 
 interface RootContextValue {
   open: boolean;
@@ -317,7 +317,7 @@ export const DropdownMenuSubTrigger = forwardRef<HTMLDivElement, HTMLAttributes<
         aria-haspopup="menu"
         aria-expanded={sub.open}
         data-state={sub.open ? "open" : "closed"}
-        className={cn(ITEM, "data-[state=open]:bg-accent", inset && "pl-8", className)}
+        className={cn(ITEM, "data-[state=open]:bg-accent/10", inset && "pl-8", className)}
         onPointerEnter={() => {
           sub.cancelClose();
           sub.setOpen(true);

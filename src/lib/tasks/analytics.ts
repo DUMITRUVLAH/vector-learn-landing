@@ -5,8 +5,8 @@
 // (ex.: „rata de finalizare nu se raportează la task-uri care nici nu existau
 // în perioada aleasă").
 
-import { dueDay } from './grouping';
-import type { BoardTask, TaskStatus } from './types';
+import { dueDay } from "./grouping";
+import type { BoardTask, TaskStatus } from "./types";
 
 export interface TaskKpis {
   total: number;
@@ -32,16 +32,10 @@ function addDaysIso(iso: string, days: number): string {
 }
 
 function diffDays(from: string, to: string): number {
-  return Math.round(
-    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000,
-  );
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
-export function computeKpis(
-  tasks: BoardTask[],
-  today: string,
-  windowDays = 30,
-): TaskKpis {
+export function computeKpis(tasks: BoardTask[], today: string, windowDays = 30): TaskKpis {
   const top = tasks.filter((task) => !task.parent_task_id);
   const windowStart = addDaysIso(today, -windowDays);
 
@@ -53,7 +47,7 @@ export function computeKpis(
   let cycleCount = 0;
 
   for (const task of top) {
-    const isDone = task.status === 'done';
+    const isDone = task.status === "done";
     if (isDone) {
       done++;
       const completed = isoDay(task.completed_at);
@@ -95,11 +89,7 @@ export interface TrendPoint {
 }
 
 /** Serie zilnică creat/finalizat pentru graficul de tendință. */
-export function completionTrend(
-  tasks: BoardTask[],
-  today: string,
-  days = 30,
-): TrendPoint[] {
+export function completionTrend(tasks: BoardTask[], today: string, days = 30): TrendPoint[] {
   const series: Record<string, TrendPoint> = {};
   for (let i = days - 1; i >= 0; i--) {
     const day = addDaysIso(today, -i);
@@ -136,7 +126,7 @@ export function loadByPerson(tasks: BoardTask[], today: string): PersonLoad[] {
     const people = task.assignees ?? [];
     if (people.length === 0) continue;
     const due = dueDay(task);
-    const isDone = task.status === 'done';
+    const isDone = task.status === "done";
 
     for (const userId of people) {
       const row = (map[userId] ??= { userId, open: 0, overdue: 0, done: 0 });
@@ -172,7 +162,7 @@ export function statsByBoard(tasks: BoardTask[], today: string): BoardStat[] {
       pct: 0,
     });
     row.total++;
-    if (task.status === 'done') row.done++;
+    if (task.status === "done") row.done++;
     else {
       const due = dueDay(task);
       if (due && due < today) row.overdue++;
@@ -199,11 +189,11 @@ export function dueSoon(tasks: BoardTask[], today: string, days = 7): BoardTask[
   const limit = addDaysIso(today, days);
   return tasks
     .filter((task) => {
-      if (task.parent_task_id || task.status === 'done') return false;
+      if (task.parent_task_id || task.status === "done") return false;
       const due = dueDay(task);
       return !!due && due >= today && due <= limit;
     })
-    .sort((a, b) => (dueDay(a) ?? '').localeCompare(dueDay(b) ?? ''));
+    .sort((a, b) => (dueDay(a) ?? "").localeCompare(dueDay(b) ?? ""));
 }
 
 /**
@@ -213,9 +203,6 @@ export function dueSoon(tasks: BoardTask[], today: string, days = 7): BoardTask[
  */
 export function pendingApprovalsFor(tasks: BoardTask[], userId: string): BoardTask[] {
   return tasks.filter(
-    (task) =>
-      task.status !== 'done' &&
-      !task.parent_task_id &&
-      (task.approver_ids ?? []).includes(userId),
+    (task) => task.status !== "done" && !task.parent_task_id && (task.approver_ids ?? []).includes(userId),
   );
 }

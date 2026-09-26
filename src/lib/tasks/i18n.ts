@@ -152,7 +152,7 @@ export const ro = {
 
   "board.boardsTitle": "Boarduri",
 
-  "board.boardsSubtitle": "Proiectele și echipele tale. Fiecare board are membri expliciți — vezi doar boardurile în care ești.",
+  "board.boardsSubtitle": "Proiectele și echipele tale. Vezi boardurile pe care ești membru, pe cele ale echipelor tale și pe cele deschise întregii organizații.",
 
   "board.noDescription": "Fără descriere",
 
@@ -192,7 +192,7 @@ export const ro = {
   "board.empty.description": "Creează primul board pentru echipa ta.",
 
   "board.notFound.title": "Boardul nu există sau nu ai acces",
-  "board.notFound.description": "Cere-i unui administrator al boardului să te adauge ca membru.",
+  "board.notFound.description": "Cere-i unui administrator al boardului să te adauge ca membru, sau să deschidă boardul echipei tale.",
   "board.notFound.back": "Înapoi la boarduri",
 
   "board.actions.rename": "Redenumește",
@@ -701,6 +701,8 @@ export const ro = {
   "board.deps.remove": "Elimină dependența",
   "board.attachments.remove": "Elimină fișierul",
   "board.attachments.typeNotAllowed": "Tipul fișierului nu este permis. Acceptate: PDF, imagini, Word, Excel, PowerPoint, text, CSV, ZIP.",
+  "board.actions.menu": "Acțiuni pentru boardul „{name}”",
+  "board.teams.menu": "Acțiuni pentru echipa „{name}”",
 } as const;
 
 export const en: Translated<typeof ro> = {
@@ -843,7 +845,7 @@ export const en: Translated<typeof ro> = {
 
   "board.boardsTitle": "Boards",
 
-  "board.boardsSubtitle": "Your projects and teams. Every board has explicit members — you only see the boards you belong to.",
+  "board.boardsSubtitle": "Your projects and teams. You see the boards you are a member of, your teams' boards and the boards open to the whole organisation.",
 
   "board.noDescription": "No description",
 
@@ -883,7 +885,7 @@ export const en: Translated<typeof ro> = {
   "board.empty.description": "Create the first board for your team.",
 
   "board.notFound.title": "Board not found or no access",
-  "board.notFound.description": "Ask a board admin to add you as a member.",
+  "board.notFound.description": "Ask a board admin to add you as a member, or to open the board to your team.",
   "board.notFound.back": "Back to boards",
 
   "board.actions.rename": "Rename",
@@ -1392,6 +1394,8 @@ export const en: Translated<typeof ro> = {
   "board.deps.remove": "Remove dependency",
   "board.attachments.remove": "Remove file",
   "board.attachments.typeNotAllowed": "This file type is not allowed. Accepted: PDF, images, Word, Excel, PowerPoint, text, CSV, ZIP.",
+  "board.actions.menu": "Actions for board “{name}”",
+  "board.teams.menu": "Actions for team “{name}”",
 };
 
 export type TasksKey = keyof typeof ro;
