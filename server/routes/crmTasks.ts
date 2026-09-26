@@ -11,7 +11,7 @@
  * PATCH  /api/crm/tasks/:id                — editare titlu/scadență/responsabil
  * POST   /api/crm/tasks/:id/complete       — marchează încheiat (status "done" + completedAt)
  * POST   /api/crm/tasks/:id/reopen         — redeschide (status "open", completedAt golit)
- * POST   /api/crm/tasks/:id/snooze         — { days } → împinge scadența înainte cu N zile
+ * POST   /api/crm/tasks/:id/snooze         — { days } → împinge scadența înainte cu N zile (rămâne „open”)
  * DELETE /api/crm/tasks/:id                — șterge taskul
  * GET    /api/crm/tasks/today              — cele 4 gălețile „de azi" (opțional ?owner=<userId>)
  *
@@ -23,28 +23,33 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmLeadTasks, type NewCrmLeadTask } from "../db/schema/crmTasks";
-import { leads } from "../db/schema/leads";
+import { leads, leadInteractions } from "../db/schema/leads";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { getTodayForTenant } from "../lib/crm/today";
+import { getTodayForTenant, PENDING_TASK_STATUSES } from "../lib/crm/today";
 
 export const crmTasksRoutes = new Hono<{ Variables: AuthVariables }>();
 crmTasksRoutes.use("/*", requireAuth);
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
+// `.trim()` înainte de `.min(1)`: un titlu doar din spații trecea de validare pe textul brut și se
+// salva gol după curățarea din handler — un rând fără text în listă și în clopoțel.
+const taskTitle = z.string().trim().min(1, "Titlul este obligatoriu").max(300);
+
 const createTaskSchema = z.object({
   leadId: z.string().uuid("Lead invalid"),
-  title: z.string().min(1, "Titlul este obligatoriu").max(300),
+  title: taskTitle,
   dueAt: z.string().datetime().optional().nullable(),
   dueHasTime: z.boolean().optional(),
   assignedTo: z.string().uuid().optional().nullable(),
 });
 
 const updateTaskSchema = z.object({
-  title: z.string().min(1, "Titlul este obligatoriu").max(300).optional(),
+  title: taskTitle.optional(),
   dueAt: z.string().datetime().optional().nullable(),
   dueHasTime: z.boolean().optional(),
   assignedTo: z.string().uuid().optional().nullable(),
@@ -53,6 +58,20 @@ const updateTaskSchema = z.object({
 const snoozeTaskSchema = z.object({
   days: z.number().int().min(1).max(365),
 });
+
+/**
+ * Responsabilul unui task trebuie să fie un om ACTIV din workspace-ul curent. Fără verificarea
+ * asta, un id inexistent pica abia la cheia străină (500), iar id-ul unui om din alt workspace
+ * trecea: taskul ar fi ajuns în clopoțelul unui străin (`?owner=`), iar nimeni de aici nu l-ar
+ * mai fi văzut ca al lui.
+ */
+async function isAssignableMember(tenantId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, userId), eq(users.tenantId, tenantId), eq(users.isActive, true), isNull(users.deletedAt)));
+  return !!row;
+}
 
 // ─── GET / — taskurile unui lead SAU cele „upcoming" pe tot tenantul ─────────
 
@@ -104,7 +123,8 @@ crmTasksRoutes.get("/", async (c) => {
       .where(
         and(
           eq(crmLeadTasks.tenantId, tenantId),
-          eq(crmLeadTasks.status, "open"),
+          // „snoozed” doar pentru rândurile vechi — amânarea scrie acum „open” (vezi /snooze).
+          inArray(crmLeadTasks.status, [...PENDING_TASK_STATUSES]),
           isNotNull(crmLeadTasks.dueAt),
           // Clopoțelul unui agent arată munca LUI. Taskurile nealocate intră și ele: nimeni nu le
           // are, deci trebuie să le vadă cineva — altfel rămân restante fără să știe nimeni.
@@ -149,6 +169,10 @@ crmTasksRoutes.post("/", zValidator("json", createTaskSchema), async (c) => {
     .where(and(eq(leads.id, body.leadId), eq(leads.tenantId, tenantId)));
   if (!lead) return c.json({ error: "not_found" }, 404);
 
+  if (body.assignedTo && !(await isAssignableMember(tenantId, body.assignedTo))) {
+    return c.json({ error: "invalid_assignee" }, 400);
+  }
+
   const values: NewCrmLeadTask = {
     tenantId,
     leadId: body.leadId,
@@ -173,15 +197,29 @@ crmTasksRoutes.patch("/:id", zValidator("json", updateTaskSchema), async (c) => 
   const body = c.req.valid("json");
 
   const [existing] = await db
-    .select({ id: crmLeadTasks.id })
+    .select({ id: crmLeadTasks.id, dueAt: crmLeadTasks.dueAt, assignedTo: crmLeadTasks.assignedTo })
     .from(crmLeadTasks)
     .where(and(eq(crmLeadTasks.id, id), eq(crmLeadTasks.tenantId, user.tenantId)));
   if (!existing) return c.json({ error: "not_found" }, 404);
 
+  // Verificăm doar un responsabil NOU: un formular care retrimite responsabilul actual (între
+  // timp dezactivat) nu trebuie să blocheze editarea titlului sau a scadenței.
+  if (
+    body.assignedTo &&
+    body.assignedTo !== existing.assignedTo &&
+    !(await isAssignableMember(user.tenantId, body.assignedTo))
+  ) {
+    return c.json({ error: "invalid_assignee" }, 400);
+  }
+
   const updates: Partial<NewCrmLeadTask> = { updatedAt: new Date() };
   if (body.title !== undefined) updates.title = body.title.trim();
   if (body.dueAt !== undefined) updates.dueAt = body.dueAt ? new Date(body.dueAt) : null;
-  if (body.dueHasTime !== undefined) updates.dueHasTime = !!body.dueAt && body.dueHasTime;
+  // Ora are sens doar pe o zi: se judecă după scadența care RĂMÂNE după editare — cea trimisă
+  // acum, altfel cea deja salvată. Înainte, `{ dueHasTime: true }` singur (adaugi ora pe un task
+  // „toată ziua”) se salva fals, fiindcă se uita doar la `body.dueAt`, absent din cerere.
+  const effectiveDueAt = body.dueAt !== undefined ? body.dueAt : existing.dueAt;
+  if (body.dueHasTime !== undefined) updates.dueHasTime = !!effectiveDueAt && body.dueHasTime;
   else if (body.dueAt === null) updates.dueHasTime = false;
   if (body.assignedTo !== undefined) updates.assignedTo = body.assignedTo;
 
@@ -201,19 +239,47 @@ crmTasksRoutes.post("/:id/complete", async (c) => {
   const id = c.req.param("id");
 
   const [existing] = await db
-    .select({ id: crmLeadTasks.id })
+    .select({ id: crmLeadTasks.id, status: crmLeadTasks.status, leadId: crmLeadTasks.leadId, title: crmLeadTasks.title })
     .from(crmLeadTasks)
     .where(and(eq(crmLeadTasks.id, id), eq(crmLeadTasks.tenantId, user.tenantId)));
   if (!existing) return c.json({ error: "not_found" }, 404);
 
+  // Al doilea „încheie” pe un task deja încheiat e un no-op: nu mută completedAt și nu dublează
+  // urma din istoric.
+  if (existing.status === "done") {
+    const [row] = await db
+      .select()
+      .from(crmLeadTasks)
+      .where(and(eq(crmLeadTasks.id, id), eq(crmLeadTasks.tenantId, user.tenantId)));
+    return c.json(row);
+  }
+
   const now = new Date();
-  // Un task încheiat iese din restanțe: „azi" citește doar taskuri status="open" (vezi
+  // Un task încheiat iese din restanțe: „azi" citește doar taskurile încă de făcut (vezi
   // server/lib/crm/today.ts) — „done" cu completedAt setat dispare automat de acolo.
   const [row] = await db
     .update(crmLeadTasks)
     .set({ status: "done", completedAt: now, updatedAt: now })
     .where(and(eq(crmLeadTasks.id, id), eq(crmLeadTasks.tenantId, user.tenantId)))
     .returning();
+
+  // T-CRM-107-3: încheierea lasă o urmă „system” în istoricul leadului — cine se uită pe fișă vede
+  // ce s-a făcut și când, nu doar un rând bifat în tabul de taskuri. Best-effort: dacă scrierea
+  // urmei eșuează, taskul rămâne încheiat (urma e o consecință, nu o condiție).
+  try {
+    await db.insert(leadInteractions).values({
+      tenantId: user.tenantId,
+      leadId: existing.leadId,
+      type: "system",
+      direction: "internal",
+      body: `Task încheiat: „${existing.title}”`,
+      metadata: { kind: "task_completed", taskId: existing.id },
+      userId: user.id,
+      occurredAt: now,
+    });
+  } catch (e) {
+    console.error("[crm/tasks] urma de încheiere n-a putut fi scrisă:", e instanceof Error ? e.message : e);
+  }
 
   return c.json(row);
 });
@@ -247,10 +313,12 @@ crmTasksRoutes.post("/:id/snooze", zValidator("json", snoozeTaskSchema), async (
   const { days } = c.req.valid("json");
 
   const [existing] = await db
-    .select({ id: crmLeadTasks.id, dueAt: crmLeadTasks.dueAt })
+    .select({ id: crmLeadTasks.id, dueAt: crmLeadTasks.dueAt, status: crmLeadTasks.status })
     .from(crmLeadTasks)
     .where(and(eq(crmLeadTasks.id, id), eq(crmLeadTasks.tenantId, user.tenantId)));
   if (!existing) return c.json({ error: "not_found" }, 404);
+  // Un task încheiat nu are ce amâna; UI-ul ascunde oricum butonul pe rândurile bifate.
+  if (existing.status === "done") return c.json({ error: "task_done" }, 409);
 
   // Amânarea ÎMPINGE scadența cu `days` zile înainte — nu o șterge niciodată. Bază: scadența
   // curentă dacă există, altfel „acum" (un task fără scadență, amânat, primește una nouă).
@@ -259,7 +327,10 @@ crmTasksRoutes.post("/:id/snooze", zValidator("json", snoozeTaskSchema), async (
 
   const [row] = await db
     .update(crmLeadTasks)
-    .set({ dueAt: newDueAt, status: "snoozed", updatedAt: new Date() })
+    // Status „open”, nu „snoozed”: clopoțelul, „azi”, cartonașul din pâlnie și „fără pas următor”
+    // citesc taskurile deschise — un status aparte le scotea pe toate definitiv din vedere, deși
+    // amânarea înseamnă doar „mai târziu”. Scadența nouă e tot ce trebuie ca taskul să revină.
+    .set({ dueAt: newDueAt, status: "open", updatedAt: new Date() })
     .where(and(eq(crmLeadTasks.id, id), eq(crmLeadTasks.tenantId, user.tenantId)))
     .returning();
 

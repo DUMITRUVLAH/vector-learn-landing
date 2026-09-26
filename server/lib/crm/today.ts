@@ -17,9 +17,10 @@
  * ÎNTREGII echipe (comportament vechi); cu `ownerId`, DOAR lead-urile agentului
  * respectiv — bug-ul din sursă era exact opusul (fiecare agent vedea tot).
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { leads, leadInteractions } from "../../db/schema/leads";
+import { tenants } from "../../db/schema/tenants";
 import { crmLeadTasks, type CrmLeadTask } from "../../db/schema/crmTasks";
 import { crmPipelineStages } from "../../db/schema/crmPipelineStages";
 import { ensureTenantStages } from "./stages";
@@ -66,6 +67,55 @@ export interface ComputeTodayInput {
   ownerId?: string;
   now?: Date;
   staleDays?: number;
+  /** Fusul orar al workspace-ului (IANA) — decide când se termină ziua unui task „toată ziua”. */
+  timeZone?: string;
+}
+
+/** Fusul implicit al produsului, când workspace-ul n-are unul valid. */
+export const DEFAULT_CRM_TIME_ZONE = "Europe/Chisinau";
+
+/**
+ * Stările care înseamnă „încă de făcut”. `snoozed` rămâne aici doar pentru rândurile vechi: până
+ * la reparația din crmTasks.ts, amânarea scria status „snoozed”, iar toate listele citeau doar
+ * „open” — taskul amânat dispărea definitiv din clopoțel și din „azi”. Amânarea scrie acum „open”
+ * (mută doar scadența); rândurile rămase „snoozed” se citesc în continuare ca deschise.
+ */
+export const PENDING_TASK_STATUSES = ["open", "snoozed"] as const;
+
+export function isPendingTask(t: { status: string }): boolean {
+  return (PENDING_TASK_STATUSES as readonly string[]).includes(t.status);
+}
+
+/** Un fus IANA invalid (scris greșit în setări) aruncă RangeError în Intl — cădem pe implicit. */
+export function safeTimeZone(tz: string | null | undefined): string {
+  if (!tz) return DEFAULT_CRM_TIME_ZONE;
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz });
+    return tz;
+  } catch {
+    return DEFAULT_CRM_TIME_ZONE;
+  }
+}
+
+/** „2026-09-26” — ziua calendaristică a momentului `d`, văzută din fusul `timeZone`. */
+function dayKey(d: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+/**
+ * Restant: taskul cu oră — după ora lui; taskul „toată ziua” — abia după ce i se termină ZIUA, în
+ * fusul workspace-ului. Oglinda lui `isDueOverdue` din src/lib/crm/taskDue.ts (CRM-U04): taskul
+ * „toată ziua” se păstrează la prânz local, deci `dueAt < now` îl făcea restant de la ora 12 în
+ * chiar ziua în care era scadent. Pe server nu avem fusul browserului — folosim pe al tenantului.
+ */
+export function isTaskOverdue(
+  task: { dueAt: Date | null; dueHasTime: boolean | null },
+  now: Date,
+  timeZone: string = DEFAULT_CRM_TIME_ZONE
+): boolean {
+  if (!task.dueAt) return false;
+  if (task.dueHasTime) return task.dueAt.getTime() < now.getTime();
+  return dayKey(task.dueAt, timeZone) < dayKey(now, timeZone);
 }
 
 const inactiveStageKeys = (stages: StageFlags[]) =>
@@ -77,6 +127,7 @@ export function computeToday(input: ComputeTodayInput): TodayBuckets {
   const staleMs = staleDays * 86_400_000;
   const inactiveKeys = inactiveStageKeys(input.stages);
   const owner = input.ownerId;
+  const timeZone = safeTimeZone(input.timeZone);
 
   const overdueTasks: TodayBuckets["overdueTasks"] = [];
   const uncontacted: TodayLead[] = [];
@@ -87,11 +138,11 @@ export function computeToday(input: ComputeTodayInput): TodayBuckets {
     if (owner && lead.assignedTo !== owner) continue;
     const isActive = !inactiveKeys.has(lead.stage);
     const tasks = input.tasksByLead[lead.id] ?? [];
-    const openTasks = tasks.filter((t) => t.status === "open");
+    const openTasks = tasks.filter(isPendingTask);
 
     // Taskurile restante contează pentru orice lead, activ sau nu.
     for (const t of openTasks) {
-      if (t.dueAt && t.dueAt < now) overdueTasks.push({ lead, task: t });
+      if (isTaskOverdue(t, now, timeZone)) overdueTasks.push({ lead, task: t });
     }
 
     if (!isActive) continue;
@@ -101,7 +152,7 @@ export function computeToday(input: ComputeTodayInput): TodayBuckets {
       uncontacted.push(lead);
     }
 
-    // Fără pas următor: lead activ, fără niciun task deschis.
+    // Fără pas următor: lead activ, fără niciun task deschis (unul amânat e tot un pas următor).
     if (openTasks.length === 0) noNextStep.push(lead);
 
     // Neglijat: ultima atingere mai veche de staleDays (fallback pe createdAt).
@@ -125,7 +176,7 @@ export async function getTodayForTenant(
   // lui să nu pice toate în „inactive" dintr-o pâlnie complet goală.
   await ensureTenantStages(tenantId);
 
-  const [leadRows, taskRows, interactionRows, stageRows] = await Promise.all([
+  const [leadRows, taskRows, interactionRows, stageRows, timeZone] = await Promise.all([
     db
       .select({
         id: leads.id,
@@ -143,7 +194,7 @@ export async function getTodayForTenant(
     db
       .select()
       .from(crmLeadTasks)
-      .where(and(eq(crmLeadTasks.tenantId, tenantId), eq(crmLeadTasks.status, "open"))),
+      .where(and(eq(crmLeadTasks.tenantId, tenantId), inArray(crmLeadTasks.status, [...PENDING_TASK_STATUSES]))),
     db
       .select({ leadId: leadInteractions.leadId, occurredAt: leadInteractions.occurredAt })
       .from(leadInteractions)
@@ -152,6 +203,7 @@ export async function getTodayForTenant(
       .select({ key: crmPipelineStages.key, isWon: crmPipelineStages.isWon, isLost: crmPipelineStages.isLost })
       .from(crmPipelineStages)
       .where(eq(crmPipelineStages.tenantId, tenantId)),
+    tenantTimeZone(tenantId),
   ]);
 
   const tasksByLead: Record<string, CrmLeadTask[]> = {};
@@ -176,5 +228,17 @@ export async function getTodayForTenant(
     ownerId: opts.ownerId,
     now: opts.now,
     staleDays: opts.staleDays,
+    timeZone,
   });
+}
+
+/** Fusul workspace-ului; orice eșec de citire (coloană lipsă pe o bază rămasă în urmă) → implicit,
+ *  fiindcă „azi” trebuie să răspundă chiar și fără el. */
+async function tenantTimeZone(tenantId: string): Promise<string> {
+  try {
+    const [row] = await db.select({ timezone: tenants.timezone }).from(tenants).where(eq(tenants.id, tenantId));
+    return safeTimeZone(row?.timezone);
+  } catch {
+    return DEFAULT_CRM_TIME_ZONE;
+  }
 }

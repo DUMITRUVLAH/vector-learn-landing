@@ -25,6 +25,7 @@ import { db } from "../db/client";
 import { leads, customFields, leadFieldValues, type NewCustomField } from "../db/schema/leads";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { logCrmAudit } from "../lib/crm/audit";
+import { normalizeFieldValue } from "../lib/crm/customFieldValue";
 
 export const crmCustomFieldsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmCustomFieldsRoutes.use("/*", requireAuth);
@@ -94,12 +95,18 @@ crmCustomFieldsRoutes.put("/values", zValidator("json", setValueSchema), async (
   if (!lead) return c.json({ error: "not_found" }, 404);
 
   const [field] = await db
-    .select({ id: customFields.id })
+    .select({ id: customFields.id, type: customFields.type, options: customFields.options })
     .from(customFields)
     .where(and(eq(customFields.id, fieldId), eq(customFields.tenantId, user.tenantId)));
   if (!field) return c.json({ error: "not_found" }, 404);
 
-  const clean = value?.trim() ?? "";
+  const trimmed = value?.trim() ?? "";
+  const checked = trimmed === "" ? { ok: true as const, value: "" } : normalizeFieldValue(field, trimmed);
+  // Tipul câmpului e un contract: un „Buget" cu „mult" în el nu se mai poate filtra, însuma sau
+  // exporta, iar un select cu o valoare din afara listei rupe gruparea din rapoarte. Refuzăm
+  // ÎNAINTE de orice scriere, deci valoarea veche rămâne neatinsă.
+  if (!checked.ok) return c.json({ error: checked.error }, 400);
+  const clean = checked.value;
   if (clean === "") {
     await db
       .delete(leadFieldValues)

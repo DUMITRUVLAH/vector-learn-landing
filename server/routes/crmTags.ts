@@ -32,7 +32,9 @@ crmTagsRoutes.use("/*", requireAuth);
 
 const addTagSchema = z.object({
   leadId: z.string().uuid("Lead invalid"),
-  tag: z.string().min(1, "Eticheta este obligatorie").max(100),
+  // `.trim()` ÎNAINTE de `.min(1)`: o etichetă doar din spații ar trece de `min(1)` pe textul brut
+  // și s-ar salva goală după curățarea din handler — un chip invizibil pe lead și în sugestii.
+  tag: z.string().trim().min(1, "Eticheta este obligatorie").max(100),
 });
 
 // ─── GET /suggestions — ÎNAINTE de orice rută cu efect de citire generală ─────

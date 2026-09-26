@@ -21,7 +21,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { tenants, users } from "../db/schema";
-import { leads } from "../db/schema/leads";
+import { leads, leadInteractions } from "../db/schema/leads";
 import { crmPipelineStages, type NewCrmPipelineStage } from "../db/schema/crmPipelineStages";
 
 let pglite: PGlite;
@@ -394,7 +394,9 @@ describe("POST /api/crm/tasks/:id/snooze", () => {
     const snoozed = await res.json();
     expect(snoozed.dueAt).not.toBeNull();
     expect(new Date(snoozed.dueAt).toISOString()).toBe("2026-01-15T00:00:00.000Z");
-    expect(snoozed.status).toBe("snoozed");
+    // Rămâne „open”: un status „snoozed” scotea taskul definitiv din clopoțel, din „azi” și din
+    // „fără pas următor” (toate citesc taskurile deschise). Amânarea mută doar scadența.
+    expect(snoozed.status).toBe("open");
   });
 
   it("amânarea unui task fără scadență pornește de la „acum”, nu de la null", async () => {
@@ -768,5 +770,64 @@ describe("CRM-U04 — taskul cu oră", () => {
     const updated = (await res.json()) as { dueHasTime: boolean; dueAt: string | null };
     expect(updated.dueAt).toBeNull();
     expect(updated.dueHasTime).toBe(false);
+  });
+});
+
+describe("Reparații e2e satelite — taskuri, etichete, motive", () => {
+  const json = (method: string, body: unknown) => ({
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  it("[blocant] încheierea lasă o urmă „system” în istoric, o singură dată (T-CRM-107-3)", async () => {
+    const lead = await createLead();
+    const task = await createTask(lead.id, { title: "Trimite oferta semnată" });
+    expect((await app.request(`/api/crm/tasks/${task.id}/complete`, { method: "POST" })).status).toBe(200);
+    expect((await app.request(`/api/crm/tasks/${task.id}/complete`, { method: "POST" })).status).toBe(200);
+    const rows = await testDb.select().from(leadInteractions).where(eq(leadInteractions.leadId, lead.id));
+    const traces = rows.filter((r) => r.type === "system" && (r.body ?? "").includes("Trimite oferta semnată"));
+    expect(traces).toHaveLength(1);
+  });
+
+  it("[blocant] taskul amânat rămâne în clopoțel și e pas următor", async () => {
+    const lead = await createLead({ fullName: "Amânat" });
+    const task = await createTask(lead.id, { dueAt: new Date(Date.now() + 86_400_000).toISOString() });
+    await app.request(`/api/crm/tasks/${task.id}/snooze`, json("POST", { days: 1 }));
+    const { items } = await (await app.request("/api/crm/tasks?scope=upcoming")).json();
+    expect(items.some((x: { id: string }) => x.id === task.id)).toBe(true);
+    const today = await (await app.request("/api/crm/tasks/today")).json();
+    expect(today.noNextStep.some((l: { id: string }) => l.id === lead.id)).toBe(false);
+  });
+
+  it("[blocant] responsabil inexistent sau din alt workspace → 400, nu 500", async () => {
+    const lead = await createLead();
+    const ghost = await app.request("/api/crm/tasks", json("POST", { leadId: lead.id, title: "X", assignedTo: "11111111-1111-4111-8111-111111111111" }));
+    expect(ghost.status).toBe(400);
+    const foreign = await app.request("/api/crm/tasks", json("POST", { leadId: lead.id, title: "X", assignedTo: userB }));
+    expect(foreign.status).toBe(400);
+    const task = await createTask(lead.id);
+    expect((await app.request(`/api/crm/tasks/${task.id}`, json("PATCH", { assignedTo: userB }))).status).toBe(400);
+    expect((await app.request(`/api/crm/tasks/${task.id}`, json("PATCH", { assignedTo: userA2 }))).status).toBe(200);
+  });
+
+  it("[blocant] PATCH doar cu dueHasTime pe un task cu dată păstrează ora", async () => {
+    const lead = await createLead();
+    const task = await createTask(lead.id, { dueAt: "2026-09-27T09:00:00.000Z" });
+    expect(task.dueHasTime).toBe(false);
+    const updated = await (await app.request(`/api/crm/tasks/${task.id}`, json("PATCH", { dueHasTime: true }))).json();
+    expect(updated.dueHasTime).toBe(true);
+  });
+
+  it("[blocant] textul doar din spații e refuzat: titlu task, etichetă, motiv de pierdere", async () => {
+    const lead = await createLead();
+    expect((await app.request("/api/crm/tasks", json("POST", { leadId: lead.id, title: "   " }))).status).toBe(400);
+    const task = await createTask(lead.id);
+    expect((await app.request(`/api/crm/tasks/${task.id}`, json("PATCH", { title: "  " }))).status).toBe(400);
+    expect((await app.request("/api/crm/tags", json("POST", { leadId: lead.id, tag: "   " }))).status).toBe(400);
+    expect((await app.request("/api/crm/lost-reasons", json("POST", { label: "  " }))).status).toBe(400);
+    const created = await (await app.request("/api/crm/lost-reasons", json("POST", { label: "  Prea departe  " }))).json();
+    expect(created.label).toBe("Prea departe");
+    expect((await app.request(`/api/crm/lost-reasons/${created.id}`, json("PATCH", { label: " " }))).status).toBe(400);
   });
 });

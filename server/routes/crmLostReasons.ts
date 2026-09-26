@@ -81,12 +81,17 @@ async function ensureTenantLostReasons(tenantId: string): Promise<void> {
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
+// Eticheta se curăță de spații înainte de validare: un motiv „   " ar apărea ca opțiune goală în
+// dialogul de pierdere și ar strica gruparea din raportul „de ce pierdem" (două variante ale
+// aceluiași text, una cu spații la capete).
+const lostReasonLabel = z.string().trim().min(1, "Eticheta este obligatorie").max(200);
+
 const createLostReasonSchema = z.object({
-  label: z.string().min(1, "Eticheta este obligatorie").max(200),
+  label: lostReasonLabel,
 });
 
 const updateLostReasonSchema = z.object({
-  label: z.string().min(1, "Eticheta este obligatorie").max(200),
+  label: lostReasonLabel,
 });
 
 const reorderSchema = z.object({
