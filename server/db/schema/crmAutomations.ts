@@ -21,23 +21,9 @@ import { users } from "./users";
 import { leads } from "./leads";
 
 /** Ce declanșează o automatizare. `toStage` doar pentru „lead.stage_changed". */
-export interface AutomationTrigger {
-  kind: "lead.created" | "lead.stage_changed";
-  toStage?: string;
-}
-
-export interface AutomationCondition {
-  field: string;
-  op: "eq" | "neq" | "contains" | "gte" | "lte" | "exists" | "not_exists";
-  value?: string | number;
-}
-
-export type AutomationAction =
-  | { type: "create_task"; title: string; dueInDays?: number }
-  | { type: "move_stage"; stageKey: string }
-  | { type: "add_tag"; tag: string }
-  | { type: "add_note"; body: string }
-  | { type: "assign"; userId?: string; strategy?: "round_robin" | "capacity" | "weighted" | "territory" };
+// Formele trăiesc în motorul pur; schema doar le refolosește, ca să nu existe două definiții.
+import type { AutomationTrigger, AutomationCondition, AutomationAction } from "../../lib/crm/automations";
+export type { AutomationTrigger, AutomationCondition, AutomationAction };
 
 export const crmAutomations = pgTable(
   "crm_automations",
@@ -53,6 +39,12 @@ export const crmAutomations = pgTable(
     conditions: jsonb("conditions").$type<AutomationCondition[]>().notNull().default([]),
     actions: jsonb("actions").$type<AutomationAction[]>().notNull().default([]),
     orderIndex: integer("order_index").notNull().default(0),
+    /**
+     * Din ce scenariu gata făcut a pornit regula (CRM-A02). Așa pagina știe că scenariul „Sună
+     * lead-ul nou" e deja pornit și nu-l mai propune a doua oară. Gol = regulă scrisă de mână.
+     * Migrare: drizzle/0191_crm_automation_templates.sql
+     */
+    templateKey: varchar("template_key", { length: 60 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -108,6 +100,8 @@ export const crmAssignmentRules = pgTable(
     /** Cine intră în tragere. Listă goală = toți agenții activi ai workspace-ului. */
     userIds: jsonb("user_ids").$type<string[]>().notNull().default([]),
     orderIndex: integer("order_index").notNull().default(0),
+    /** Scenariul gata făcut din care a pornit regula — vezi `crmAutomations.templateKey`. */
+    templateKey: varchar("template_key", { length: 60 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

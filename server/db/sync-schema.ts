@@ -750,6 +750,10 @@ async function main() {
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     )`,
     `CREATE INDEX IF NOT EXISTS "crm_assignment_rules_tenant_idx" ON "crm_assignment_rules" ("tenant_id","order_index")`,
+    // CRM-A02 (0191): scenariile gata făcute. Tabelele de mai sus se creează DUPĂ bucla generică de
+    // coloane, deci pe o bază fără ele coloana nouă n-ar apărea decât la deploy-ul următor.
+    `ALTER TABLE "crm_automations" ADD COLUMN IF NOT EXISTS "template_key" varchar(60)`,
+    `ALTER TABLE "crm_assignment_rules" ADD COLUMN IF NOT EXISTS "template_key" varchar(60)`,
     `CREATE TABLE IF NOT EXISTS "crm_sales_settings" (
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
       "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,

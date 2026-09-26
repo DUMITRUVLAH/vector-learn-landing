@@ -21,17 +21,20 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, max } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions, leadTags } from "../db/schema/leads";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmLeadTasks } from "../db/schema/crmTasks";
 import { crmAutomations, crmAutomationRuns } from "../db/schema/crmAutomations";
+import { users } from "../db/schema/users";
+import { createNotification } from "../lib/createNotification";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import {
   planRuns,
   triggerMatches,
+  idleDue,
   conditionsPass,
   validateAutomation,
   MAX_AUTOMATION_DEPTH,
@@ -48,17 +51,31 @@ crmAutomationsRoutes.post("/*", requireCrmPermission("automations.manage"));
 crmAutomationsRoutes.patch("/*", requireCrmPermission("automations.manage"));
 crmAutomationsRoutes.delete("/*", requireCrmPermission("automations.manage"));
 
+export const CONDITION_OPS = ["eq", "neq", "contains", "not_contains", "in", "gte", "lte", "exists", "not_exists"] as const;
+
 const conditionSchema = z.object({
   field: z.string().min(1).max(60),
-  op: z.enum(["eq", "neq", "contains", "gte", "lte", "exists", "not_exists"]),
+  op: z.enum(CONDITION_OPS),
   value: z.union([z.string(), z.number()]).optional(),
 });
 
 const actionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("create_task"), title: z.string().min(1).max(300), dueInDays: z.number().int().min(0).max(365).optional() }),
+  z.object({
+    type: z.literal("create_task"),
+    title: z.string().min(1).max(300),
+    dueInDays: z.number().int().min(0).max(365).optional(),
+    assignTo: z.string().uuid().nullish(),
+  }),
   z.object({ type: z.literal("move_stage"), stageKey: z.string().min(1).max(64) }),
   z.object({ type: z.literal("add_tag"), tag: z.string().min(1).max(60) }),
+  z.object({ type: z.literal("remove_tag"), tag: z.string().min(1).max(60) }),
   z.object({ type: z.literal("add_note"), body: z.string().min(1).max(2000) }),
+  z.object({
+    type: z.literal("notify"),
+    to: z.enum(["assignee", "admins", "user"]),
+    userId: z.string().uuid().nullish(),
+    message: z.string().min(1).max(500),
+  }),
   z.object({
     type: z.literal("assign"),
     userId: z.string().uuid().nullish(),
@@ -70,21 +87,51 @@ const automationSchema = z.object({
   name: z.string().min(1, "Regula are nevoie de un nume").max(200),
   enabled: z.boolean().default(true),
   trigger: z.object({
-    kind: z.enum(["lead.created", "lead.stage_changed"]),
+    kind: z.enum(["lead.created", "lead.stage_changed", "lead.idle"]),
     toStage: z.string().max(64).nullish(),
+    idleDays: z.number().int().min(1).max(365).nullish(),
   }),
-  conditions: z.array(conditionSchema).default([]),
-  actions: z.array(actionSchema).min(1, "Regula nu face nimic — adaugă cel puțin o acțiune"),
+  conditions: z.array(conditionSchema).max(20).default([]),
+  actions: z.array(actionSchema).min(1, "Regula nu face nimic — adaugă cel puțin o acțiune").max(10),
+  templateKey: z.string().max(60).nullish(),
 });
+
+type TriggerInput = z.infer<typeof automationSchema>["trigger"];
+
+/** Declanșatorul, curățat: `null` din formular devine absent, iar `idleDays` rămâne doar la „idle". */
+function normalizeTrigger(t: TriggerInput): AutomationLike["trigger"] {
+  return {
+    kind: t.kind,
+    toStage: t.toStage ?? undefined,
+    ...(t.kind === "lead.idle" && t.idleDays != null ? { idleDays: t.idleDays } : {}),
+  };
+}
 
 function isMissingSchemaError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? "");
   return /relation .* does not exist|column .* does not exist|undefined_table|undefined_column/i.test(msg);
 }
 
-/** Forma pe care o văd condițiile: câmpurile lead-ului, plate. */
-function leadAsRecord(lead: typeof leads.$inferSelect): Record<string, unknown> {
-  return lead as unknown as Record<string, unknown>;
+/**
+ * Forma pe care o văd condițiile: câmpurile lead-ului, plate. `tags` e câmp virtual (etichetele
+ * stau în altă tabelă), citit doar când o regulă chiar îl folosește — o interogare în plus la
+ * fiecare lead salvat, pentru reguli care nu se uită la etichete, ar fi pură risipă.
+ */
+function leadAsRecord(lead: typeof leads.$inferSelect, tags?: string[]): Record<string, unknown> {
+  const rec = lead as unknown as Record<string, unknown>;
+  return tags ? { ...rec, tags: tags.join(", ") } : rec;
+}
+
+function usesTags(autos: AutomationLike[]): boolean {
+  return autos.some((a) => a.conditions.some((c) => c.field === "tags"));
+}
+
+async function tagsOf(tenantId: string, leadId: string): Promise<string[]> {
+  const rows = await db
+    .select({ tag: leadTags.tag })
+    .from(leadTags)
+    .where(and(eq(leadTags.tenantId, tenantId), eq(leadTags.leadId, leadId)));
+  return rows.map((r) => r.tag);
 }
 
 // ─── Executorul ──────────────────────────────────────────────────────────────
@@ -115,6 +162,8 @@ export async function runAutomations(opts: {
   kind: TriggerKind;
   toStage?: string;
   depth?: number;
+  /** Rulează doar regula asta (cronul „idle" le ia pe rând, fiecare cu pragul ei). */
+  only?: string;
   assignFn?: (lead: typeof leads.$inferSelect, strategy: string) => Promise<string | null>;
 }): Promise<AutomationOutcome[]> {
   const depth = opts.depth ?? 0;
@@ -129,6 +178,7 @@ export async function runAutomations(opts: {
 
     const candidates = (rows as unknown as AutomationLike[])
       .filter((a) => a.enabled)
+      .filter((a) => !opts.only || a.id === opts.only)
       .filter((a) => triggerMatches(a, opts.kind, opts.toStage));
     if (candidates.length === 0) return [];
 
@@ -145,9 +195,11 @@ export async function runAutomations(opts: {
      * reguli, o listă se citește de sus în jos, cu efect imediat.
      */
     let current = opts.lead;
+    const needTags = usesTags(candidates);
 
     for (const auto of candidates) {
-      const matched = conditionsPass(leadAsRecord(current), auto.conditions);
+      const tags = needTags ? await tagsOf(opts.tenantId, current.id) : undefined;
+      const matched = conditionsPass(leadAsRecord(current, tags), auto.conditions);
       const outcome: AutomationOutcome = {
         automationId: auto.id,
         automationName: auto.name,
@@ -220,14 +272,42 @@ async function applyAction(ctx: {
   switch (action.type) {
     case "create_task": {
       const dueAt = action.dueInDays != null ? new Date(Date.now() + action.dueInDays * 86_400_000) : null;
+      // Omul ales în regulă trebuie să fie încă în echipă; altfel taskul revine responsabilului,
+      // nu unui cont plecat din firmă, unde nu l-ar vedea nimeni.
+      const assignee = action.assignTo && (await isTeamMember(tenantId, action.assignTo)) ? action.assignTo : lead.assignedTo ?? null;
       await db.insert(crmLeadTasks).values({
         tenantId,
         leadId: lead.id,
         title: action.title,
         dueAt,
-        assignedTo: lead.assignedTo ?? null,
+        assignedTo: assignee,
       });
       return { detail: action.title };
+    }
+
+    case "remove_tag": {
+      const removed = await db
+        .delete(leadTags)
+        .where(and(eq(leadTags.tenantId, tenantId), eq(leadTags.leadId, lead.id), eq(leadTags.tag, action.tag)))
+        .returning({ id: leadTags.id });
+      return { detail: removed.length > 0 ? `scos „${action.tag}”` : `„${action.tag}” nu era pus` };
+    }
+
+    case "notify": {
+      const recipients = await notifyRecipients(tenantId, lead, action);
+      if (recipients.length === 0) return { detail: "nimeni de anunțat" };
+      const who = lead.company || lead.fullName;
+      for (const recipient of recipients) {
+        await createNotification({
+          tenantId,
+          userId: recipient,
+          type: "crm_automation",
+          title: `${who}: ${action.message}`,
+          link: `/business/crm/pipeline?lead=${lead.id}`,
+          metadata: { leadId: lead.id },
+        });
+      }
+      return { detail: `anunțat ${recipients.length} ${recipients.length === 1 ? "om" : "oameni"}` };
     }
 
     case "add_tag": {
@@ -336,6 +416,126 @@ async function applyAction(ctx: {
   }
 }
 
+async function isTeamMember(tenantId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, userId), eq(users.tenantId, tenantId), eq(users.isActive, true), isNull(users.deletedAt)));
+  return !!row;
+}
+
+async function notifyRecipients(
+  tenantId: string,
+  lead: typeof leads.$inferSelect,
+  action: Extract<AutomationAction, { type: "notify" }>
+): Promise<string[]> {
+  if (action.to === "assignee") return lead.assignedTo ? [lead.assignedTo] : [];
+  if (action.to === "user") {
+    return action.userId && (await isTeamMember(tenantId, action.userId)) ? [action.userId] : [];
+  }
+  const admins = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.tenantId, tenantId), eq(users.role, "admin"), eq(users.isActive, true), isNull(users.deletedAt)));
+  return admins.map((a) => a.id);
+}
+
+// ─── Lead-urile uitate (cronul zilnic) ───────────────────────────────────────
+
+/** Câte lead-uri procesează o regulă „idle" la o rulare. Restul intră a doua zi. */
+const IDLE_BATCH = 200;
+
+/**
+ * Regulile „lead neatins N zile", pentru un workspace. Chemată din cronul zilnic.
+ *
+ * „Mișcare" = orice schimbare pe lead (`updatedAt`), un apel (`lastCallAt`) sau o interacțiune
+ * scrisă (notiță, mesaj, schimbare de etapă). Doar `updatedAt` n-ar fi ajuns: o notiță nu atinge
+ * rândul lead-ului, iar un agent care a vorbit ieri cu clientul ar primi un „revino la client".
+ *
+ * Lead-urile din etape închise (câștigat/pierdut) nu se trezesc: acolo liniștea e normală.
+ */
+export async function runIdleAutomations(
+  tenantId: string,
+  now = new Date(),
+  assignFn?: (lead: typeof leads.$inferSelect, strategy: string) => Promise<string | null>
+): Promise<{ rules: number; fired: number }> {
+  const rules = (
+    (await db
+      .select()
+      .from(crmAutomations)
+      .where(and(eq(crmAutomations.tenantId, tenantId), eq(crmAutomations.enabled, true)))
+      .orderBy(asc(crmAutomations.orderIndex))) as unknown as AutomationLike[]
+  ).filter((a) => a.trigger.kind === "lead.idle" && (a.trigger.idleDays ?? 0) >= 1);
+  if (rules.length === 0) return { rules: 0, fired: 0 };
+
+  const closedStages = new Set(
+    (
+      await db
+        .select({ key: crmPipelineStages.key, isWon: crmPipelineStages.isWon, isLost: crmPipelineStages.isLost })
+        .from(crmPipelineStages)
+        .where(eq(crmPipelineStages.tenantId, tenantId))
+    )
+      .filter((s) => s.isWon || s.isLost)
+      .map((s) => s.key)
+  );
+
+  let fired = 0;
+  for (const rule of rules) {
+    const cutoff = new Date(now.getTime() - (rule.trigger.idleDays ?? 0) * 86_400_000);
+    const filters = [eq(leads.tenantId, tenantId), lte(leads.updatedAt, cutoff), isNull(leads.mergedIntoId)];
+    if (rule.trigger.toStage) filters.push(eq(leads.stage, rule.trigger.toStage));
+    const stale = (
+      await db
+        .select()
+        .from(leads)
+        .where(and(...filters))
+        .orderBy(asc(leads.updatedAt))
+        .limit(IDLE_BATCH * 2)
+    ).filter((l) => !closedStages.has(l.stage));
+    if (stale.length === 0) continue;
+
+    const ids = stale.map((l) => l.id);
+    const [lastTouch, lastRuns] = await Promise.all([
+      db
+        .select({ leadId: leadInteractions.leadId, at: max(leadInteractions.occurredAt) })
+        .from(leadInteractions)
+        .where(and(eq(leadInteractions.tenantId, tenantId), inArray(leadInteractions.leadId, ids), gte(leadInteractions.occurredAt, cutoff)))
+        .groupBy(leadInteractions.leadId),
+      db
+        .select({ leadId: crmAutomationRuns.leadId, at: max(crmAutomationRuns.createdAt) })
+        .from(crmAutomationRuns)
+        .where(and(eq(crmAutomationRuns.tenantId, tenantId), eq(crmAutomationRuns.automationId, rule.id), inArray(crmAutomationRuns.leadId, ids)))
+        .groupBy(crmAutomationRuns.leadId),
+    ]);
+    const touchedAt = new Map(lastTouch.map((r) => [r.leadId, r.at ? new Date(r.at) : null]));
+    const ranAt = new Map(lastRuns.map((r) => [r.leadId, r.at ? new Date(r.at) : null]));
+
+    let done = 0;
+    for (const lead of stale) {
+      if (done >= IDLE_BATCH) break;
+      const moments = [lead.updatedAt, lead.lastCallAt, touchedAt.get(lead.id)]
+        .filter((d): d is Date => d instanceof Date || typeof d === "string")
+        .map((d) => new Date(d).getTime());
+      const lastActivityAt = new Date(Math.max(...moments));
+      if (!idleDue({ lastActivityAt, idleDays: rule.trigger.idleDays ?? 0, now, lastRunAt: ranAt.get(lead.id) ?? null })) continue;
+
+      // Doar regula ASTA, nu toate regulile „idle": fiecare are pragul ei de zile.
+      await runAutomations({
+        tenantId,
+        userId: null,
+        lead,
+        kind: "lead.idle",
+        toStage: lead.stage,
+        only: rule.id,
+        assignFn,
+      });
+      done++;
+    }
+    fired += done;
+  }
+  return { rules: rules.length, fired };
+}
+
 // ─── Rutele ──────────────────────────────────────────────────────────────────
 
 crmAutomationsRoutes.get("/", async (c) => {
@@ -357,10 +557,8 @@ crmAutomationsRoutes.post("/", zValidator("json", automationSchema), async (c) =
   const user = c.get("user");
   const body = c.req.valid("json");
 
-  const problems = validateAutomation({
-    trigger: { kind: body.trigger.kind, toStage: body.trigger.toStage ?? undefined },
-    actions: body.actions as AutomationAction[],
-  });
+  const trigger = normalizeTrigger(body.trigger);
+  const problems = validateAutomation({ trigger, actions: body.actions as AutomationAction[] });
   if (problems.length > 0) return c.json({ error: "invalid_automation", problems }, 400);
 
   const [maxRow] = await db
@@ -376,10 +574,11 @@ crmAutomationsRoutes.post("/", zValidator("json", automationSchema), async (c) =
       tenantId: user.tenantId,
       name: body.name,
       enabled: body.enabled,
-      trigger: { kind: body.trigger.kind, toStage: body.trigger.toStage ?? undefined },
+      trigger,
       conditions: body.conditions,
       actions: body.actions as AutomationAction[],
       orderIndex: (maxRow?.max ?? -1) + 1,
+      templateKey: body.templateKey ?? null,
     })
     .returning();
 
@@ -397,9 +596,7 @@ crmAutomationsRoutes.patch("/:id", zValidator("json", automationSchema.partial()
     .where(and(eq(crmAutomations.id, id), eq(crmAutomations.tenantId, user.tenantId)));
   if (!existing) return c.json({ error: "not_found" }, 404);
 
-  const nextTrigger = body.trigger
-    ? { kind: body.trigger.kind, toStage: body.trigger.toStage ?? undefined }
-    : existing.trigger;
+  const nextTrigger = body.trigger ? normalizeTrigger(body.trigger) : existing.trigger;
   const nextActions = (body.actions as AutomationAction[] | undefined) ?? existing.actions;
 
   const problems = validateAutomation({ trigger: nextTrigger, actions: nextActions });
@@ -439,7 +636,7 @@ crmAutomationsRoutes.delete("/:id", async (c) => {
  */
 crmAutomationsRoutes.post(
   "/preview",
-  zValidator("json", z.object({ leadId: z.string().uuid(), kind: z.enum(["lead.created", "lead.stage_changed"]).default("lead.created"), toStage: z.string().max(64).nullish() })),
+  zValidator("json", z.object({ leadId: z.string().uuid(), kind: z.enum(["lead.created", "lead.stage_changed", "lead.idle"]).default("lead.created"), toStage: z.string().max(64).nullish() })),
   async (c) => {
     const user = c.get("user");
     const body = c.req.valid("json");

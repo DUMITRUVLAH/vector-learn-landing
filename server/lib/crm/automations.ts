@@ -16,15 +16,29 @@
  * reguli pe care un om le poate scrie fără rea intenție, în două zile diferite.
  */
 
-export type TriggerKind = "lead.created" | "lead.stage_changed";
+/**
+ * `lead.idle` nu vine dintr-o acțiune a omului, ci din cronul zilnic (`runIdleAutomations`): e
+ * singurul declanșator care prinde ce NU s-a întâmplat — un lead uitat. Pentru o echipă de vânzări
+ * e cea mai valoroasă regulă, fiindcă lead-urile se pierd din tăcere, nu din greșeli.
+ */
+export type TriggerKind = "lead.created" | "lead.stage_changed" | "lead.idle";
 
 export interface AutomationTrigger {
   kind: TriggerKind;
-  /** Doar pentru „stage_changed": pornește numai la intrarea ÎN etapa asta. */
+  /**
+   * „stage_changed": pornește numai la intrarea ÎN etapa asta.
+   * „idle": numai pentru lead-urile care stau în etapa asta. Gol = orice etapă deschisă.
+   */
   toStage?: string;
+  /** Doar pentru „idle": după câte zile fără nicio mișcare. */
+  idleDays?: number;
 }
 
-export type ConditionOp = "eq" | "neq" | "contains" | "gte" | "lte" | "exists" | "not_exists";
+/**
+ * `in` = „este unul dintre" (valori despărțite prin virgulă): dă SAU fără un al doilea nivel de
+ * logică în editor. „Sursa e Facebook, Instagram sau Google" e o singură condiție, nu trei reguli.
+ */
+export type ConditionOp = "eq" | "neq" | "contains" | "not_contains" | "in" | "gte" | "lte" | "exists" | "not_exists";
 
 export interface AutomationCondition {
   field: string;
@@ -32,11 +46,17 @@ export interface AutomationCondition {
   value?: string | number;
 }
 
+/** Cui ajunge o notificare automată. `user` cere `userId`. */
+export type NotifyTarget = "assignee" | "admins" | "user";
+
 export type AutomationAction =
-  | { type: "create_task"; title: string; dueInDays?: number }
+  /** `assignTo` gol = responsabilul lead-ului (sau nimeni, dacă lead-ul n-are încă). */
+  | { type: "create_task"; title: string; dueInDays?: number; assignTo?: string | null }
   | { type: "move_stage"; stageKey: string }
   | { type: "add_tag"; tag: string }
+  | { type: "remove_tag"; tag: string }
   | { type: "add_note"; body: string }
+  | { type: "notify"; to: NotifyTarget; userId?: string | null; message: string }
   /** `userId` fix → atribuire directă; altfel `strategy` rulează distribuirea. */
   | { type: "assign"; userId?: string; strategy?: "round_robin" | "capacity" | "weighted" | "territory" };
 
@@ -59,10 +79,19 @@ export const MAX_AUTOMATION_DEPTH = 2;
 /** Se potrivește evenimentul (de tipul `kind`, intrat în `toStage`) cu declanșatorul? */
 export function triggerMatches(auto: Pick<AutomationLike, "trigger">, kind: TriggerKind, toStage?: string): boolean {
   if (auto.trigger.kind !== kind) return false;
-  if (kind === "lead.stage_changed" && auto.trigger.toStage) {
+  // Pentru „idle", `toStage` e etapa în care stă acum lead-ul — același filtru, altă întrebare.
+  if ((kind === "lead.stage_changed" || kind === "lead.idle") && auto.trigger.toStage) {
     return auto.trigger.toStage === toStage;
   }
   return true;
+}
+
+/** Lista din „este unul dintre": despărțită prin virgulă, fără goluri, fără majuscule. */
+export function splitList(value: string | number | undefined): string[] {
+  return String(value ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 /**
@@ -87,6 +116,12 @@ export function evalCondition(lead: Record<string, unknown>, c: AutomationCondit
       return String(raw ?? "")
         .toLowerCase()
         .includes(String(c.value ?? "").toLowerCase());
+    case "not_contains":
+      return !String(raw ?? "")
+        .toLowerCase()
+        .includes(String(c.value ?? "").toLowerCase());
+    case "in":
+      return splitList(c.value).includes(String(raw ?? "").trim().toLowerCase());
     case "gte":
       return Number(raw ?? 0) >= Number(c.value ?? 0);
     case "lte":
@@ -150,6 +185,13 @@ export function validateAutomation(auto: Pick<AutomationLike, "trigger" | "actio
     problems.push("Regula nu face nimic — adaugă cel puțin o acțiune.");
   }
 
+  if (auto.trigger.kind === "lead.idle") {
+    const days = Number(auto.trigger.idleDays);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      problems.push("Spune după câte zile fără mișcare pornește regula (între 1 și 365).");
+    }
+  }
+
   for (const action of auto.actions) {
     if (action.type === "move_stage" && auto.trigger.kind === "lead.stage_changed") {
       if (auto.trigger.toStage && action.stageKey === auto.trigger.toStage) {
@@ -162,10 +204,33 @@ export function validateAutomation(auto: Pick<AutomationLike, "trigger" | "actio
     if (action.type === "add_tag" && !action.tag.trim()) {
       problems.push("Eticheta adăugată automat e goală.");
     }
+    if (action.type === "remove_tag" && !action.tag.trim()) {
+      problems.push("Nu scrie ce etichetă să scoată.");
+    }
+    if (action.type === "notify") {
+      if (!action.message.trim()) problems.push("Notificarea n-are text — omul n-ar ști de ce a primit-o.");
+      if (action.to === "user" && !action.userId) problems.push("Alege omul care primește notificarea.");
+    }
     if (action.type === "assign" && !action.userId && !action.strategy) {
       problems.push("Acțiunea de atribuire n-are nici om, nici strategie — nu s-ar atribui nimănui.");
     }
   }
 
   return problems;
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Pornește regula „idle" pentru lead-ul ăsta, acum?
+ *
+ * O singură dată pe PERIOADĂ de liniște: dacă regula a rulat deja după ultima mișcare a lead-ului,
+ * nu mai rulează până nu se mișcă ceva. Altfel cronul zilnic ar crea câte un task „Revino la
+ * client" în fiecare dimineață, pentru același lead uitat — exact zgomotul care face oamenii să
+ * oprească automatizările.
+ */
+export function idleDue(opts: { lastActivityAt: Date; idleDays: number; now: Date; lastRunAt?: Date | null }): boolean {
+  if (opts.now.getTime() - opts.lastActivityAt.getTime() < opts.idleDays * DAY_MS) return false;
+  if (opts.lastRunAt && opts.lastRunAt.getTime() >= opts.lastActivityAt.getTime()) return false;
+  return true;
 }

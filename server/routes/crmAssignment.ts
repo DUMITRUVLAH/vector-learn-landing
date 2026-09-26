@@ -341,7 +341,8 @@ export async function assignLeadAutomatically(
 
 const conditionSchema = z.object({
   field: z.string().min(1).max(100),
-  op: z.enum(["eq", "neq", "contains", "gte", "lte", "exists", "not_exists"]),
+  // Aceiași operatori ca la automatizări: evaluatorul e unul singur (`lib/crm/automations.ts`).
+  op: z.enum(["eq", "neq", "contains", "not_contains", "in", "gte", "lte", "exists", "not_exists"]),
   value: z.union([z.string(), z.number()]).optional(),
 });
 
@@ -352,6 +353,7 @@ const ruleInput = z.object({
   conditions: z.array(conditionSchema).max(20).optional(),
   userIds: z.array(z.string().uuid()).max(200).optional(),
   orderIndex: z.number().int().min(0).optional(),
+  templateKey: z.string().max(60).nullish(),
 });
 
 crmAssignmentRoutes.get("/rules", async (c) => {
@@ -386,6 +388,7 @@ crmAssignmentRoutes.post("/rules", zValidator("json", ruleInput), async (c) => {
       // workspace-ului nu vor avea niciodată cu ce să se potrivească la tragere.
       userIds: body.userIds ?? [],
       orderIndex: body.orderIndex ?? (maxOrder ?? -1) + 1,
+      templateKey: body.templateKey ?? null,
     })
     .returning();
 

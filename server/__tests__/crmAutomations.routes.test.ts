@@ -24,6 +24,7 @@ import { tenants, users, leads, leadInteractions, leadTags } from "../db/schema"
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
 import { crmLeadTasks } from "../db/schema/crmTasks";
 import { crmAutomations, crmAutomationRuns } from "../db/schema/crmAutomations";
+import { inAppNotifications } from "../db/schema";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -50,6 +51,7 @@ vi.mock("../middleware/requireAuth", () => ({
 import { Hono } from "hono";
 let app: Hono;
 let runAutomations: typeof import("../routes/crmAutomations").runAutomations;
+let runIdleAutomations: typeof import("../routes/crmAutomations").runIdleAutomations;
 
 async function applyMigrations(pg: PGlite) {
   const dir = path.resolve(__dirname, "../../drizzle");
@@ -80,6 +82,7 @@ beforeAll(async () => {
 
   const mod = await import("../routes/crmAutomations");
   runAutomations = mod.runAutomations;
+  runIdleAutomations = mod.runIdleAutomations;
   app = new Hono();
   app.route("/api/crm/automations", mod.crmAutomationsRoutes);
 
@@ -117,6 +120,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await testDb.delete(crmAutomationRuns);
   await testDb.delete(crmAutomations);
+  await testDb.delete(inAppNotifications);
   await testDb.delete(crmLeadTasks);
   await testDb.delete(leadTags);
   await testDb.delete(leadInteractions);
@@ -510,6 +514,175 @@ describe("validarea regulilor", () => {
 
   it("o regulă fără nicio acțiune e refuzată", async () => {
     const res = await post("/api/crm/automations", rule({ actions: [] }));
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─── CRM-A02: automatizări mai flexibile ─────────────────────────────────────
+
+const DAY = 86_400_000;
+
+describe("lead-urile uitate (declanșatorul „idle”)", () => {
+  async function idleRule(over: Record<string, unknown> = {}) {
+    await testDb.insert(crmAutomations).values({
+      tenantId: tenantA,
+      name: "Revino la client",
+      trigger: { kind: "lead.idle", idleDays: 3 },
+      conditions: [],
+      actions: [{ type: "create_task", title: "Revino la client" }],
+      ...over,
+    });
+  }
+
+  it("[blocant] lead-ul neatins de 3 zile primește taskul; cel atins ieri, nu", async () => {
+    await idleRule();
+    const now = new Date();
+    const old = await makeLead(tenantA, { fullName: "Uitat", updatedAt: new Date(now.getTime() - 5 * DAY) });
+    const fresh = await makeLead(tenantA, { fullName: "Proaspăt", updatedAt: new Date(now.getTime() - 1 * DAY) });
+
+    const res = await runIdleAutomations(tenantA, now);
+    expect(res.fired).toBe(1);
+    expect(await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, old.id))).toHaveLength(1);
+    expect(await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, fresh.id))).toHaveLength(0);
+  });
+
+  it("[blocant] cronul de a doua zi NU mai creează încă un task pentru același lead uitat", async () => {
+    await idleRule();
+    const now = new Date();
+    const lead = await makeLead(tenantA, { updatedAt: new Date(now.getTime() - 5 * DAY) });
+    await runIdleAutomations(tenantA, now);
+    await runIdleAutomations(tenantA, new Date(now.getTime() + DAY));
+    expect(await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, lead.id))).toHaveLength(1);
+  });
+
+  it("o notiță recentă contează ca mișcare, chiar dacă rândul lead-ului e vechi", async () => {
+    await idleRule();
+    const now = new Date();
+    const lead = await makeLead(tenantA, { updatedAt: new Date(now.getTime() - 10 * DAY) });
+    await testDb.insert(leadInteractions).values({
+      tenantId: tenantA,
+      leadId: lead.id,
+      type: "note",
+      direction: "internal",
+      body: "am vorbit ieri",
+      occurredAt: new Date(now.getTime() - DAY),
+    });
+    const res = await runIdleAutomations(tenantA, now);
+    expect(res.fired).toBe(0);
+  });
+
+  it("lead-urile câștigate nu se trezesc — acolo liniștea e normală", async () => {
+    await idleRule();
+    const now = new Date();
+    await makeLead(tenantA, { stage: "paid", updatedAt: new Date(now.getTime() - 30 * DAY) });
+    expect((await runIdleAutomations(tenantA, now)).fired).toBe(0);
+  });
+
+  it("[blocant] cronul nu atinge lead-urile altui workspace", async () => {
+    await idleRule();
+    const now = new Date();
+    const foreign = await makeLead(tenantB, { updatedAt: new Date(now.getTime() - 30 * DAY) });
+    await runIdleAutomations(tenantA, now);
+    expect(await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, foreign.id))).toHaveLength(0);
+  });
+
+  it("o regulă „idle” fără număr de zile e refuzată la salvare", async () => {
+    const res = await post("/api/crm/automations", rule({ trigger: { kind: "lead.idle" } }));
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body.problems)).toContain("zile");
+  });
+
+  it("regula „idle” se salvează prin API cu pragul de zile și scenariul de origine", async () => {
+    const res = await post(
+      "/api/crm/automations",
+      rule({ trigger: { kind: "lead.idle", idleDays: 7, toStage: null }, templateKey: "idle-7" })
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.trigger).toEqual({ kind: "lead.idle", idleDays: 7 });
+    expect(res.body.templateKey).toBe("idle-7");
+  });
+});
+
+describe("condiții și acțiuni noi", () => {
+  it("„este unul dintre” prinde oricare valoare din listă, fără majuscule", async () => {
+    await testDb.insert(crmAutomations).values({
+      tenantId: tenantA,
+      name: "Rețele sociale",
+      trigger: { kind: "lead.created" },
+      conditions: [{ field: "source", op: "in", value: "Facebook_ad, instagram" }],
+      actions: [{ type: "add_tag", tag: "social" }],
+    });
+    const fb = await makeLead(tenantA, { source: "facebook_ad" });
+    const web = await makeLead(tenantA, { source: "webform" });
+    await runAutomations({ tenantId: tenantA, userId: anaId, lead: fb, kind: "lead.created" });
+    await runAutomations({ tenantId: tenantA, userId: anaId, lead: web, kind: "lead.created" });
+    expect(await testDb.select().from(leadTags).where(eq(leadTags.leadId, fb.id))).toHaveLength(1);
+    expect(await testDb.select().from(leadTags).where(eq(leadTags.leadId, web.id))).toHaveLength(0);
+  });
+
+  it("condiția pe etichete vede etichetele lead-ului", async () => {
+    await testDb.insert(crmAutomations).values({
+      tenantId: tenantA,
+      name: "VIP sună imediat",
+      trigger: { kind: "lead.stage_changed" },
+      conditions: [{ field: "tags", op: "contains", value: "vip" }],
+      actions: [{ type: "create_task", title: "Sună VIP-ul" }],
+    });
+    const vip = await makeLead(tenantA);
+    await testDb.insert(leadTags).values({ tenantId: tenantA, leadId: vip.id, tag: "VIP" });
+    const plain = await makeLead(tenantA);
+    await runAutomations({ tenantId: tenantA, userId: anaId, lead: vip, kind: "lead.stage_changed", toStage: "contacted" });
+    await runAutomations({ tenantId: tenantA, userId: anaId, lead: plain, kind: "lead.stage_changed", toStage: "contacted" });
+    expect(await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, vip.id))).toHaveLength(1);
+    expect(await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, plain.id))).toHaveLength(0);
+  });
+
+  it("scoate eticheta", async () => {
+    await testDb.insert(crmAutomations).values({
+      tenantId: tenantA,
+      name: "Nu mai e rece",
+      trigger: { kind: "lead.stage_changed" },
+      conditions: [],
+      actions: [{ type: "remove_tag", tag: "rece" }],
+    });
+    const lead = await makeLead(tenantA);
+    await testDb.insert(leadTags).values({ tenantId: tenantA, leadId: lead.id, tag: "rece" });
+    await runAutomations({ tenantId: tenantA, userId: anaId, lead, kind: "lead.stage_changed", toStage: "contacted" });
+    expect(await testDb.select().from(leadTags).where(eq(leadTags.leadId, lead.id))).toHaveLength(0);
+  });
+
+  it("[blocant] notificarea către administratori ajunge doar la cei din workspace-ul lead-ului", async () => {
+    await testDb.insert(crmAutomations).values({
+      tenantId: tenantA,
+      name: "Afacere mare",
+      trigger: { kind: "lead.created" },
+      conditions: [],
+      actions: [{ type: "notify", to: "admins", message: "a intrat o afacere mare" }],
+    });
+    const lead = await makeLead(tenantA, { company: "Orange SRL" });
+    await runAutomations({ tenantId: tenantA, userId: anaId, lead, kind: "lead.created" });
+    const rows = await testDb.select().from(inAppNotifications);
+    expect(rows.map((r) => r.recipientUserId)).toEqual([anaId]);
+    expect(JSON.stringify(rows[0].payload)).toContain("Orange SRL");
+    expect(rows.every((r) => r.recipientUserId !== boId)).toBe(true);
+  });
+
+  it("[blocant] taskul atribuit unui om din alt workspace revine responsabilului lead-ului", async () => {
+    await testDb.insert(crmAutomations).values({
+      tenantId: tenantA,
+      name: "Task pentru străin",
+      trigger: { kind: "lead.created" },
+      conditions: [],
+      actions: [{ type: "create_task", title: "Sună", assignTo: boId }],
+    });
+    const lead = await makeLead(tenantA, { assignedTo: anaId });
+    await runAutomations({ tenantId: tenantA, userId: anaId, lead, kind: "lead.created" });
+    const [task] = await testDb.select().from(crmLeadTasks).where(eq(crmLeadTasks.leadId, lead.id));
+    expect(task.assignedTo).toBe(anaId);
+  });
+
+  it("o notificare fără text e refuzată la salvare", async () => {
+    const res = await post("/api/crm/automations", rule({ actions: [{ type: "notify", to: "assignee", message: " " }] }));
     expect(res.status).toBe(400);
   });
 });

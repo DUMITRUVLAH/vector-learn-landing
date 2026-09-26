@@ -22,6 +22,9 @@ import { runRecall } from "../lib/crm/recall";
 import { crmRecallSettings } from "../db/schema/crmRecall";
 import { runCrmTaskDigest, runCrmTaskDigestForTenant } from "../services/crm/taskDigest";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { crmAutomations } from "../db/schema/crmAutomations";
+import { runIdleAutomations } from "./crmAutomations";
+import { assignLeadAutomatically } from "./crmAssignment";
 
 export const crmCronRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -96,8 +99,34 @@ crmCronRoutes.get("/daily", async (c) => {
     digest = { tenants: 0, recipients: 0, emails: 0, skipped: 0 };
   }
 
+  // Pasul 5 (CRM-A02): automatizările „lead neatins N zile". Doar workspace-urile cu reguli pornite;
+  // filtrul pe tipul declanșatorului e în `runIdleAutomations` (e jsonb, nu o coloană).
+  const idle = { tenants: 0, rules: 0, fired: 0 };
+  try {
+    const tenantsWithAutomations = await db
+      .selectDistinct({ tenantId: crmAutomations.tenantId })
+      .from(crmAutomations)
+      .where(eq(crmAutomations.enabled, true));
+    for (const row of tenantsWithAutomations) {
+      try {
+        const res = await runIdleAutomations(row.tenantId, new Date(), async (lead) => {
+          const decision = await assignLeadAutomatically(row.tenantId, lead);
+          return decision?.userId ?? null;
+        });
+        if (res.rules > 0) idle.tenants++;
+        idle.rules += res.rules;
+        idle.fired += res.fired;
+      } catch (e) {
+        console.error("[crm/cron] lead-urile uitate au eșuat pentru tenantul", row.tenantId, e instanceof Error ? e.message : e);
+      }
+    }
+  } catch (e) {
+    console.error("[crm/cron] automatizările nu s-au putut citi:", e instanceof Error ? e.message : e);
+  }
+
   return c.json({
     ok: true,
+    idle,
     cadences,
     reengagement: { tenants: tenantsWithRules.length, due, applied, failed },
     recall,

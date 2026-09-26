@@ -1331,6 +1331,13 @@
       "when": 1789000000013,
       "tag": "0190_crm_datele_firmei",
       "breakpoints": true
+    },
+    {
+      "idx": 191,
+      "version": "7",
+      "when": 1789000000014,
+      "tag": "0191_crm_automation_templates",
+      "breakpoints": true
     }
   ]
 }
