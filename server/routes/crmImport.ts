@@ -392,7 +392,7 @@ async function loadCustomFields(tenantId: string): Promise<{ id: string; key: st
 async function loadExistingIdnos(tenantId: string, idnos: string[]): Promise<string[]> {
   if (idnos.length === 0) return [];
   const out: string[] = [];
-  const normalizedColumn = sql<string>`upper(regexp_replace(${crmCompanies.idno}, '[^A-Za-z0-9]', '', 'g'))`;
+  const normalizedColumn = sql<string>`regexp_replace(upper(regexp_replace(${crmCompanies.idno}, '[^A-Za-z0-9]', '', 'g')), '^MD([0-9]{13})$', '\\1')`;
   try {
     const CHUNK = 500;
     for (let i = 0; i < idnos.length; i += CHUNK) {
@@ -665,7 +665,7 @@ async function upsertCompanies(tenantId: string, rows: PlannedRow[]): Promise<Ma
 
   const idnoKeys = [...byKey.keys()].filter((k) => k.startsWith("idno:")).map((k) => k.slice(5));
   const nameKeys = [...byKey.keys()].filter((k) => !k.startsWith("idno:"));
-  const normalizedIdno = sql<string>`upper(regexp_replace(${crmCompanies.idno}, '[^A-Za-z0-9]', '', 'g'))`;
+  const normalizedIdno = sql<string>`regexp_replace(upper(regexp_replace(${crmCompanies.idno}, '[^A-Za-z0-9]', '', 'g')), '^MD([0-9]{13})$', '\\1')`;
 
   try {
     // Codul fiscal bate numele: „SRL Alfa" și „Alfa SRL" sunt aceeași firmă dacă au același IDNO,

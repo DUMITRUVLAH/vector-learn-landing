@@ -465,7 +465,8 @@ describe("CC-1 — coloane arbitrare: cod fiscal, etichete, câmpuri personaliza
     expect(res.body.created).toBe(1);
 
     const [firma] = await testDb.select().from(crmCompanies).where(eq(crmCompanies.tenantId, tenantA));
-    expect(firma.idno).toBe("MD1003600012345");
+    // IDNO-ul moldovenesc are 13 cifre; prefixul „MD" nu face parte din cod (altfel „MD 100…" și „100…" erau două firme).
+    expect(firma.idno).toBe("1003600012345");
   });
 
   it("[blocant] aceeași firmă cu ALT nume, dar același cod fiscal, nu se dublează", async () => {

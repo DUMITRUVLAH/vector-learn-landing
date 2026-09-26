@@ -16,13 +16,33 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, inArray, isNull, or, ilike, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, ilike, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmCompanies } from "../db/schema/crmCompanies";
 import { leads, leadInteractions, leadContacts, leadTags, leadFieldValues } from "../db/schema/leads";
 import { crmLeadTasks } from "../db/schema/crmTasks";
+import { crmPipelineStages } from "../db/schema/crmPipelineStages";
+import { crmPipelines } from "../db/schema/crmPipelines";
+import { docDocuments } from "../db/schema/docs";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireCrmPermission } from "../middleware/requireCrmPermission";
 import { normalizeEmail, normalizePhone } from "../lib/crm/normalize";
+import { parseDelimited, parseWorkbookTable, detectDelimiter, normalizeIdno } from "../lib/crm/importFile";
+import {
+  applyCompanyMapping,
+  companyColumns,
+  companyPatch,
+  countCompanyPlan,
+  isCompanyImportTarget,
+  normalizeCompanyName,
+  planCompanyImport,
+  rebaseHeader,
+  suggestCompanyMapping,
+  type CompanyDraft,
+  type CompanyFieldMapping,
+} from "../lib/crm/companyImport";
+import { logCrmAudit } from "../lib/crm/audit";
 import {
   groupDuplicates,
   leadToDedupRecord,
@@ -78,7 +98,31 @@ crmCompaniesRoutes.get("/", async (c) => {
     .orderBy(crmCompanies.name)
     .limit(500);
 
-  return c.json({ items });
+  // Câte oportunități are fiecare firmă — lista arată unde e vânzare, nu doar nume și coduri.
+  const counts = new Map<string, number>();
+  if (items.length > 0) {
+    try {
+      const rows = await db
+        .select({ companyId: leads.companyId, n: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.tenantId, user.tenantId),
+            isNull(leads.mergedIntoId),
+            inArray(
+              leads.companyId,
+              items.map((i) => i.id)
+            )
+          )
+        )
+        .groupBy(leads.companyId);
+      for (const r of rows) if (r.companyId) counts.set(r.companyId, Number(r.n));
+    } catch {
+      // Numărătoarea e un bonus; lista de firme se arată oricum.
+    }
+  }
+
+  return c.json({ items: items.map((i) => ({ ...i, leadCount: counts.get(i.id) ?? 0 })) });
 });
 
 crmCompaniesRoutes.post("/", zValidator("json", companyInput), async (c) => {
@@ -163,6 +207,417 @@ crmCompaniesRoutes.get("/:id/leads", async (c) => {
 
   return c.json({ items });
 });
+
+// ─── Fișa clientului ─────────────────────────────────────────────────────────
+
+/**
+ * Tot ce știe CRM-ul despre o firmă, într-o singură cerere: datele ei, oportunitățile, oamenii de
+ * contact, sarcinile deschise, actele și istoricul. Istoricul unei firme e suma istoricelor
+ * lead-urilor ei — nu există o a doua cronologie de ținut în sincron.
+ */
+crmCompaniesRoutes.get("/:id/overview", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json({ error: "not_found" }, 404);
+
+  const [company] = await db
+    .select()
+    .from(crmCompanies)
+    .where(and(eq(crmCompanies.id, id), eq(crmCompanies.tenantId, user.tenantId)));
+  if (!company) return c.json({ error: "not_found" }, 404);
+
+  const leadRows = await db
+    .select({
+      id: leads.id,
+      fullName: leads.fullName,
+      dealName: leads.dealName,
+      phone: leads.phone,
+      email: leads.email,
+      stage: leads.stage,
+      pipelineId: leads.pipelineId,
+      valueCents: leads.valueCents,
+      assignedTo: leads.assignedTo,
+      createdAt: leads.createdAt,
+      updatedAt: leads.updatedAt,
+    })
+    .from(leads)
+    .where(and(eq(leads.tenantId, user.tenantId), eq(leads.companyId, id), isNull(leads.mergedIntoId)))
+    .orderBy(desc(leads.updatedAt))
+    .limit(200);
+  const leadIds = leadRows.map((l) => l.id);
+
+  // Cererile care depind doar de lista de lead-uri pleacă împreună; fiecare se degradează la gol
+  // dacă tabela ei lipsește pe un workspace vechi — fișa se deschide oricum.
+  const safe = async <T>(q: () => Promise<T[]>): Promise<T[]> => {
+    try {
+      return await q();
+    } catch {
+      return [];
+    }
+  };
+  const none = leadIds.length === 0;
+  const [stages, pipelines, contacts, tasks, activity, documents, owners] = await Promise.all([
+    safe(() =>
+      db
+        .select({
+          key: crmPipelineStages.key,
+          label: crmPipelineStages.label,
+          pipelineId: crmPipelineStages.pipelineId,
+          isWon: crmPipelineStages.isWon,
+          isLost: crmPipelineStages.isLost,
+        })
+        .from(crmPipelineStages)
+        .where(eq(crmPipelineStages.tenantId, user.tenantId))
+    ),
+    safe(() =>
+      db
+        .select({ id: crmPipelines.id, name: crmPipelines.name })
+        .from(crmPipelines)
+        .where(eq(crmPipelines.tenantId, user.tenantId))
+    ),
+    none
+      ? Promise.resolve([])
+      : safe(() =>
+          db
+            .select({
+              id: leadContacts.id,
+              leadId: leadContacts.leadId,
+              fullName: leadContacts.fullName,
+              role: leadContacts.role,
+              phone: leadContacts.phone,
+              email: leadContacts.email,
+              isPrimary: leadContacts.isPrimary,
+            })
+            .from(leadContacts)
+            .where(and(eq(leadContacts.tenantId, user.tenantId), inArray(leadContacts.leadId, leadIds)))
+            .limit(200)
+        ),
+    none
+      ? Promise.resolve([])
+      : safe(() =>
+          db
+            .select({
+              id: crmLeadTasks.id,
+              leadId: crmLeadTasks.leadId,
+              title: crmLeadTasks.title,
+              dueAt: crmLeadTasks.dueAt,
+              status: crmLeadTasks.status,
+            })
+            .from(crmLeadTasks)
+            .where(
+              and(
+                eq(crmLeadTasks.tenantId, user.tenantId),
+                inArray(crmLeadTasks.leadId, leadIds),
+                eq(crmLeadTasks.status, "open")
+              )
+            )
+            .orderBy(crmLeadTasks.dueAt)
+            .limit(50)
+        ),
+    none
+      ? Promise.resolve([])
+      : safe(() =>
+          db
+            .select({
+              id: leadInteractions.id,
+              leadId: leadInteractions.leadId,
+              type: leadInteractions.type,
+              direction: leadInteractions.direction,
+              body: leadInteractions.body,
+              occurredAt: leadInteractions.occurredAt,
+              userName: users.name,
+            })
+            .from(leadInteractions)
+            .leftJoin(users, eq(users.id, leadInteractions.userId))
+            .where(and(eq(leadInteractions.tenantId, user.tenantId), inArray(leadInteractions.leadId, leadIds)))
+            .orderBy(desc(leadInteractions.occurredAt))
+            .limit(100)
+        ),
+    none
+      ? Promise.resolve([])
+      : safe(() =>
+          db
+            .select({
+              id: docDocuments.id,
+              leadId: docDocuments.counterpartyId,
+              kind: docDocuments.kind,
+              docNumber: docDocuments.docNumber,
+              title: docDocuments.title,
+              status: docDocuments.status,
+              totalCents: docDocuments.totalCents,
+              currency: docDocuments.currency,
+              createdAt: docDocuments.createdAt,
+            })
+            .from(docDocuments)
+            .where(
+              and(
+                eq(docDocuments.tenantId, user.tenantId),
+                eq(docDocuments.counterpartyKind, "crm_lead"),
+                inArray(docDocuments.counterpartyId, leadIds)
+              )
+            )
+            .orderBy(desc(docDocuments.createdAt))
+            .limit(50)
+        ),
+    safe(() => {
+      const ids = [...new Set(leadRows.map((l) => l.assignedTo).filter((v): v is string => Boolean(v)))];
+      if (ids.length === 0) return Promise.resolve([] as { id: string; name: string }[]);
+      return db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(and(eq(users.tenantId, user.tenantId), inArray(users.id, ids)));
+    }),
+  ]);
+
+  // Cheia etapei e unică în pâlnie, nu în workspace: „new" din două pâlnii sunt etape diferite.
+  const stageOf = (pipelineId: string | null, key: string) =>
+    stages.find((s) => s.key === key && s.pipelineId === pipelineId) ?? stages.find((s) => s.key === key);
+  const ownerName = new Map(owners.map((o) => [o.id, o.name]));
+  const pipelineName = new Map(pipelines.map((p) => [p.id, p.name]));
+
+  const dealList = leadRows.map((l) => {
+    const st = stageOf(l.pipelineId, l.stage);
+    return {
+      ...l,
+      stageLabel: st?.label ?? l.stage,
+      outcome: st?.isWon ? ("won" as const) : st?.isLost ? ("lost" as const) : ("open" as const),
+      pipelineName: l.pipelineId ? (pipelineName.get(l.pipelineId) ?? null) : null,
+      ownerName: l.assignedTo ? (ownerName.get(l.assignedTo) ?? null) : null,
+    };
+  });
+  const leadName = new Map(leadRows.map((l) => [l.id, l.dealName || l.fullName]));
+  const sum = (outcome: "won" | "open" | "lost") =>
+    dealList.filter((d) => d.outcome === outcome).reduce((a, d) => a + (d.valueCents ?? 0), 0);
+
+  // Persoanele de pe lead-uri sunt și ele contacte ale firmei; se unifică după telefon/email.
+  const people = [
+    ...contacts.map((p) => ({ ...p, isPrimary: p.isPrimary === 1, leadName: leadName.get(p.leadId) ?? null })),
+    ...leadRows.map((l) => ({
+      id: `lead-${l.id}`,
+      leadId: l.id,
+      fullName: l.fullName,
+      role: null as string | null,
+      phone: l.phone,
+      email: l.email,
+      isPrimary: false,
+      leadName: l.dealName || null,
+    })),
+  ];
+  const seenPeople = new Set<string>();
+  const contactList = people.filter((p) => {
+    const key = normalizePhone(p.phone) || normalizeEmail(p.email) || normalizeCompanyName(p.fullName) || p.id;
+    if (seenPeople.has(key)) return false;
+    seenPeople.add(key);
+    return true;
+  });
+
+  return c.json({
+    company,
+    stats: {
+      deals: dealList.length,
+      openDeals: dealList.filter((d) => d.outcome === "open").length,
+      openValueCents: sum("open"),
+      wonValueCents: sum("won"),
+      lastActivityAt: activity[0]?.occurredAt ?? null,
+    },
+    deals: dealList,
+    contacts: contactList,
+    tasks: tasks.map((t) => ({ ...t, leadName: leadName.get(t.leadId) ?? null })),
+    documents: documents.map((d) => ({ ...d, leadName: d.leadId ? (leadName.get(d.leadId) ?? null) : null })),
+    activity: activity.map((a) => ({ ...a, leadName: leadName.get(a.leadId) ?? null })),
+  });
+});
+
+// ─── Import de firme ─────────────────────────────────────────────────────────
+
+/** Ca la importul de lead-uri: Vercel refuză corpuri peste ~4.5 MB; un mesaj clar bate un 413 mut. */
+const IMPORT_MAX_BYTES = 2_000_000;
+const IMPORT_PREVIEW_ROWS = 200;
+
+const companyImportInput = z.object({
+  /** CSV/text lipit, sau registrul `.xlsx` în base64 când `format` e „xlsx". */
+  text: z.string().min(1, "Nu am primit niciun conținut de importat."),
+  format: z.enum(["text", "xlsx"]).default("text"),
+  delimiter: z.enum([",", ";", "\t"]).nullish(),
+  /** Foaia din registru (0 = prima). */
+  sheet: z.number().int().min(0).max(200).default(0),
+  /** Rândul cu antetele, numărat de la 1. */
+  headerRow: z.number().int().min(1).max(50).default(1),
+  mapping: z
+    .record(z.string(), z.string().refine(isCompanyImportTarget, "Țintă de mapare necunoscută."))
+    .nullish(),
+  existingMode: z.enum(["skip", "fill", "overwrite"]).default("fill"),
+  fileName: z.string().max(300).nullish(),
+});
+type CompanyImportInput = z.infer<typeof companyImportInput>;
+
+async function buildCompanyImport(tenantId: string, body: CompanyImportInput) {
+  const raw =
+    body.format === "xlsx"
+      ? await parseWorkbookTable(Buffer.from(body.text, "base64"), { sheet: body.sheet })
+      : parseDelimited(body.text, body.delimiter ?? undefined);
+  const delimiter = body.format === "xlsx" ? null : (body.delimiter ?? detectDelimiter(body.text));
+  // Primele rânduri, brute: omul vede unde începe tabelul și alege rândul antetului.
+  const topRows = [raw.headers, ...raw.rows].slice(0, 8);
+  const table = rebaseHeader(raw, body.headerRow);
+
+  const mapping: CompanyFieldMapping =
+    body.mapping && Object.keys(body.mapping).length > 0
+      ? (body.mapping as CompanyFieldMapping)
+      : suggestCompanyMapping(table.headers, table.rows.slice(0, 20));
+  const drafts = applyCompanyMapping(table, mapping, body.headerRow);
+
+  const existing = await loadExistingCompanyKeys(tenantId, drafts);
+  const rows = planCompanyImport(drafts, existing);
+  return {
+    headers: table.headers,
+    delimiter,
+    sheetNames: raw.sheetNames ?? [],
+    topRows,
+    sampleRows: table.rows.slice(0, 3),
+    mapping,
+    rows,
+    counts: countCompanyPlan(rows),
+  };
+}
+
+/** Cheie de dedup → id fișă, doar pentru cheile care apar în fișier. */
+async function loadExistingCompanyKeys(tenantId: string, drafts: CompanyDraft[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const idnos = [...new Set(drafts.map((d) => normalizeIdno(d.idno)).filter((v): v is string => Boolean(v)))];
+  const names = [...new Set(drafts.map((d) => normalizeCompanyName(d.name)).filter((v): v is string => Boolean(v)))];
+  const normalizedIdno = sql<string>`regexp_replace(upper(regexp_replace(${crmCompanies.idno}, '[^A-Za-z0-9]', '', 'g')), '^MD([0-9]{13})$', '\\1')`;
+  for (let i = 0; i < idnos.length; i += 500) {
+    const rows = await db
+      .select({ id: crmCompanies.id, idno: normalizedIdno })
+      .from(crmCompanies)
+      .where(and(eq(crmCompanies.tenantId, tenantId), inArray(normalizedIdno, idnos.slice(i, i + 500))));
+    for (const r of rows) if (r.idno && !out.has(`idno:${r.idno}`)) out.set(`idno:${r.idno}`, r.id);
+  }
+  for (let i = 0; i < names.length; i += 500) {
+    const rows = await db
+      .select({ id: crmCompanies.id, name: crmCompanies.nameNormalized })
+      .from(crmCompanies)
+      .where(and(eq(crmCompanies.tenantId, tenantId), inArray(crmCompanies.nameNormalized, names.slice(i, i + 500))));
+    for (const r of rows) if (r.name && !out.has(`name:${r.name}`)) out.set(`name:${r.name}`, r.id);
+  }
+  return out;
+}
+
+function importError(err: unknown) {
+  const msg = err instanceof Error ? err.message : "";
+  // Mesajele parserului (limită de rânduri, registru stricat) sunt scrise pentru om.
+  if (/rânduri|limita|zip|central directory|end of data/i.test(msg)) {
+    return msg.includes("rânduri") ? msg : "Fișierul Excel nu s-a putut citi. Salvează-l din nou ca .xlsx sau ca CSV.";
+  }
+  return null;
+}
+
+crmCompaniesRoutes.post(
+  "/import/preview",
+  requireCrmPermission("leads.edit"),
+  zValidator("json", companyImportInput),
+  async (c) => {
+    const user = c.get("user");
+    const body = c.req.valid("json");
+    if (Buffer.byteLength(body.text, "utf8") > IMPORT_MAX_BYTES) {
+      return c.json({ error: "Fișierul e prea mare pentru un singur import. Împarte-l în bucăți mai mici." }, 413);
+    }
+    try {
+      const plan = await buildCompanyImport(user.tenantId, body);
+      return c.json({
+        ...plan,
+        rows: plan.rows.slice(0, IMPORT_PREVIEW_ROWS),
+        truncated: plan.rows.length > IMPORT_PREVIEW_ROWS,
+      });
+    } catch (err) {
+      const message = importError(err);
+      if (message) return c.json({ error: message }, 400);
+      throw err;
+    }
+  }
+);
+
+crmCompaniesRoutes.post(
+  "/import/run",
+  requireCrmPermission("leads.edit"),
+  zValidator("json", companyImportInput),
+  async (c) => {
+    const user = c.get("user");
+    const body = c.req.valid("json");
+    if (Buffer.byteLength(body.text, "utf8") > IMPORT_MAX_BYTES) {
+      return c.json({ error: "Fișierul e prea mare pentru un singur import. Împarte-l în bucăți mai mici." }, 413);
+    }
+    let plan: Awaited<ReturnType<typeof buildCompanyImport>>;
+    try {
+      plan = await buildCompanyImport(user.tenantId, body);
+    } catch (err) {
+      const message = importError(err);
+      if (message) return c.json({ error: message }, 400);
+      throw err;
+    }
+
+    // Aceeași funcție ca la previzualizare → se scrie exact ce a văzut omul.
+    const toCreate = plan.rows.filter((r) => r.status === "new");
+    let created = 0;
+    for (let i = 0; i < toCreate.length; i += 500) {
+      const chunk = toCreate.slice(i, i + 500);
+      const inserted = await db
+        .insert(crmCompanies)
+        .values(chunk.map((r) => ({ tenantId: user.tenantId, ...companyColumns(r.draft) })))
+        .returning({ id: crmCompanies.id });
+      created += inserted.length;
+    }
+
+    let updated = 0;
+    const toUpdate = body.existingMode === "skip" ? [] : plan.rows.filter((r) => r.status === "exists" && r.existingId);
+    if (toUpdate.length > 0) {
+      const ids = [...new Set(toUpdate.map((r) => r.existingId as string))];
+      const current = new Map<string, typeof crmCompanies.$inferSelect>();
+      for (let i = 0; i < ids.length; i += 500) {
+        const rows = await db
+          .select()
+          .from(crmCompanies)
+          .where(and(eq(crmCompanies.tenantId, user.tenantId), inArray(crmCompanies.id, ids.slice(i, i + 500))));
+        for (const r of rows) current.set(r.id, r);
+      }
+      for (const r of toUpdate) {
+        const row = current.get(r.existingId as string);
+        if (!row) continue;
+        const patch = companyPatch(row, companyColumns(r.draft), body.existingMode);
+        if (Object.keys(patch).length === 0) continue;
+        await db
+          .update(crmCompanies)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(and(eq(crmCompanies.id, row.id), eq(crmCompanies.tenantId, user.tenantId)));
+        // Două rânduri pot ținti aceeași fișă (IDNO într-unul, nume în altul): al doilea vede ce a scris primul.
+        current.set(row.id, { ...row, ...patch } as typeof row);
+        updated += 1;
+      }
+    }
+
+    const counts = plan.counts;
+    await logCrmAudit({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      action: "company.imported",
+      target: "crm_company",
+      after: { fileName: body.fileName ?? null, created, updated, mode: body.existingMode, counts },
+    });
+
+    return c.json({
+      created,
+      updated,
+      unchanged: counts.exists - updated,
+      skipped: counts.duplicatesInFile + counts.errors,
+      counts,
+      details: plan.rows
+        .filter((r) => r.status === "error")
+        .slice(0, 200)
+        .map((r) => ({ rowNumber: r.draft.rowNumber, reason: r.errors.join(" ") })),
+    });
+  }
+);
 
 // ─── Duplicate ───────────────────────────────────────────────────────────────
 

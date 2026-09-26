@@ -18,7 +18,8 @@ export type CrmAuditTarget =
   | "crm_stage"
   | "crm_cadence"
   | "crm_reengagement_rule"
-  | "crm_custom_field";
+  | "crm_custom_field"
+  | "crm_company";
 
 export interface CrmAuditInput {
   tenantId: string;

@@ -63,6 +63,8 @@ export function detectDelimiter(sample: string): Delimiter {
 export interface ParsedTable {
   headers: string[];
   rows: string[][];
+  /** Doar la registre: numele foilor, ca omul să poată alege alta decât prima. */
+  sheetNames?: string[];
 }
 
 /** Câte rânduri acceptăm dintr-un registru — aceeași limită ca la DocMerge. */
@@ -82,13 +84,14 @@ const MAX_WORKBOOK_ROWS = 5000;
  * Valorile se aduc la text: importul lucrează cu șiruri, iar conversiile (bani, date) se fac mai
  * jos, o singură dată, indiferent dacă rândul a venit din CSV sau din Excel.
  */
-export async function parseWorkbookTable(buffer: Buffer): Promise<ParsedTable> {
+export async function parseWorkbookTable(buffer: Buffer, opts: { sheet?: number } = {}): Promise<ParsedTable> {
   const { default: ExcelJS } = (await import("exceljs")) as { default: typeof import("exceljs") };
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
 
-  const sheet = wb.worksheets[0];
-  if (!sheet) return { headers: [], rows: [] };
+  const sheetNames = wb.worksheets.map((w) => w.name);
+  const sheet = wb.worksheets[opts.sheet ?? 0] ?? wb.worksheets[0];
+  if (!sheet) return { headers: [], rows: [], sheetNames };
   if (sheet.rowCount > MAX_WORKBOOK_ROWS + 1) {
     throw new Error(`Registrul are ${sheet.rowCount} rânduri; limita e ${MAX_WORKBOOK_ROWS}. Împarte-l în fișiere mai mici.`);
   }
@@ -119,7 +122,7 @@ export async function parseWorkbookTable(buffer: Buffer): Promise<ParsedTable> {
     else if (values.some((v) => v !== "")) rows.push(values);
   });
 
-  return { headers, rows };
+  return { headers, rows, sheetNames };
 }
 
 /** Scoate rândurile complet goale de la finalul unui tabel brut (linii goale
@@ -602,7 +605,9 @@ function findColumnFor(mapping: FieldMapping, field: ImportTargetField): number 
 export function normalizeIdno(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const cleaned = String(raw).toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return cleaned.length > 0 ? cleaned : null;
+  // Prefixul de țară al IDNO-ului moldovenesc („MD1003600012345") nu face parte din cod.
+  const code = /^MD\d{13}$/.test(cleaned) ? cleaned.slice(2) : cleaned;
+  return code.length > 0 ? code : null;
 }
 
 /** „alimentar, retail ; HoReCa" → ["alimentar", "retail", "HoReCa"]. O celulă de etichete

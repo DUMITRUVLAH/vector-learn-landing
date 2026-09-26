@@ -13,8 +13,12 @@
  * se șterge. Rămâne în bază, marcat, cu istoricul mutat pe fișa păstrată.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Building2, Users, Loader2, Plus, Search, GitMerge, AlertTriangle } from "lucide-react";
+import { Building2, Users, Loader2, Plus, Search, GitMerge, AlertTriangle, Upload } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { CompanyFormDialog } from "@/components/crm/CompanyFormDialog";
+import { CompanyImportDialog } from "@/components/crm/CompanyImportDialog";
+import { Link, useRouter } from "@/router/HashRouter";
+import { companyHref } from "@/lib/crm/companyUrl";
 import {
   Alert,
   Badge,
@@ -31,17 +35,14 @@ import {
   TableHeader,
   TableRow,
   Tabs,
-  Textarea,
 } from "@/components/ds";
 import {
   listCrmCompanies,
-  createCrmCompany,
   listCrmDuplicates,
   previewCrmMerge,
   mergeCrmLeads,
   MERGE_FIELD_LABELS,
   type CrmCompany,
-  type CrmCompanyInput,
   type CrmDuplicateCluster,
   type CrmMergePlan,
 } from "@/lib/api/crmCompanies";
@@ -88,6 +89,8 @@ function CompaniesTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const { navigate } = useRouter();
 
   const load = useCallback(async (term: string) => {
     setLoading(true);
@@ -128,10 +131,16 @@ function CompaniesTab() {
             />
           </div>
         </div>
-        <Button onClick={() => setAdding(true)}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Firmă nouă
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImporting(true)}>
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            Importă din Excel / CSV
+          </Button>
+          <Button onClick={() => setAdding(true)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Firmă nouă
+          </Button>
+        </div>
       </div>
 
       {error && <Alert variant="destructive">{error}</Alert>}
@@ -147,7 +156,7 @@ function CompaniesTab() {
           description={
             search
               ? "Încearcă alt cuvânt — căutarea merge și pe cod fiscal, telefon sau email."
-              : "Firmele apar aici pe măsură ce le adaugi sau le imporți odată cu lead-urile."
+              : "Adaugă o firmă sau importă lista de clienți din Excel / CSV — maparea coloanelor o alegi tu."
           }
         />
       ) : (
@@ -160,16 +169,24 @@ function CompaniesTab() {
                 <TableHead>Industrie</TableHead>
                 <TableHead>Regiune</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead className="text-right">Oportunități</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
+                <TableRow key={c.id} interactive onClick={() => navigate(companyHref(c.id))}>
+                  <TableCell className="font-medium">
+                    {/* Linkul e ținta reală (tastatură, click-dreapta „deschide în filă nouă");
+                        clicul pe rând e doar o scurtătură pentru mouse. */}
+                    <Link to={companyHref(c.id)} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                      {c.name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground tabular-nums">{c.idno || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{c.industry || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{c.region || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{c.phone || c.email || "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">{c.leadCount || "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -178,93 +195,19 @@ function CompaniesTab() {
       )}
 
       {adding && (
-        <CompanyDialog
+        <CompanyFormDialog
           onClose={() => setAdding(false)}
-          onSaved={async () => {
+          onSaved={async (company) => {
             setAdding(false);
-            await load(search);
+            navigate(companyHref(company.id));
           }}
         />
       )}
+
+      {importing && (
+        <CompanyImportDialog onClose={() => setImporting(false)} onImported={() => load(search)} />
+      )}
     </div>
-  );
-}
-
-function CompanyDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void | Promise<void> }) {
-  const [form, setForm] = useState<CrmCompanyInput>({ name: "" });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function set<K extends keyof CrmCompanyInput>(key: K, value: CrmCompanyInput[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      await createCrmCompany(form);
-      await onSaved();
-    } catch (err) {
-      setError(errText(err, "Nu am putut salva firma."));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open onClose={onClose} title="Firmă nouă">
-      <div className="space-y-3">
-        {error && <Alert variant="destructive">{error}</Alert>}
-        <div className="space-y-1">
-          <Label htmlFor="f-nume">Denumire</Label>
-          <Input id="f-nume" value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label htmlFor="f-idno">Cod fiscal (IDNO)</Label>
-            <Input id="f-idno" value={form.idno ?? ""} onChange={(e) => set("idno", e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="f-industrie">Industrie</Label>
-            <Input id="f-industrie" value={form.industry ?? ""} onChange={(e) => set("industry", e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="f-regiune">Regiune</Label>
-            <Input id="f-regiune" value={form.region ?? ""} onChange={(e) => set("region", e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="f-marime">Mărime</Label>
-            <Input id="f-marime" value={form.companySize ?? ""} onChange={(e) => set("companySize", e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="f-telefon">Telefon</Label>
-            <Input id="f-telefon" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="f-email">Email</Label>
-            <Input id="f-email" type="email" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="f-adresa">Adresă</Label>
-          <Input id="f-adresa" value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="f-note">Notițe</Label>
-          <Textarea id="f-note" rows={3} value={form.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={onClose}>
-            Renunță
-          </Button>
-          <Button onClick={() => void save()} disabled={saving || form.name.trim().length < 2}>
-            {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            Salvează
-          </Button>
-        </div>
-      </div>
-    </Dialog>
   );
 }
 
