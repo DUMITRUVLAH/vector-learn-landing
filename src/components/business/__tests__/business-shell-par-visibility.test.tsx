@@ -7,7 +7,7 @@
  * T-VM1-01-4 [normal]: 401 from /api/par/me → behaves as roles=[]
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { useParRoles } from "@/hooks/useParRoles";
 import { ALL_MODULE_KEYS, type ModuleKey } from "@/hooks/useEnabledModules";
 import { BusinessShell } from "@/components/business/BusinessShell";
@@ -81,8 +81,11 @@ describe("T-VM1-01-1 [blocant] PAR section hidden when roles=[]", () => {
     renderShell();
 
     // No link to /business/par should be in sidebar when roles=[]
-    const parLinks = document.querySelectorAll('a[href*="business/par"]');
-    // The PAR section links (sidebar) should not exist
+    // DC-101: modulul Documente trăiește sub `/business/par/documente` ca meniul să nu sară, dar e
+    // al tuturor, nu al PAR — deci nu intră în numărătoare.
+    const parLinks = Array.from(document.querySelectorAll('a[href*="business/par"]')).filter(
+      (a) => !a.getAttribute("href")?.includes("/business/par/documente"),
+    );
     expect(parLinks.length).toBe(0);
   });
 });
@@ -124,10 +127,10 @@ describe("T-VM1-01-2 [blocant] PAR and other sections visible when roles present
     mockUseParRoles.mockReturnValue({ status: "resolved", roles: [] });
     renderShell();
 
-    const finDeskToggle = await screen.findByText("FinDesk — Finanțe");
-    fireEvent.click(finDeskToggle); // expand the collapsible section
+    // Secțiunile HR365 sunt deschise implicit — un click le-ar fi ÎNCHIS (de aici eșecul vechi).
+    expect(await screen.findByText("FinDesk — Finanțe")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("Rezidenți ITPark")).toBeInTheDocument();
+      expect(screen.getByText("Rezidenți IT Park")).toBeInTheDocument();
     });
   });
 });

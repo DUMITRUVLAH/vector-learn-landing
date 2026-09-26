@@ -22,9 +22,7 @@ import {
   Upload,
   FileText,
   DollarSign,
-  CreditCard,
   BarChart3,
-  BookOpen,
   Users,
   Filter,
   Home,
@@ -40,9 +38,7 @@ import {
   Zap,
   RefreshCw,
   Calendar,
-  ListChecks,
   ShieldCheck,
-  Shield,
   ArrowLeft,
   FolderOpen,
   CloudUpload,
@@ -63,6 +59,7 @@ import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { onParBadgeRefresh } from "@/lib/par/badgeBus";
 import { DOCS_BASE } from "@/lib/docs/paths";
 import type { CrmPermission } from "@/lib/api/crm";
+import { CRM_FIN_ITEMS, visibleFinNavGroups } from "@/lib/fin/finNav";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { cachedOnce, peekResolved } from "@/lib/sessionCache";
@@ -121,6 +118,10 @@ interface NavItem {
    * Oglindește `requireCrmPermission` de pe server — ascunderea e curtoazie, nu apărare.
    */
   crmPermission?: CrmPermission;
+  /** NAV-01: alte rute care aprind rândul (un modul cu file are un rând și mai multe rute). */
+  alsoActive?: string[];
+  /** NAV-04: rândul CRM care afișează date FinDesk — apare doar cu FinDesk pornit. */
+  requiresFindesk?: boolean;
 }
 
 interface NavGroup {
@@ -145,35 +146,17 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // NAV-01: pe tabloul general FinDesk e o secțiune de scurtături, nu cele 26 de rânduri — harta
+    // completă, grupată, apare în interiorul modulului (FIN_SIDEBAR_GROUPS). Titlul rămâne cheia
+    // după care filtrul de module ascunde secțiunea când FinDesk e oprit.
     section: "FinDesk — Finanțe",
     prefix: "/business/fin",
     items: [
       { label: "Acasă FinDesk", href: "/business/fin/", icon: Home, tone: "violet" },
-      { label: "Compania mea", href: "/business/fin/company", icon: Building2, tone: "indigo" },
-      { label: "Facturi", href: "/business/fin/invoices", icon: Receipt, tone: "blue" },
-      { label: "Cont de plată", href: "/business/fin/invoices/document", icon: FileText, tone: "sky" },
-      { label: "e-Factura", href: "/business/fin/einvoices", icon: FileText, tone: "teal" },
-      { label: "Încasări", href: "/business/fin/payments", icon: CreditCard, tone: "emerald" },
+      { label: "Facturi", href: "/business/fin/invoices", icon: Receipt, tone: "blue", alsoActive: ["/business/fin/einvoices"] },
       { label: "Cheltuieli", href: "/business/fin/expenses", icon: DollarSign, tone: "rose" },
-      { label: "Parteneri", href: "/business/fin/parties", icon: Users, tone: "amber" },
-      { label: "Acorduri", href: "/business/fin/agreements", icon: FileText, tone: "violet" },
-      { label: "Registru general", href: "/business/fin/ledger", icon: Landmark, tone: "indigo" },
-      { label: "TVA & declarații", href: "/business/fin/tax", icon: ClipboardList, tone: "orange" },
-      { label: "Salarii", href: "/business/fin/payroll", icon: DollarSign, tone: "emerald" },
-      { label: "Mijloace fixe", href: "/business/fin/assets", icon: Building2, tone: "teal" },
-      { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen, tone: "sky" },
-      { label: "Buget", href: "/business/fin/budget", icon: BarChart3, tone: "violet" },
-      { label: "Invoice Reporting", href: "/business/fin/captures", icon: Zap, tone: "amber" },
-      { label: "Import extras bancar", href: "/business/fin/statement/upload", icon: FileSpreadsheet, tone: "blue" },
-      { label: "Istoric extrase", href: "/business/fin/statement", icon: FileText, tone: "sky" },
-      { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw, tone: "teal" },
-      { label: "Conturi bancare", href: "/business/fin/banklink", icon: Banknote, tone: "emerald" },
       { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar, tone: "orange" },
-      { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks, tone: "rose" },
-      { label: "Export & rapoarte", href: "/business/fin/export", icon: BarChart3, tone: "indigo" },
-      { label: "Rezidenți ITPark", href: "/business/fin/itpark", icon: Building2, tone: "violet" },
-      { label: "Securitate", href: "/business/fin/settings/security", icon: Shield, tone: "rose" },
-      { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings, tone: "amber" },
+      { label: "Rezidenți IT Park", href: "/business/fin/itpark", icon: Building2, tone: "emerald" },
     ],
   },
   {
@@ -270,6 +253,21 @@ const CRM_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // NAV-04: contractele și facturile sunt și acte de vânzare, deci CRM-ul le are în meniul lui —
+    // aceleași pagini și aceleași date ca în FinDesk, doar meniul din jur e al CRM-ului. Apar doar
+    // cu FinDesk pornit: seria de facturare și profilul fiscal se configurează acolo.
+    section: "Contracte & facturare",
+    prefix: "/business/crm",
+    items: CRM_FIN_ITEMS.map((it) => ({
+      label: it.label,
+      href: it.href,
+      icon: it.icon,
+      tone: it.tone,
+      requiresFindesk: true,
+      alsoActive: it.alsoActive,
+    })),
+  },
+  {
     // Nu „Vânzări": e și numele pâlniei implicite, iar două controale cu același nume pe
     // aceeași pagină se confundă (și pentru cititoarele de ecran).
     section: "Instrumente",
@@ -316,6 +314,19 @@ const CRM_NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * NAV-01: meniul FinDesk din interiorul modulului — grupat, din harta unică `finNav.ts`, pe care o
+ * citește și ecranul de start. Se construiește per randare fiindcă ascunde rânduri după modulele
+ * pornite (Contracte trec în CRM, IT Park e modul separat).
+ */
+function finSidebarGroups(opts: { crmEnabled: boolean; itparkEnabled: boolean }): NavGroup[] {
+  return visibleFinNavGroups(opts).map((g) => ({
+    section: g.section,
+    prefix: "/business/fin",
+    items: g.items.map((it) => ({ label: it.label, href: it.href, icon: it.icon, tone: it.tone, alsoActive: it.alsoActive })),
+  }));
+}
+
 /** Exported for testing purposes only (T-DOCMERGE-004-4). Do not use in production code. */
 export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
 
@@ -335,7 +346,7 @@ const INDEX_HREFS = ["/business/par", "/business/fin/", "/business/crm"];
 function isItemActive(item: NavItem, path: string): boolean {
   const isIndexItem = INDEX_HREFS.includes(item.href);
   if (isIndexItem) return path === item.href || path === item.href.replace(/\/$/, "");
-  return path.startsWith(item.href);
+  return path.startsWith(item.href) || !!item.alsoActive?.some((href) => path.startsWith(href));
 }
 
 /** Notification pill count for the two nav rows that carry one. */
@@ -717,6 +728,11 @@ export function BusinessShell({
   const isCrmModule = path.startsWith("/business/crm");
   const crmOnlyWorkspace = enabledModules.length === 1 && enabledModules[0] === "crm";
   const useCrmNav = !useParNav && (isCrmModule || (crmOnlyWorkspace && isEnabled("crm")));
+  // NAV-01: FinDesk are și el meniu propriu în interiorul modulului — 26 de rânduri plate sub PAR
+  // erau exact problema pe care CRM-ul și PAR-ul o rezolvaseră deja.
+  const isFinModule = path.startsWith("/business/fin");
+  const finOnlyWorkspace = enabledModules.length === 1 && enabledModules[0] === "findesk";
+  const useFinNav = !useParNav && !useCrmNav && (isFinModule || (finOnlyWorkspace && isEnabled("findesk")));
   // Drepturile se cer numai în CRM: pe restul rutelor n-au ce rând să ascundă.
   const { can: crmCan } = useCrmPermissions({ enabled: useCrmNav });
 
@@ -727,6 +743,8 @@ export function BusinessShell({
     ? PAR_NAV_GROUPS
     : useCrmNav
     ? CRM_NAV_GROUPS
+    : useFinNav
+    ? finSidebarGroups({ crmEnabled: isEnabled("crm"), itparkEnabled: isEnabled("itpark") })
     : availableGroups.filter((g) => {
         if (g.section === "PAR — Cereri de plată") return hasPar;
         if (g.section === "FinDesk — Finanțe") return isEnabled("findesk");
@@ -743,6 +761,7 @@ export function BusinessShell({
       items: g.items.filter((it) => {
         if (it.roles && !it.roles.some((r) => parRoles.includes(r)) && !(it.alsoPreApprover && preApprover)) return false;
         if (it.crmPermission && !crmCan(it.crmPermission)) return false;
+        if (it.requiresFindesk && !isEnabled("findesk")) return false;
         // Rândul ITPark trăiește sub FinDesk, dar e un modul separat în catalog.
         if (it.href.startsWith("/business/fin/itpark")) return isEnabled("itpark");
         return true;
@@ -780,7 +799,8 @@ export function BusinessShell({
 
   // „Înapoi la module" apare cât timp CHIAR există alt modul de întors; într-un workspace cu un
   // singur modul, meniul lui e tot meniul, deci rămâne rândul de Dashboard.
-  const inFocusedModule = (isParModule && !parOnlyWorkspace) || (isCrmModule && !crmOnlyWorkspace);
+  const inFocusedModule =
+    (isParModule && !parOnlyWorkspace) || (isCrmModule && !crmOnlyWorkspace) || (isFinModule && !finOnlyWorkspace);
   const showBackToModules = inFocusedModule;
   const showDashboard = !inFocusedModule;
 
@@ -925,16 +945,28 @@ export function BusinessShell({
                 ...(canAnalyse ? [{ label: "Rapoarte", href: "/business/par/reports", icon: BarChart3 }] : []),
                 ...(isParAdmin ? [{ label: "Admin", href: "/business/par/admin", icon: Settings }] : []),
               ]
+            : useFinNav
+            ? [
+                // NAV-01: în FinDesk, filele de jos sunt munca zilnică a contabilului.
+                { label: "Acasă", href: "/business/fin/", icon: Home },
+                { label: "Facturi", href: "/business/fin/invoices", icon: Receipt },
+                { label: "Cheltuieli", href: "/business/fin/expenses", icon: DollarSign },
+                { label: "Termene", href: "/business/fin/calendar", icon: Calendar },
+              ]
             : [
                 { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
                 ...(isEnabled("findesk") ? [{ label: "FinDesk", href: "/business/fin/", icon: Landmark }] : []),
                 // VM1-01: only show PAR tab if user has at least one PAR role
                 ...(hasPar ? [{ label: "PAR", href: "/business/par", icon: ClipboardList }] : []),
-                ...(isEnabled("itpark") ? [{ label: "ITPark", href: "/business/itpark", icon: Building2 }] : []),
+                ...(isEnabled("crm") ? [{ label: "CRM", href: "/business/crm", icon: KanbanSquare }] : []),
+                // Ruta ITPark e /business/fin/itpark — „/business/itpark" nu există și ducea la 404.
+                ...(isEnabled("itpark") ? [{ label: "ITPark", href: "/business/fin/itpark", icon: Building2 }] : []),
                 ...(isEnabled("pontaj") ? [{ label: "Pontaj", href: "/business/pontaj", icon: CalendarClock }] : []),
-              ];
+              ].slice(0, 5);
+          // Cinci file încap (≥ 64px fiecare la 320px); a șasea ar fi rupt rândul în două.
           const colsClass =
-            mobileItems.length >= 4 ? "grid-cols-4"
+            mobileItems.length >= 5 ? "grid-cols-5"
+            : mobileItems.length === 4 ? "grid-cols-4"
             : mobileItems.length === 3 ? "grid-cols-3"
             : mobileItems.length === 2 ? "grid-cols-2"
             : "grid-cols-1";
@@ -943,9 +975,11 @@ export function BusinessShell({
           {mobileItems.map((item) => {
             const Icon = item.icon;
             const active =
-              item.href === "/business/par"
-                ? path === "/business/par" || path === "/business/par/"
-                : path.startsWith(item.href);
+              item.href === "/business/par" || item.href === "/business/crm"
+                ? path === item.href || path === `${item.href}/`
+                : item.href === "/business/fin/" && useFinNav
+                ? path === "/business/fin/" || path === "/business/fin"
+                : path.startsWith(item.href) || (item.href === "/business/fin/invoices" && path.startsWith("/business/fin/einvoices"));
             return (
               <Link
                 key={item.href}

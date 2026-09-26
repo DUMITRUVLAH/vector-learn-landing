@@ -124,9 +124,17 @@ const appShellBusinessSection = businessNavStart !== -1 && businessNavEnd !== -1
   : "";
 const appShellBusinessHrefs = extractHrefs(appShellBusinessSection, "AppShell(BUSINESS_NAV_GROUPS)");
 
+// NAV-01: harta FinDesk (meniul din modul + ecranul de start) și rutele modulului Facturare.
+// Rutele stau și în constante (`invoices: "/business/fin/invoices"`), nu doar în `href:`.
+const finMapSrc = readNav("src/lib/fin/finNav.ts", "CHECK_FINMAP_FIXTURE");
+const finMapHrefs = [
+  ...extractHrefs(finMapSrc, "finNav"),
+  ...[...finMapSrc.matchAll(/:\s*"(\/business\/[^"]+)"/g)].map((m) => ({ href: m[1], source: "finNav" })),
+];
+
 // ─── 4. Check all collected hrefs ─────────────────────────────────────────────
 
-const allHrefs = [...finNavHrefs, ...businessShellHrefs, ...appShellBusinessHrefs];
+const allHrefs = [...finNavHrefs, ...businessShellHrefs, ...appShellBusinessHrefs, ...finMapHrefs];
 const dead = allHrefs.filter(({ href }) => !isCovered(href, routes));
 
 // ─── 5. Report ────────────────────────────────────────────────────────────────

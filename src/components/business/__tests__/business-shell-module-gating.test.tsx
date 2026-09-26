@@ -114,8 +114,9 @@ describe("gating-ul modulelor în navigația clientului", () => {
     // Exact ce întoarce hook-ul real la eroare de rețea / tabelă lipsă.
     setEnabled([...DEFAULT_MODULE_KEYS]);
     renderShell();
-    // PAR singur = meniul PAR complet (fără antetul de secțiune pliabilă).
-    expect((await screen.findAllByText("Cereri de plată")).length).toBeGreaterThan(0);
+    // Implicitul e acum PAR + CRM (nu doar PAR), deci meniul general arată secțiunea PAR, iar
+    // modulele pe care serverul le-ar refuza (FinDesk) lipsesc.
+    expect(await screen.findByText("PAR — Cereri de plată")).toBeInTheDocument();
     expect(screen.queryByText("FinDesk — Finanțe")).not.toBeInTheDocument();
   });
 });

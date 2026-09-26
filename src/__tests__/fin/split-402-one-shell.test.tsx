@@ -15,6 +15,7 @@ import { render, screen, within } from "@testing-library/react";
 
 import { AppShell } from "@/components/app/AppShell";
 import { NAV_GROUPS_EXPORT } from "@/components/business/BusinessShell";
+import { FIN_NAV_GROUPS } from "@/lib/fin/finNav";
 
 vi.mock("@/router/HashRouter", () => ({
   useRouter: () => ({ path: "/business/fin/captures", navigate: vi.fn() }),
@@ -44,8 +45,9 @@ describe("SPLIT-402 — single business shell", () => {
     expect(nav).toBeInTheDocument();
     // Key modules present in the one menu (nothing lost in the merge).
     expect(within(nav).getByText("Invoice Reporting")).toBeInTheDocument();
-    expect(within(nav).getByText("e-Factura")).toBeInTheDocument();
-    expect(within(nav).getByText("Salarii")).toBeInTheDocument();
+    // NAV-02: e-Factura e o filă a modulului „Facturi", nu un rând separat.
+    expect(within(nav).getByText("Facturi")).toBeInTheDocument();
+    expect(within(nav).getByText("Salarizare")).toBeInTheDocument();
     // DocMerge is prefix-gated: it only enters the sidebar on /business/docmerge/*,
     // so on a FinDesk path it is correctly absent here (its presence in the nav
     // definition is pinned by the NAV_GROUPS_EXPORT test below).
@@ -64,9 +66,11 @@ describe("SPLIT-402 — single business shell", () => {
   });
 
   it("the single nav keeps every FinDesk module from both old menus", () => {
-    const finGroup = NAV_GROUPS_EXPORT.find((g) => g.section?.startsWith("FinDesk"));
-    const labels = finGroup?.items.map((i) => i.label) ?? [];
-    for (const m of ["Facturi", "Cont de plată", "e-Factura", "Cheltuieli", "Invoice Reporting", "Salarii", "Mijloace fixe", "Stocuri", "Buget", "Export & rapoarte"]) {
+    // NAV-01: harta completă trăiește în finNav.ts (meniul din interiorul modulului); pe tabloul
+    // general FinDesk are doar o secțiune de scurtături.
+    expect(NAV_GROUPS_EXPORT.find((g) => g.section?.startsWith("FinDesk"))).toBeDefined();
+    const labels = FIN_NAV_GROUPS.flatMap((g) => g.items.map((i) => i.label));
+    for (const m of ["Facturi", "Cheltuieli", "Invoice Reporting", "Salarizare", "Mijloace fixe", "Stocuri", "Buget", "Export & rapoarte", "Calendar fiscal", "TVA & declarații", "Rezidenți IT Park"]) {
       expect(labels).toContain(m);
     }
   });
