@@ -165,6 +165,11 @@ export async function removeBoardMember(boardId: string, userId: string): Promis
   await api(`${BASE}/boards/${boardId}/members/${userId}`, json("DELETE"));
 }
 
+/** O echipă întreagă devine membră a boardului; cei deja pe board își păstrează rolul. Întoarce câți au intrat. */
+export async function addTeamToBoard(boardId: string, teamId: string, role: BoardRole = "editor"): Promise<number> {
+  return (await api<{ added: number }>(`${BASE}/boards/${boardId}/members/team`, json("POST", { team_id: teamId, role }))).added;
+}
+
 /**
  * Toți oamenii workspace-ului, pentru AFIȘARE (avatare, autori, actori din istoric) — inclusiv
  * cei dezactivați: un task atribuit cuiva plecat trebuie să-i arate numele, nu o bulină anonimă.

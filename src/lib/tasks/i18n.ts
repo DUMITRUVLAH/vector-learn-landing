@@ -703,6 +703,13 @@ export const ro = {
   "board.attachments.typeNotAllowed": "Tipul fișierului nu este permis. Acceptate: PDF, imagini, Word, Excel, PowerPoint, text, CSV, ZIP.",
   "board.actions.menu": "Acțiuni pentru boardul „{name}”",
   "board.teams.menu": "Acțiuni pentru echipa „{name}”",
+  "board.members.addTeam": "Adaugă o echipă întreagă",
+  "board.members.pickTeam": "Alege echipa",
+  "board.members.addTeamButton": "Adaugă echipa",
+  "board.members.teamAdded_one": "{count} membru nou.",
+  "board.members.teamAdded_few": "{count} membri noi.",
+  "board.members.teamAdded_other": "{count} de membri noi.",
+  "board.members.teamAddedNone": "Toți membrii echipei erau deja pe board.",
 } as const;
 
 export const en: Translated<typeof ro> = {
@@ -1396,6 +1403,13 @@ export const en: Translated<typeof ro> = {
   "board.attachments.typeNotAllowed": "This file type is not allowed. Accepted: PDF, images, Word, Excel, PowerPoint, text, CSV, ZIP.",
   "board.actions.menu": "Actions for board “{name}”",
   "board.teams.menu": "Actions for team “{name}”",
+  "board.members.addTeam": "Add a whole team",
+  "board.members.pickTeam": "Choose a team",
+  "board.members.addTeamButton": "Add team",
+  "board.members.teamAdded_one": "{count} new member.",
+  "board.members.teamAdded_few": "{count} new members.",
+  "board.members.teamAdded_other": "{count} new members.",
+  "board.members.teamAddedNone": "Everyone on that team was already on the board.",
 };
 
 export type TasksKey = keyof typeof ro;

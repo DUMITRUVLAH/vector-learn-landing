@@ -288,6 +288,17 @@ export function useAddBoardMember(boardId: string | undefined) {
   });
 }
 
+export function useAddTeamToBoard(boardId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, role }: { teamId: string; role?: BoardRole }) => api.addTeamToBoard(boardId as string, teamId, role),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [KEY, "members", boardId] });
+      qc.invalidateQueries({ queryKey: [KEY, "assignable"] });
+    },
+  });
+}
+
 export function useRemoveBoardMember(boardId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({

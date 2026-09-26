@@ -5,7 +5,8 @@
 // boardului sau prin vizibilitatea lui — așa poți da `admin` cuiva din afara
 // echipei, sau `viewer` cuiva din ea.
 
-import { Trash2, UserPlus } from "lucide-react";
+import { useState } from "react";
+import { Trash2, UserPlus, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Button,
@@ -25,10 +26,12 @@ import { toast } from "@/lib/tasks/toast";
 import { AssigneePicker } from "@/components/tasks/AssigneePicker";
 import {
   useAddBoardMember,
+  useAddTeamToBoard,
   useAssignableIndex,
   useAssignableUsers,
   useBoardMembers,
   useRemoveBoardMember,
+  useSelectableTeams,
 } from "@/hooks/useTaskBoards";
 import { BOARD_ROLES, type BoardMember, type BoardRole } from "@/lib/tasks/types";
 import { avatarClass, initialsOf } from "@/lib/tasks/meta";
@@ -53,6 +56,27 @@ export function BoardMembersDialog({ boardId, members: membersProp, open, onOpen
   const { data: candidates = [] } = useAssignableUsers(boardId);
   const addMember = useAddBoardMember(boardId);
   const removeMember = useRemoveBoardMember(boardId);
+  // Echipele workspace-ului (aceleași ca în PAR): o echipă întreagă intră pe board dintr-un clic.
+  const { data: teams = [] } = useSelectableTeams(open);
+  const addTeam = useAddTeamToBoard(boardId);
+  const [teamId, setTeamId] = useState("");
+
+  const handleAddTeam = () => {
+    if (!teamId) return;
+    addTeam.mutate(
+      { teamId },
+      {
+        onSuccess: (added) => {
+          setTeamId("");
+          toast.success(added > 0 ? t("board.members.teamAdded", { count: added }) : t("board.members.teamAddedNone"));
+        },
+        onError: (error) => {
+          console.error("[tasks] add team", error);
+          toast.error(t("board.toast.saveFailed"));
+        },
+      },
+    );
+  };
 
   const handleAdd = (userIds: string[]) => {
     const userId = userIds[0];
@@ -86,6 +110,32 @@ export function BoardMembersDialog({ boardId, members: membersProp, open, onOpen
           </div>
           <AssigneePicker boardId={boardId} mode="single" value={[]} onChange={handleAdd} inDialog />
         </div>
+
+        {teams.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Users className="h-3.5 w-3.5" />
+              {t("board.members.addTeam")}
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={teamId} onValueChange={setTeamId}>
+                <SelectTrigger className="h-9 flex-1 text-sm" aria-label={t("board.members.pickTeam")}>
+                  <SelectValue placeholder={t("board.members.pickTeam")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams.map((team) => (
+                    <SelectItem key={team.team_id} value={team.team_id}>
+                      {team.name} · {t("board.form.teamMembers", { count: team.member_count })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline" disabled={!teamId || addTeam.isPending} onClick={handleAddTeam}>
+                {t("board.members.addTeamButton")}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="max-h-72 space-y-1 overflow-y-auto">
           {members.length === 0 && (
