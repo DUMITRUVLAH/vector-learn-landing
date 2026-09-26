@@ -41,6 +41,10 @@ import { fieldLabelRo } from "../lib/docs/fieldLabels";
 import { renderPrintablePdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
 import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
 import { recordLeadDocumentEvent } from "../lib/crm/documentEvents";
+import { ensureShareLink } from "./docShare";
+import { finOrgProfile } from "../db/schema/finCore";
+import { tenants } from "../db/schema/tenants";
+import { documentEmailHtml, documentSender } from "../lib/docs/documentEmail";
 import { blankUnresolved, unresolvedFields } from "../lib/docs/blanks";
 import {
   parVendors,
@@ -95,7 +99,22 @@ async function loadOrg(tenantId: string): Promise<{ name: string | null; logoUrl
     .from(parSettings)
     .where(eq(parSettings.tenantId, tenantId))
     .limit(1);
-  return { name: settings?.orgLegalName ?? null, logoUrl: settings?.orgLogoUrl ?? null };
+  if (settings?.orgLegalName) return { name: settings.orgLegalName, logoUrl: settings.orgLogoUrl ?? null };
+  // CRM-U03: un workspace doar-CRM n-are setări PAR — numele vine din „Datele firmei" (CRM-D04),
+  // apoi din numele workspace-ului. Altfel antetul PDF-ului și expeditorul e-mailului ieșeau fără firmă.
+  const [profile] = await db
+    .select({ legalName: finOrgProfile.legalName, logoUrl: finOrgProfile.logoUrl })
+    .from(finOrgProfile)
+    .where(eq(finOrgProfile.tenantId, tenantId))
+    .limit(1)
+    .catch(() => [] as { legalName: string; logoUrl: string | null }[]);
+  const [tenant] = profile?.legalName
+    ? []
+    : await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  return {
+    name: profile?.legalName || tenant?.name || null,
+    logoUrl: settings?.orgLogoUrl ?? profile?.logoUrl ?? null,
+  };
 }
 
 const lineSchema = z.object({
@@ -1839,10 +1858,12 @@ docsRoutes.post("/documents/:id/email", async (c) => {
 
   let to = "";
   let message: string | null = null;
+  let subjectIn: string | null = null;
   try {
-    const body = (await c.req.json()) as { to?: string; message?: string };
+    const body = (await c.req.json()) as { to?: string; message?: string; subject?: string };
     to = (body?.to ?? "").trim();
-    message = body?.message ?? null;
+    message = body?.message?.trim() ? body.message.slice(0, 5000) : null;
+    subjectIn = body?.subject?.trim() ? body.subject.trim().slice(0, 200) : null;
   } catch {
     to = "";
   }
@@ -1876,14 +1897,38 @@ docsRoutes.post("/documents/:id/email", async (c) => {
     }
   }
 
+  // CRM-U03: actele CRM pleacă cu butonul „Vezi și acceptă" (pagina publică, CRM-D06), de la
+  // „<Firma> · FinFlow Documente", cu răspunsurile direcționate către omul care trimite.
+  const isCrm = doc.counterpartyKind === "crm_lead" && doc.status !== "draft";
+  const viewUrl = isCrm
+    ? `${(process.env.APP_URL ?? "http://localhost:5173").replace(/\/$/, "")}/#/act/${(await ensureShareLink(user.tenantId, doc.id, user.id)).link.token}`
+    : null;
+  const isOffer = doc.kind === "oferta_comerciala";
+  const docLabel = `${doc.title}${doc.docNumber ? `, nr. ${doc.docNumber}` : ""}`;
+  const text =
+    message ??
+    (isCrm
+      ? `Bună ziua,\n\nVă transmitem ${isOffer ? "oferta" : "documentul"} ${docLabel}. ${isOffer ? "O puteți vedea și accepta direct din linkul de mai jos" : "Îl puteți vedea din linkul de mai jos"}; PDF-ul e atașat.\n\nCu respect,\n${(user as { name?: string }).name ?? ""}`.trim()
+      : `Bună ziua,\n\nVă transmitem atașat ${doc.title}${doc.docNumber ? ` (nr. ${doc.docNumber})` : ""}.\n\nCu respect,`);
   const result = await sendDocumentEmail({
     to,
-    subject: `${doc.docNumber ? `${doc.docNumber} · ` : ""}${doc.title}`,
-    message:
-      message ??
-      `Bună ziua,\n\nVă transmitem atașat ${doc.title}${doc.docNumber ? ` (nr. ${doc.docNumber})` : ""}.\n\nCu respect,`,
+    subject: subjectIn ?? `${doc.docNumber ? `${doc.docNumber} · ` : ""}${doc.title}`,
+    message: viewUrl ? `${text}\n\n${viewUrl}` : text,
     fileName,
     pdfBase64,
+    ...(isCrm
+      ? {
+          from: documentSender(org.name),
+          replyTo: (user as { email?: string }).email ?? null,
+          html: documentEmailHtml({
+            message: text,
+            orgName: org.name,
+            docLabel,
+            viewUrl,
+            buttonLabel: isOffer ? "Vezi și acceptă oferta" : "Vezi documentul",
+          }),
+        }
+      : {}),
   });
 
   // Jurnalul consemnează ÎNCERCAREA, nu doar succesul: „am trimis?" trebuie să aibă răspuns și

@@ -38,6 +38,14 @@ vi.mock("../middleware/requireAuth", () => ({
   },
 }));
 
+const sentEmails: Array<Record<string, unknown>> = [];
+vi.mock("../lib/docs/sendDocumentEmail", () => ({
+  sendDocumentEmail: async (p: Record<string, unknown>) => {
+    sentEmails.push(p);
+    return { sent: true };
+  },
+}));
+
 import { Hono } from "hono";
 let app: Hono;
 
@@ -259,5 +267,28 @@ describe("CRM-D06 — clientul răspunde de pe link", () => {
     const token = await linkFor(id);
     await call("DELETE", `/api/docs/${id}/share`);
     expect((await respond(token, { decision: "accept", name: "Ion Popescu" })).status).toBe(404);
+  });
+});
+
+describe("CRM-U03 — actul pleacă pe e-mail din partea FinFlow Documente", () => {
+  it("[blocant] expeditor „<Firma> · FinFlow Documente”, răspunsuri la vânzător, buton spre pagina actului", async () => {
+    process.env.APP_URL = "https://www.finflow.best";
+    const lead = await leadAt("contactat");
+    const id = await finalDoc(lead.id, "oferta_comerciala");
+    sentEmails.length = 0;
+    const res = await call("POST", `/api/docs/documents/${id}/email`, { to: "t@medlife.md", subject: "Oferta noastră" });
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(true);
+    const mail = sentEmails[0];
+    expect(mail.from).toMatch(/· FinFlow Documente" </);
+    expect(mail.replyTo).toBe("ana@alfa.md");
+    expect(mail.subject).toBe("Oferta noastră");
+    expect(String(mail.html)).toMatch(/href="https:\/\/www\.finflow\.best\/#\/act\/[0-9a-f-]{36}"/);
+    expect(String(mail.html)).toContain("Vezi și acceptă oferta");
+    // Linkul din e-mail e chiar linkul public activ al actului.
+    const share = await call("POST", `/api/docs/${id}/share`);
+    expect(String(mail.html)).toContain(share.body.token as string);
+    // Trimiterea mută leadul în etapa de ofertă (CRM-D05).
+    expect(res.body.leadMovedTo).toBe("oferta");
   });
 });

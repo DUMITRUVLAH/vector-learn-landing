@@ -60,6 +60,8 @@ import { DocPreviewDialog } from "./DocPreviewDialog";
 import { BlanksConfirmDialog } from "./BlanksConfirmDialog";
 import { docPathIn, docsListPath, documentIdFromPath } from "@/lib/docs/paths";
 import { pipelineHref } from "@/lib/crm/pipelineUrl";
+import { SendDocumentDialog } from "./SendDocumentDialog";
+import { useBusinessSession } from "@/hooks/useBusinessSession";
 
 /**
  * Cantitatea și prețul se țin ca TEXT cât timp omul tastează.
@@ -107,6 +109,7 @@ export function DocEditorPage() {
   const docId = useMemo(() => documentIdFromPath(path), [path]);
   /** CRM-D01: deschis din CRM (`/business/crm/documente/:id`) — navigările rămân în CRM. */
   const inCrm = path.startsWith("/business/crm");
+  const { data: session } = useBusinessSession();
 
   /**
    * Actul poate porni din fișa unui furnizor: `/business/docs/nou?vendor=<id>&kind=<tip>`.
@@ -475,11 +478,19 @@ export function DocEditorPage() {
    * Trimiterea către contraparte. Răspunsul poate fi „nu am trimis" fără să fie eroare (mediul
    * blochează e-mailurile reale) — atunci spunem exact asta, nu „a eșuat".
    */
+  const [sendOpen, setSendOpen] = useState(false);
   const sendEmail = useCallback(async () => {
     if (!docId) return;
     // CRM-D02: adresa clientului e deja pe act (din lead sau din firmă) — o propunem, nu o
     // cerem din nou. Omul o poate schimba înainte de trimitere.
     const knownEmail = ((doc?.counterpartySnapshot ?? {}) as Record<string, string>).email ?? "";
+    // CRM-U03: actul unui client CRM pleacă printr-un dialog adevărat (expeditor „FinFlow
+    // Documente", subiect, mesaj, buton de acceptare) — nu printr-un prompt al browserului.
+    if (isLeadDoc) {
+      await ensureStoredPdf(docId).catch(() => false);
+      setSendOpen(true);
+      return;
+    }
     const to = window.prompt("Către ce adresă trimitem actul?", knownEmail);
     if (!to) return;
     setError(null);
@@ -495,7 +506,7 @@ export function DocEditorPage() {
       const body = (e as { body?: { message?: string } }).body;
       setError(body?.message ?? "Actul nu a putut fi trimis.");
     }
-  }, [docId, doc?.counterpartySnapshot]);
+  }, [docId, doc?.counterpartySnapshot, isLeadDoc]);
 
   /**
    * „Previzualizează" — aceeași foaie din care se face PDF-ul, deschisă pe loc.
@@ -1278,6 +1289,25 @@ export function DocEditorPage() {
         onDownloadPdf={() => exportWithConfirm("pdf")}
         onClose={() => setPreviewOpen(false)}
       />
+          {sendOpen && doc && docId && (
+        <SendDocumentDialog
+          documentId={docId}
+          docLabel={`${doc.title}${doc.docNumber ? `, nr. ${doc.docNumber}` : ""}`}
+          orgName={session?.tenant.name ?? null}
+          senderName={session?.user.name ?? null}
+          defaultTo={((doc.counterpartySnapshot ?? {}) as Record<string, string>).email ?? ""}
+          forClient
+          isOffer={doc.kind === "oferta_comerciala"}
+          onClose={() => setSendOpen(false)}
+          onSent={async ({ to, leadMovedTo }) => {
+            setSendOpen(false);
+            setEmailNotice(
+              `Actul a plecat către ${to}.${leadMovedTo ? " Leadul a trecut în etapa următoare." : ""}`
+            );
+            setDoc(await getDocument(docId));
+          }}
+        />
+      )}
     </BusinessShell>
   );
 }

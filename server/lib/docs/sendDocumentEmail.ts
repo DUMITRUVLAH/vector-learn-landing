@@ -18,6 +18,12 @@ export interface SendDocumentEmailParams {
   message: string;
   fileName: string;
   pdfBase64: string | null;
+  /** CRM-U03: „<Firma> · FinFlow Documente <adresa verificată>". Lipsă = EMAIL_FROM, ca înainte. */
+  from?: string;
+  /** Răspunsurile clientului merg la omul care a trimis actul. */
+  replyTo?: string | null;
+  /** Varianta HTML (cu butonul spre pagina actului); textul rămâne pentru clienții fără HTML. */
+  html?: string;
 }
 
 export type SendDocumentEmailResult =
@@ -45,7 +51,7 @@ export async function sendDocumentEmail(
     return { sent: false, reason: "not_configured", detail: "Serviciul de e-mail nu e configurat." };
   }
 
-  const from = process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "Vector Finance <onboarding@resend.dev>";
+  const from = params.from ?? process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "Vector Finance <onboarding@resend.dev>";
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -55,6 +61,8 @@ export async function sendDocumentEmail(
         to: [params.to],
         subject: params.subject,
         text: params.message,
+        ...(params.html ? { html: params.html } : {}),
+        ...(params.replyTo ? { reply_to: params.replyTo } : {}),
         ...(params.pdfBase64
           ? { attachments: [{ filename: params.fileName, content: params.pdfBase64 }] }
           : {}),

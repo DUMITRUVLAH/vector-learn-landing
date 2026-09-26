@@ -77,10 +77,25 @@ docShareRoutes.post("/:documentId/share", async (c) => {
   // arăta mâine alt act decât azi.
   if (doc.status === "draft") return c.json({ error: "document_is_draft" }, 400);
 
+  const { link, created } = await ensureShareLink(user.tenantId, documentId, user.id);
+  return c.json(shareShape(link), created ? 201 : 200);
+});
+
+/**
+ * Linkul public al unui act — cel existent (reactivat dacă fusese revocat) sau unul nou.
+ *
+ * Exportat pentru trimiterea pe e-mail (CRM-U03): e-mailul către client poartă butonul „Vezi și
+ * acceptă", deci are nevoie de același link pe care l-ar crea butonul „Link client".
+ */
+export async function ensureShareLink(
+  tenantId: string,
+  documentId: string,
+  userId: string
+): Promise<{ link: typeof docShareLinks.$inferSelect; created: boolean }> {
   const [existing] = await db
     .select()
     .from(docShareLinks)
-    .where(and(eq(docShareLinks.documentId, documentId), eq(docShareLinks.tenantId, user.tenantId)));
+    .where(and(eq(docShareLinks.documentId, documentId), eq(docShareLinks.tenantId, tenantId)));
 
   // Un act are un singur link. Cererea repetată îl reactivează pe cel existent (și îi șterge
   // revocarea), ca să nu apară două adrese valabile pentru același act.
@@ -90,24 +105,23 @@ docShareRoutes.post("/:documentId/share", async (c) => {
       .set({ revokedAt: null })
       .where(eq(docShareLinks.id, existing.id))
       .returning();
-    return c.json(shareShape(refreshed));
+    return { link: refreshed, created: false };
   }
 
   const [created] = await db
     .insert(docShareLinks)
-    .values({ tenantId: user.tenantId, documentId, createdBy: user.id })
+    .values({ tenantId, documentId, createdBy: userId })
     .returning();
 
   await db.insert(docAudit).values({
-    tenantId: user.tenantId,
+    tenantId,
     documentId,
     action: "share_link_created",
-    actorUserId: user.id,
+    actorUserId: userId,
     details: JSON.stringify({ tokenPrefix: created.token.slice(0, 8) }),
   });
-
-  return c.json(shareShape(created), 201);
-});
+  return { link: created, created: true };
+}
 
 docShareRoutes.delete("/:documentId/share", async (c) => {
   const user = c.get("user");

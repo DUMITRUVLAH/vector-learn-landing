@@ -341,10 +341,15 @@ export type EmailDocumentResult =
   | { sent: false; reason: string; message: string };
 
 /** Trimite actul contrapărții. Poarta de livrare poate opri trimiterea — răspunsul o spune. */
-export function emailDocument(id: string, to: string, message?: string): Promise<EmailDocumentResult> {
-  return api<EmailDocumentResult>(`/api/docs/documents/${id}/email`, {
+export function emailDocument(
+  id: string,
+  to: string,
+  message?: string,
+  subject?: string
+): Promise<EmailDocumentResult & { leadMovedTo?: string | null }> {
+  return api<EmailDocumentResult & { leadMovedTo?: string | null }>(`/api/docs/documents/${id}/email`, {
     method: "POST",
-    body: JSON.stringify({ to, message }),
+    body: JSON.stringify({ to, message, subject }),
   });
 }
 

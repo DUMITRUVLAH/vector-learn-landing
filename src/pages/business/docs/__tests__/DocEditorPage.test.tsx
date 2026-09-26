@@ -899,17 +899,30 @@ describe("CRM-D01 — actul unui lead, deschis din CRM", () => {
     expect(navigate).toHaveBeenCalledWith("/business/crm/pipeline?lead=lead-1");
   });
 
-  it("[blocant] trimiterea pe e-mail propune adresa clientului, nu un câmp gol", async () => {
+  it("[blocant] actul clientului pleacă printr-un dialog cu adresa, subiectul și mesajul completate", async () => {
     getDocument.mockResolvedValue({
       ...LEAD_DOC,
       status: "final",
       docNumber: "OF-2026-0001",
       counterpartySnapshot: { email: "tatiana.frunze@medlife.md" },
     });
-    const prompt = vi.spyOn(window, "prompt").mockReturnValue(null);
+    emailDocument.mockResolvedValue({ sent: true, to: "tatiana.frunze@medlife.md", leadMovedTo: "oferta" });
+    const prompt = vi.spyOn(window, "prompt");
     render(<DocEditorPage />);
     await userEvent.click(await screen.findByRole("button", { name: /Trimite pe email/ }));
-    expect(prompt).toHaveBeenCalledWith(expect.any(String), "tatiana.frunze@medlife.md");
+    const dialog = await screen.findByRole("dialog", { name: /Trimite oferta pe e-mail/ });
+    // Nu mai e promptul browserului.
+    expect(prompt).not.toHaveBeenCalled();
+    expect(within(dialog).getByLabelText("Către")).toHaveValue("tatiana.frunze@medlife.md");
+    expect(within(dialog).getByText(/ATIC · FinFlow Documente/)).toBeInTheDocument();
+    expect((within(dialog).getByLabelText("Mesaj") as HTMLTextAreaElement).value).toMatch(/accepta/);
+    await userEvent.click(within(dialog).getByRole("button", { name: /^Trimite$/ }));
+    await waitFor(() => expect(emailDocument).toHaveBeenCalled());
+    const [id, to, message, subject] = emailDocument.mock.calls.at(-1) as [string, string, string, string];
+    expect([id, to]).toEqual(["doc-lead", "tatiana.frunze@medlife.md"]);
+    expect(subject).toMatch(/OF-2026-0001/);
+    expect(message).toMatch(/Bună ziua/);
+    expect(await screen.findByText(/Actul a plecat către tatiana.frunze@medlife.md/)).toBeInTheDocument();
     prompt.mockRestore();
   });
 
