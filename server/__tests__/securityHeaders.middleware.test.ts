@@ -57,6 +57,14 @@ describe("securityHeaders — încadrarea", () => {
     }
   });
 
+  it("[blocant] CONTPLATA: PDF-ul contului de plată (și mostra din setări) se vede în previzualizare", async () => {
+    for (const path of ["/api/payment-accounts/pa-1/pdf", "/api/payment-accounts/settings/sample.pdf"]) {
+      const res = await appWith(path).request(path);
+      expect(res.headers.get("X-Frame-Options"), path).toBe("SAMEORIGIN");
+      expect(res.headers.get("Content-Security-Policy"), path).toContain("frame-ancestors 'self'");
+    }
+  });
+
   it("orice altă rută rămâne de neîncadrat", async () => {
     for (const path of [
       "/api/crm/lead-files",
@@ -70,6 +78,10 @@ describe("securityHeaders — încadrarea", () => {
       "/api/par/vendors",
       "/api/par/vendors/v-1",
       "/api/par/par-1/payee-patent/sign",
+      "/api/payment-accounts/pa-1",
+      "/api/payment-accounts/pa-1/issue",
+      "/api/payment-accounts/pa-1/pdf/extra",
+      "/api/payment-accounts/settings",
     ]) {
       const res = await appWith(path).request(path);
       expect(res.headers.get("X-Frame-Options"), path).toBe("DENY");

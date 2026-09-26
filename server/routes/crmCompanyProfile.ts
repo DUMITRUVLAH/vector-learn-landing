@@ -89,7 +89,7 @@ const putSchema = z.object({
  * actele își iau azi denumirea și IDNO-ul (setările PAR, plătitorul activ, numele workspace-ului).
  * Altfel ecranul „scrie o dată" ar cere exact ce e deja tipărit pe oferte.
  */
-async function knownDefaults(tenantId: string): Promise<Partial<ProfileRow>> {
+export async function knownOrgDefaults(tenantId: string): Promise<Partial<ProfileRow>> {
   const safe = async <T>(q: Promise<T[]>): Promise<T | undefined> => {
     try {
       return (await q)[0];
@@ -111,7 +111,7 @@ async function knownDefaults(tenantId: string): Promise<Partial<ProfileRow>> {
 crmCompanyProfileRoutes.get("/", requireCrmPermission("documents.create"), async (c) => {
   const user = c.get("user");
   const [row] = await db.select().from(finOrgProfile).where(eq(finOrgProfile.tenantId, user.tenantId)).limit(1);
-  return c.json(view(row ?? ((await knownDefaults(user.tenantId)) as ProfileRow)));
+  return c.json(view(row ?? ((await knownOrgDefaults(user.tenantId)) as ProfileRow)));
 });
 
 crmCompanyProfileRoutes.put(

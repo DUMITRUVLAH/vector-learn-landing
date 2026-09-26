@@ -46,7 +46,9 @@ const CSP_SELF_FRAMEABLE = csp({ storageOrigin: STORAGE_ORIGIN, frameAncestors: 
  * fără ea aici, „Deschide" arăta „localhost refused to connect" (23.09.2026).
  */
 const FRAMEABLE_BY_US =
-  /^\/api\/par\/(?:[^/]+\/(?:attachments\/[^/]+\/preview|dosar|form\.pdf|payee-patent)|vendors\/[^/]+\/patent)$|^\/api\/crm\/lead-files\/[^/]+\/preview$|^\/api\/docs\/documents\/[^/]+\/pdf$/;
+  /^\/api\/par\/(?:[^/]+\/(?:attachments\/[^/]+\/preview|dosar|form\.pdf|payee-patent)|vendors\/[^/]+\/patent)$|^\/api\/crm\/lead-files\/[^/]+\/preview$|^\/api\/docs\/documents\/[^/]+\/pdf$|^\/api\/payment-accounts\/(?:[^/]+\/pdf|settings\/sample\.pdf)$/;
+// CONTPLATA-faza-1: previzualizarea contului de plată e chiar PDF-ul, încadrat din ruta lui —
+// sursa `blob:` de dinainte era blocată de CSP („foaia tristă" din editor, 26.09.2026).
 // CRM-U05: fișierele leadului și PDF-ul actelor se văd în același vizualizator, în aplicație
 // (ownerul: „trebuie să văd toate fișierele direct pe website fără să descarc, așa cum e la PAR").
 
