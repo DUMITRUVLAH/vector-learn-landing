@@ -8,11 +8,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { InvitePage } from "../pages/business/InvitePage";
 
+// Hoisted: the router mock below is lifted above every declaration by vitest.
+const mockNavigate = vi.hoisted(() => vi.fn());
+
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
 // Mock the router so we don't need HashRouter in tests.
 vi.mock("../router/HashRouter", () => ({
-  useRouter: () => ({ navigate: vi.fn(), path: "/business/invite?token=abc" }),
+  useRouter: () => ({ navigate: mockNavigate, path: "/business/invite?token=abc" }),
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={`#${to}`}>{children}</a>
   ),
@@ -62,7 +65,29 @@ describe("InvitePage", () => {
     mockGetInviteInfo.mockReturnValue(new Promise(() => {}));
     render(<InvitePage />);
     // Should show the loading heading
-    expect(screen.getByText("Invitație PAR")).toBeInTheDocument();
+    expect(screen.getByText("Invitație")).toBeInTheDocument();
+  });
+
+  it("[blocant] o invitație CRM arată rolul de vânzări și, după acceptare, duce în CRM", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockGetInviteInfo.mockResolvedValueOnce({
+      email: "ion@example.com",
+      parRole: null,
+      module: "crm",
+      workspaceRole: "manager",
+      orgName: "Ecosolar",
+    });
+    mockAcceptInvite.mockResolvedValueOnce({ user: { id: "u" }, redirect: "/business/crm" });
+    render(<InvitePage />);
+    await waitFor(() => expect(screen.getByText(/Ecosolar te invită ca Manager vânzări/)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/Nume/i), { target: { value: "Ion Popescu" } });
+    fireEvent.change(screen.getByLabelText(/Parol/i), { target: { value: "parola123" } });
+    fireEvent.submit(screen.getByLabelText(/Parol/i).closest("form")!);
+    await waitFor(() => expect(screen.getByText(/redirecționăm spre CRM/)).toBeInTheDocument());
+    vi.advanceTimersByTime(1600);
+    expect(mockNavigate).toHaveBeenCalledWith("/business/crm");
+    vi.useRealTimers();
   });
 
   it("shows invite details when valid", async () => {
@@ -266,14 +291,14 @@ describe("InvitePage", () => {
 // A consumed link is re-opened all the time (email stays in the inbox, Back button). If the visitor
 // is signed in, the invite worked — don't greet them with an error and no way forward.
 describe("InvitePage — link already used", () => {
-  it("signed-in visitor sees 'Invitație acceptată' with a way into PAR", async () => {
+  it("signed-in visitor sees 'Invitație acceptată' with a way into the app", async () => {
     mockGetInviteInfo.mockRejectedValueOnce(new ApiError(404, "invite_not_found", "Invite not found"));
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ user: { id: "u" }, tenant: { id: "t" } }), {
       status: 200, headers: { "Content-Type": "application/json" },
     })));
     render(<InvitePage />);
     await waitFor(() => expect(screen.getByText("Invitație acceptată")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /Intră în PAR/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Intră în aplicație/ })).toBeInTheDocument();
     vi.unstubAllGlobals();
   });
 

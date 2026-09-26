@@ -1,5 +1,5 @@
 /**
- * SHELL-503: PAR Invite acceptance page
+ * SHELL-503: Invite acceptance page (PAR și CRM — `module` din invite-info decide titlul și destinația)
  * Route: /#/business/invite?token=<raw-token>
  *
  * PUBLIC — no auth guard. The user lands here from the invite email link.
@@ -23,6 +23,19 @@ const PAR_ROLE_LABELS: Record<string, string> = {
   finance: "Finanțe",
   par_admin: "Administrator PAR",
 };
+
+/** Rolurile de workspace primite printr-o invitație CRM (CRM → Echipă). */
+const CRM_ROLE_LABELS: Record<string, string> = {
+  admin: "Administrator CRM",
+  manager: "Manager vânzări",
+  teacher: "Agent vânzări",
+  receptionist: "Operator",
+};
+
+/** Unde intră omul după acceptare — în modulul pentru care a fost invitat. */
+function destinationFor(info: InviteInfo | null): { path: string; name: string } {
+  return info?.module === "crm" ? { path: "/business/crm", name: "CRM" } : { path: "/business/par", name: "PAR" };
+}
 
 function getTokenFromHash(): string | null {
   // The hash looks like: #/business/invite?token=ABC
@@ -87,10 +100,11 @@ export function InvitePage() {
     setFormError(null);
     setPageState("submitting");
     try {
-      await acceptInvite({ token, name, password });
+      const res = await acceptInvite({ token, name, password });
       setPageState("success");
-      // Brief delay so the user sees the success message, then navigate to PAR.
-      setTimeout(() => navigate("/business/par"), 1500);
+      // Brief delay so the user sees the success message, then navigate to the invited module.
+      const target = res.redirect ?? destinationFor(inviteInfo).path;
+      setTimeout(() => navigate(target), 1500);
     } catch (err) {
       setPageState("ready");
       if (err instanceof ApiError) {
@@ -118,7 +132,7 @@ export function InvitePage() {
   // ── Loading skeleton ─────────────────────────────────────────────────────────
   if (pageState === "loading") {
     return (
-      <AuthLayout title="Invitație PAR" subtitle="Se verifică invitația...">
+      <AuthLayout title="Invitație" subtitle="Se verifică invitația...">
         <div className="flex justify-center py-8" aria-live="polite" aria-busy="true">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
         </div>
@@ -135,11 +149,12 @@ export function InvitePage() {
         </p>
         <button
           type="button"
-          onClick={() => navigate("/business/par")}
+          // Invitația e consumată, deci nu mai știm pentru ce modul era — panoul arată ce are omul.
+          onClick={() => navigate("/business/dashboard")}
           className="touch-target flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <LogIn className="h-4 w-4" aria-hidden="true" />
-          Intră în PAR
+          Intră în aplicație
         </button>
       </AuthLayout>
     );
@@ -192,14 +207,18 @@ export function InvitePage() {
           role="status"
           className="rounded-md bg-green-50 border border-green-200 dark:bg-green-900/20 dark:border-green-800 px-4 py-3 text-sm text-green-800 dark:text-green-300 text-center"
         >
-          Cont creat. Vă redirecționăm spre PAR...
+          Cont creat. Vă redirecționăm spre {destinationFor(inviteInfo).name}...
         </div>
       </AuthLayout>
     );
   }
 
   // ── Ready / submitting ────────────────────────────────────────────────────────
-  const roleLabel = inviteInfo ? (PAR_ROLE_LABELS[inviteInfo.parRole] ?? inviteInfo.parRole) : "";
+  const roleLabel = !inviteInfo
+    ? ""
+    : inviteInfo.module === "crm"
+      ? CRM_ROLE_LABELS[inviteInfo.workspaceRole ?? ""] ?? "membru al echipei CRM"
+      : PAR_ROLE_LABELS[inviteInfo.parRole ?? ""] ?? inviteInfo.parRole ?? "";
   const isSubmitting = pageState === "submitting";
 
   return (

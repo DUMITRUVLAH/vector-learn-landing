@@ -21,6 +21,11 @@ const ROLE_LABELS: Record<string, string> = {
   approver: "Aprobator",
   finance: "Finanțe",
   par_admin: "Administrator",
+  // Invitațiile CRM: serverul trimite `crm:<rol de workspace>`.
+  "crm:admin": "Administrator CRM",
+  "crm:manager": "Manager vânzări (CRM)",
+  "crm:teacher": "Agent vânzări (CRM)",
+  "crm:receptionist": "Operator (CRM)",
 };
 
 interface Pending {

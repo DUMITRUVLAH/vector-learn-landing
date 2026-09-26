@@ -119,6 +119,8 @@ import { recordError } from "./lib/errorTelemetry";
 import { alertOwnerOnNewError } from "./lib/errorAlerts";
 import { requireAuth } from "./middleware/requireAuth";
 import { requireModuleEntitlement, requireTenantModule } from "./middleware/requireModuleEntitlement";
+import { requireCrmAccess } from "./middleware/requireCrmAccess";
+import { crmTeamRoutes } from "./routes/crmTeam";
 import { securityHeaders } from "./middleware/securityHeaders";
 import { httpCache } from "./middleware/httpCache";
 import { authRateLimit, expensiveRateLimit } from "./middleware/rateLimit";
@@ -456,6 +458,10 @@ app.route("/api/pontaj", pontajRoutes);
 app.route("/api/docmerge", docmergeTemplatesRoutes);
 // CRM Faza 1: leaduri/pipeline + produse. Montat înainte de catch-all-ul /api/*.
 // Diagnostic de schemă, fără autentificare și fără date de tenant (vezi fișierul).
+// CRM — echipa: omul scos din CRM de administrator nu mai atinge nicio rută /api/crm/* (doar
+// meniul ascuns ar fi fost o curtoazie, nu o limită). Înaintea routerelor, ca să ruleze primul.
+app.use("/api/crm/*", requireCrmAccess);
+app.route("/api/crm/team", crmTeamRoutes);
 app.route("/api/crm/health", crmHealthRoutes);
 app.route("/api/crm/stages", crmStagesRoutes);
 app.route("/api/crm/pipelines", crmPipelinesRoutes);

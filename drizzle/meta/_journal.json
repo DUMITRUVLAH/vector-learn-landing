@@ -1352,6 +1352,13 @@
       "when": 1789000000016,
       "tag": "0193_crm_task_ora",
       "breakpoints": true
+    },
+    {
+      "idx": 194,
+      "version": "7",
+      "when": 1789000000017,
+      "tag": "0194_crm_invitatii_echipa",
+      "breakpoints": true
     }
   ]
 }

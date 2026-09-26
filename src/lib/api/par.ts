@@ -1667,7 +1667,16 @@ export async function revokeParInvite(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/invites/${id}`, { method: "DELETE" });
 }
 
-export interface InviteInfo { email: string; parRole: ParRole; orgName: string }
+export interface InviteInfo {
+  email: string;
+  /** NULL pentru o invitație CRM. */
+  parRole: ParRole | null;
+  /** Ce modul deschide invitația; lipsă = PAR (server vechi). */
+  module?: "par" | "crm";
+  /** Rolul de workspace primit printr-o invitație CRM. */
+  workspaceRole?: string | null;
+  orgName: string;
+}
 
 export async function getInviteInfo(token: string): Promise<InviteInfo> {
   return api(`/api/auth/invite-info?token=${encodeURIComponent(token)}`);
@@ -1675,6 +1684,8 @@ export async function getInviteInfo(token: string): Promise<InviteInfo> {
 
 export async function acceptInvite(payload: { token: string; name: string; password: string }): Promise<{
   user: { id: string; email: string; name: string; role: string };
+  /** Modulul pentru care a fost invitat omul („/business/par" sau „/business/crm"). */
+  redirect?: string;
 }> {
   return api("/api/auth/accept-invite", { method: "POST", body: JSON.stringify(payload) });
 }

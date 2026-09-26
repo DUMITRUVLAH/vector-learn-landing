@@ -157,6 +157,14 @@ async function main() {
        ELSE 'individual' END
      WHERE kind IS NULL`,
     `ALTER TABLE par_vendors ALTER COLUMN kind SET NOT NULL`,
+    // Migrarea 0194: invitațiile CRM trăiesc în `par_invites`, fără rol PAR. Heal-ul generic
+    // adaugă `module`/`workspace_role`, dar nu relaxează NOT NULL-ul de pe `par_role` — fără asta,
+    // fiecare invitație CRM ar pica la INSERT pe prod. `module` vine din heal fără default, deci
+    // rândurile vechi primesc explicit „par".
+    `ALTER TABLE par_invites ALTER COLUMN par_role DROP NOT NULL`,
+    `UPDATE par_invites SET module = 'par' WHERE module IS NULL`,
+    `ALTER TABLE par_invites ALTER COLUMN module SET DEFAULT 'par'`,
+    `ALTER TABLE par_invites ALTER COLUMN module SET NOT NULL`,
   ];
   for (const stmt of ENSURE_COLUMN_STMTS) {
     try {
@@ -781,7 +789,7 @@ async function main() {
     )`,
     `CREATE INDEX IF NOT EXISTS "crm_assignment_log_tenant_idx" ON "crm_assignment_log" ("tenant_id","created_at")`,
     `CREATE INDEX IF NOT EXISTS "crm_assignment_log_lead_idx" ON "crm_assignment_log" ("lead_id")`,
-    // Migrarea 0192 (CRM-G09): aranjamentul personal al rapoartelor. Ecranul îl citește la fiecare
+    // Migrarea 0194 (CRM-G09): aranjamentul personal al rapoartelor. Ecranul îl citește la fiecare
     // deschidere; fără tabelă cade pe aranjamentul implicit, dar salvarea n-ar avea unde scrie.
     `CREATE TABLE IF NOT EXISTS "crm_report_layouts" (
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

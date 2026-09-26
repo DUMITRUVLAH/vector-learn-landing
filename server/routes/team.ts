@@ -20,13 +20,14 @@ import { Hono } from "hono";
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { users } from "../db/schema";
+import { crmUserPermissions } from "../db/schema/crmUserPermissions";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const teamRoutes = new Hono<{ Variables: AuthVariables }>();
 teamRoutes.use("/*", requireAuth);
 
 /** Rolurile care NU sunt „echipă": conturi de beneficiar, nu de lucru. */
-const NON_STAFF_ROLES = ["student", "parent"];
+const NON_STAFF_ROLES: ("student" | "parent")[] = ["student", "parent"];
 
 teamRoutes.get("/members", async (c) => {
   const user = c.get("user");
@@ -34,12 +35,34 @@ teamRoutes.get("/members", async (c) => {
     const rows = await db
       .select({ id: users.id, name: users.name, email: users.email, role: users.role })
       .from(users)
-      .where(and(eq(users.tenantId, user.tenantId), notInArray(users.role, NON_STAFF_ROLES)))
+      .where(
+        and(eq(users.tenantId, user.tenantId), notInArray(users.role, NON_STAFF_ROLES), eq(users.isActive, true))
+      )
       .orderBy(asc(users.name));
+
+    // Un lead nu se atribuie cuiva scos din CRM sau cu contul dezactivat (CRM → Echipă): n-ar
+    // mai avea cum să-l vadă.
+    const revoked = new Set(
+      (
+        await db
+          .select({ userId: crmUserPermissions.userId })
+          .from(crmUserPermissions)
+          .where(
+            and(
+              eq(crmUserPermissions.tenantId, user.tenantId),
+              eq(crmUserPermissions.permission, "crm.access"),
+              eq(crmUserPermissions.granted, false)
+            )
+          )
+          .catch(() => [])
+      ).map((r) => r.userId)
+    );
 
     // `fullName`, nu `name`: forma o dictează clientul care exista deja (`src/lib/api/team.ts`).
     return c.json(
-      rows.map((r) => ({ id: r.id, fullName: r.name ?? r.email, email: r.email, role: r.role }))
+      rows
+        .filter((r) => r.role === "admin" || !revoked.has(r.id))
+        .map((r) => ({ id: r.id, fullName: r.name ?? r.email, email: r.email, role: r.role }))
     );
   } catch (e) {
     // Un selector de oameni nu are voie să dărâme ecranul pe care stă: fără listă, restul fișei

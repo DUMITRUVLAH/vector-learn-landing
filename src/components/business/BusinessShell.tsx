@@ -49,7 +49,7 @@ import {
   ChevronDown,
   Search,
   Menu,
-  X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon} from "lucide-react";
+  X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon, UserPlus } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { clearOrphanScrollLock } from "@/lib/scrollLockGuard";
@@ -303,6 +303,7 @@ const CRM_NAV_GROUPS: NavGroup[] = [
         tone: "amber",
         crmPermission: "assignment.manage",
       },
+      { label: "Echipă", href: "/business/crm/echipa", icon: UserPlus, tone: "emerald", crmPermission: "audit.view" },
       { label: "Drepturi", href: "/business/crm/drepturi", icon: ShieldCheck, tone: "teal", crmPermission: "audit.view" },
       { label: "Jurnal", href: "/business/crm/jurnal", icon: HistoryIcon, tone: "violet", crmPermission: "audit.view" },
       { label: "API", href: "/business/crm/api", icon: KeyRound, tone: "rose", crmPermission: "audit.view" },

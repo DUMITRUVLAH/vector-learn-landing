@@ -23,6 +23,7 @@ import {
 
 /** Etichete scurte: capul de tabel are 14 coloane, iar „leads.view_all" nu spune nimic nimănui. */
 const PERMISSION_LABELS: Record<string, string> = {
+  "crm.access": "Intră în CRM",
   "leads.view_all": "Vede toate leadurile",
   "leads.view_own": "Vede leadurile lui",
   "leads.edit": "Editează leaduri",

@@ -51,6 +51,8 @@ export async function sendInviteEmail(params: {
   parRole?: string | null;
   /** Numele celui care a trimis invitația, dacă îl știm. */
   invitedByName?: string | null;
+  /** Eticheta gata făcută a rolului, pentru invitațiile care nu sunt PAR (ex. „Manager vânzări (CRM)"). */
+  roleLabel?: string | null;
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return false;
@@ -63,7 +65,8 @@ export async function sendInviteEmail(params: {
   // sandbox address Resend only delivers to the account owner — it must stay a last resort.
   const from =
     process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "FinFlow <onboarding@resend.dev>";
-  const roleLabel = params.parRole ? PAR_ROLE_LABELS[params.parRole] ?? params.parRole : null;
+  const roleLabel =
+    params.roleLabel ?? (params.parRole ? PAR_ROLE_LABELS[params.parRole] ?? params.parRole : null);
   const subject = `Invitație în ${params.orgName} pe FinFlow${roleLabel ? ` — rol ${roleLabel}` : ""}`;
   const body = [
     `${params.invitedByName?.trim() || "Un administrator"} te-a invitat în workspace-ul ${params.orgName} pe FinFlow.`,

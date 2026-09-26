@@ -17,6 +17,7 @@
  * (ștergere, produse, distribuire, jurnal, export).
  */
 export type CrmPermission =
+  | "crm.access"
   | "leads.view_all"
   | "leads.view_own"
   | "leads.edit"
@@ -36,6 +37,7 @@ export type CrmPermission =
 export type WorkspaceRole = "admin" | "manager" | "teacher" | "receptionist" | "student" | "parent";
 
 const COMMERCIAL_BASE: CrmPermission[] = [
+  "crm.access",
   "leads.view_all",
   "leads.view_own",
   "leads.edit",
@@ -53,6 +55,7 @@ const COMMERCIAL_BASE: CrmPermission[] = [
  */
 export const CRM_ROLE_PERMISSIONS: Record<WorkspaceRole, CrmPermission[]> = {
   admin: [
+    "crm.access",
     "leads.view_all",
     "leads.view_own",
     "leads.edit",
@@ -135,4 +138,20 @@ export function canWithOverrides(
   permission: CrmPermission
 ): boolean {
   return effectivePermissions(role, overrides).includes(permission);
+}
+
+// ─── Intrarea în modul ────────────────────────────────────────────────────────
+
+/**
+ * Poate omul să intre deloc în CRM? `crm.access` e dreptul-poartă: îl au implicit toate rolurile
+ * de lucru (exact ca înainte, când oricine din echipă deschidea modulul), iar administratorul îl
+ * RETRAGE pe om din ecranul „Echipă" — omul rămâne în workspace (cererile PAR, semnăturile lui),
+ * doar că CRM-ul nu mai e al lui.
+ *
+ * Administratorul trece mereu: un workspace în care ultimul admin și-a tăiat singur accesul n-ar
+ * mai avea pe nimeni care să-l repună. Ca să scoți un admin din CRM, îi schimbi întâi rolul.
+ */
+export function hasCrmAccess(role: string, overrides: readonly PermissionOverride[]): boolean {
+  if (role === "admin") return true;
+  return effectivePermissions(role, overrides).includes("crm.access");
 }

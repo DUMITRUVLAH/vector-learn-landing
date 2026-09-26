@@ -954,7 +954,16 @@ export const parInvites = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     email: varchar("email", { length: 255 }).notNull(),
-    parRole: parRoleEnum("par_role").notNull(),
+    /**
+     * Ce modul deschide invitația: „par" (implicit, istoric) sau „crm". Același tabel și același
+     * flux de acceptare (link, parolă, Google) pentru amândouă — vezi lib/invites/grant.ts.
+     * Migrarea 0194. NULL pe rândurile vechi = „par".
+     */
+    module: varchar("module", { length: 16 }).notNull().default("par"),
+    /** Rolul PAR — obligatoriu pentru o invitație PAR, NULL pentru una CRM. */
+    parRole: parRoleEnum("par_role"),
+    /** Rolul de workspace (`users.role`) primit prin invitația CRM: admin / manager / teacher / receptionist. */
+    workspaceRole: varchar("workspace_role", { length: 20 }),
     /** JSON string[] of payer ids selected by the inviter; null keeps legacy all-payer behavior. */
     payerScope: text("payer_scope"),
     /** sha256(token) — the plaintext token lives only in the invite URL. */

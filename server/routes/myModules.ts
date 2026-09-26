@@ -15,6 +15,7 @@ import { db } from "../db/client";
 import { platformAdmins } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { MODULE_CATALOG, getTenantModuleMap } from "../lib/platformModules";
+import { userHasCrmAccess } from "../middleware/requireCrmAccess";
 
 export const myModulesRoutes = new Hono<{ Variables: AuthVariables }>();
 myModulesRoutes.use("*", requireAuth);
@@ -34,7 +35,10 @@ myModulesRoutes.get("/", async (c) => {
     isSuperadmin = false; // tabela lipsă → tratăm ca utilizator obișnuit, nu ca proprietar
   }
   const map = isSuperadmin ? null : await getTenantModuleMap(user.tenantId);
-  const enabledFor = (key: string) => map === null || map[key] !== false;
+  // CRM e și pe OM, nu doar pe workspace: cine a fost scos din CRM de administrator nu-l mai vede
+  // în meniu (poarta reală e pe server — middleware/requireCrmAccess).
+  const crmForUser = isSuperadmin || (await userHasCrmAccess(user));
+  const enabledFor = (key: string) => (map === null || map[key] !== false) && (key !== "crm" || crmForUser);
   return c.json({
     modules: MODULE_CATALOG.map((m) => ({ ...m, enabled: enabledFor(m.key) })),
     enabled: MODULE_CATALOG.filter((m) => enabledFor(m.key)).map((m) => m.key),

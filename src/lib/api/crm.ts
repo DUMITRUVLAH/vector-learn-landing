@@ -1201,6 +1201,7 @@ export function runCrmReengagement(): Promise<{ ok: true; due: number; applied: 
 // ─── Roluri și jurnal ──────────────────────────────────────────────────────────
 
 export type CrmPermission =
+  | "crm.access"
   | "leads.view_all"
   | "leads.view_own"
   | "leads.edit"
@@ -1252,6 +1253,74 @@ export function setCrmUserPermission(body: {
   granted: boolean | null;
 }): Promise<{ ok: true }> {
   return api<{ ok: true }>("/api/crm/permissions/team", { method: "PUT", body: JSON.stringify(body) });
+}
+
+// ─── Echipa: invitații, roluri, scoatere din CRM ──────────────────────────────
+
+export type CrmTeamRole = "receptionist" | "teacher" | "manager" | "admin";
+
+export interface CrmTeamMember {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  isActive: boolean;
+  /** Poate intra în CRM (rolul îl lasă și administratorul nu i-a retras accesul). */
+  crmAccess: boolean;
+  isSelf: boolean;
+}
+
+export interface CrmTeamInvite {
+  id: string;
+  email: string;
+  role: CrmTeamRole | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface CrmTeamResponse {
+  /** Doar administratorul invită, schimbă roluri și scoate oameni; ceilalți văd lista. */
+  canManage: boolean;
+  roles: { key: CrmTeamRole; label: string }[];
+  members: CrmTeamMember[];
+  invites: CrmTeamInvite[];
+}
+
+export function getCrmTeam(): Promise<CrmTeamResponse> {
+  return api<CrmTeamResponse>("/api/crm/team");
+}
+
+export function inviteCrmTeamMember(body: { email: string; role: CrmTeamRole }): Promise<{
+  id: string;
+  email: string;
+  role: CrmTeamRole;
+  /** Linkul merge și fără email — administratorul îl poate trimite pe orice canal. */
+  inviteUrl: string;
+  emailed: boolean;
+}> {
+  return api("/api/crm/team/invites", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function revokeCrmTeamInvite(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/team/invites/${id}`, { method: "DELETE" });
+}
+
+export function setCrmTeamMemberRole(id: string, role: CrmTeamRole): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/team/members/${id}`, { method: "PATCH", body: JSON.stringify({ role }) });
+}
+
+export function setCrmTeamMemberAccess(id: string, crmAccess: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/team/members/${id}/access`, {
+    method: "PUT",
+    body: JSON.stringify({ crmAccess }),
+  });
+}
+
+export function setCrmTeamMemberActive(id: string, active: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/team/members/${id}/active`, {
+    method: "PUT",
+    body: JSON.stringify({ active }),
+  });
 }
 
 /**

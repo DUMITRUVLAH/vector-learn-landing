@@ -71,6 +71,7 @@ const CrmDistributionPage = lazyWithTimeout(() => import("./pages/business/crm/C
 const CrmDocumentsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmDocumentsPage").then((m) => ({ default: m.CrmDocumentsPage })));
 const CrmAutomationsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmAutomationsPage").then((m) => ({ default: m.CrmAutomationsPage })));
 const CrmCommsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmCommsPage").then((m) => ({ default: m.CrmCommsPage })));
+const CrmTeamPage = lazyWithTimeout(() => import("./pages/business/crm/CrmTeamPage").then((m) => ({ default: m.CrmTeamPage })));
 const CrmPermissionsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmPermissionsPage").then((m) => ({ default: m.CrmPermissionsPage })));
 const CrmAuditPage = lazyWithTimeout(() => import("./pages/business/crm/CrmAuditPage").then((m) => ({ default: m.CrmAuditPage })));
 const CrmCadencesPage = lazyWithTimeout(() => import("./pages/business/crm/CrmCadencesPage").then((m) => ({ default: m.CrmCadencesPage })));
@@ -356,6 +357,7 @@ function Routes() {
   if (path.startsWith("/business/crm/comunicare")) return <BusinessGuardPage><CrmCommsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/cadente")) return <BusinessGuardPage><CrmCadencesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/jurnal")) return <BusinessGuardPage><CrmAuditPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/echipa")) return <BusinessGuardPage><CrmTeamPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/drepturi")) return <BusinessGuardPage><CrmPermissionsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/firma")) return <BusinessGuardPage><CrmCompanyProfilePage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/api")) return <BusinessGuardPage><CrmApiPage /></BusinessGuardPage>;

@@ -10,7 +10,7 @@ import { tenants, users, sessions, passwordResetTokens, twoFactorSettings, finMe
 // prove an old workspace is a truly-empty auto-created shell before re-homing its sole user away.
 import { finInvoices, finCaptures, finExpenses } from "../db/schema";
 import { invoices, payments, students, leads, courses, docmergeTemplates, itparkEngagements } from "../db/schema";
-import { parInvites, parMembers, parPayerMembers, parProjectMembers, parPayers, parProjects, parVendors, parPayerModules, parRequests } from "../db/schema/par";
+import { parInvites, parPayerMembers, parProjectMembers, parPayers, parProjects, parVendors, parPayerModules, parRequests } from "../db/schema/par";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE, dropAllCachedSessions } from "../auth/session";
 import { recordLoginEvent } from "../lib/loginEvents";
@@ -28,7 +28,7 @@ import {
   fetchUserInfo,
 } from "../auth/google";
 import { hashInviteToken } from "../lib/par/invites";
-import { grantInvitePayerScope } from "../lib/par/inviteScope";
+import { grantInviteAccess, inviteLandingPath, inviteRoleKey, newUserRoleForInvite, inviteModule } from "../lib/invites/grant";
 import { sendPasswordResetEmail, passwordResetUrl } from "../lib/auth/accountEmails";
 import { encrypt, decrypt } from "../lib/crypto";
 import { isReservedPlatformEmail } from "../lib/platformOwner";
@@ -481,6 +481,9 @@ authRoutes.get("/invite-info", async (c) => {
   return c.json({
     email: invite.email,
     parRole: invite.parRole,
+    /** „par" sau „crm" — pagina de acceptare își alege titlul și destinația după el. */
+    module: inviteModule(invite),
+    workspaceRole: invite.workspaceRole,
     orgName: tenant.name,
   });
 });
@@ -599,32 +602,17 @@ authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async 
             email: emailLower,
             passwordHash,
             name,
-            // NON-privileged role; PAR access is via par_members.role, not users.role.
-            role: "teacher",
+            // PAR: NON-privileged role (PAR access is via par_members.role, not users.role).
+            // CRM: the role the admin chose on the invite.
+            role: newUserRoleForInvite(invite),
             authProvider: "password",
           })
           .returning();
         targetUser = created;
       }
 
-      // Idempotent par_members insert: check-then-insert inside the txn.
-      // (No unique index on the table, so no ON CONFLICT — manual guard.)
-      const existingMembership = await tx.query.parMembers.findFirst({
-        where: and(
-          eq(parMembers.tenantId, invite.tenantId),
-          eq(parMembers.userId, targetUser.id),
-          eq(parMembers.role, invite.parRole)
-        ),
-      });
-      if (!existingMembership) {
-        await tx.insert(parMembers).values({
-          tenantId: invite.tenantId,
-          userId: targetUser.id,
-          // parRole comes ONLY from the invite row — never from request body.
-          role: invite.parRole,
-        });
-      }
-      await grantInvitePayerScope(tx, invite, targetUser.id);
+      // Role/membership comes ONLY from the invite row — never from the request body.
+      await grantInviteAccess(tx, invite, targetUser);
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "";
@@ -652,6 +640,8 @@ authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async 
       name: targetUser.name,
       role: targetUser.role,
     },
+    /** Modulul pentru care a fost invitat omul — acolo intră, nu pe un ecran care nu e al lui. */
+    redirect: inviteLandingPath(invite),
   });
 });
 
@@ -814,17 +804,7 @@ export async function rehomeGoogleUserToInvite(
         await tx.delete(parProjectMembers).where(and(eq(parProjectMembers.tenantId, oldTenantId), eq(parProjectMembers.userId, uid)));
       }
 
-      const existingMember = await tx.query.parMembers.findFirst({
-        where: and(
-          eq(parMembers.tenantId, invite.tenantId),
-          eq(parMembers.userId, rehomed.id),
-          eq(parMembers.role, invite.parRole),
-        ),
-      });
-      if (!existingMember) {
-        await tx.insert(parMembers).values({ tenantId: invite.tenantId, userId: rehomed.id, role: invite.parRole });
-      }
-      await grantInvitePayerScope(tx, invite, rehomed.id);
+      await grantInviteAccess(tx, invite, rehomed);
     });
   } catch (err: unknown) {
     // Old workspace is not a disposable shell → refuse the auto-move; caller shows a clear screen.
@@ -979,21 +959,7 @@ authRoutes.get("/google/callback", async (c) => {
 
           if (claimed.length === 0) throw new Error("INVITE_ALREADY_CONSUMED");
 
-          const existingMember = await tx.query.parMembers.findFirst({
-            where: and(
-              eq(parMembers.tenantId, resolvedInvite!.tenantId),
-              eq(parMembers.userId, user!.id),
-              eq(parMembers.role, resolvedInvite!.parRole)
-            ),
-          });
-          if (!existingMember) {
-            await tx.insert(parMembers).values({
-              tenantId: resolvedInvite!.tenantId,
-              userId: user!.id,
-              role: resolvedInvite!.parRole,
-            });
-          }
-          await grantInvitePayerScope(tx, resolvedInvite!, user!.id);
+          await grantInviteAccess(tx, resolvedInvite!, user!);
         });
       } catch (err: unknown) {
         // Silently ignore a race on the token — user is still authenticated.
@@ -1013,7 +979,7 @@ authRoutes.get("/google/callback", async (c) => {
             email: rehomed.email, success: true, app: "business", method: "google",
             userId: rehomed.id, tenantId: rehomed.tenantId,
           });
-          return c.redirect(`${appUrl()}/#/business/par`);
+          return c.redirect(`${appUrl()}/#${inviteLandingPath(resolvedInvite)}`);
         }
         // Old workspace has real data → do not auto-move; explain the conflict on the login screen.
         return fail("account_in_other_workspace");
@@ -1108,8 +1074,8 @@ authRoutes.get("/google/callback", async (c) => {
               email: profile.email.toLowerCase(),
               passwordHash: null,
               name: profile.name ?? profile.email.split("@")[0],
-              // NON-privileged role — PAR access is via par_members, not users.role.
-              role: "teacher",
+              // PAR: NON-privileged role (access via par_members). CRM: the invited role.
+              role: newUserRoleForInvite(resolvedInvite!),
               googleId: profile.sub,
               authProvider: "google",
               avatarUrl: profile.picture ?? null,
@@ -1117,14 +1083,8 @@ authRoutes.get("/google/callback", async (c) => {
             .returning();
           inviteUser = created;
 
-          // Link to the inviting org's PAR module with the invited role.
-          // (Fresh insert — no duplicate check needed; user was just created.)
-          await tx.insert(parMembers).values({
-            tenantId: inviteTenant.id,
-            userId: created.id,
-            role: resolvedInvite!.parRole,
-          });
-          await grantInvitePayerScope(tx, resolvedInvite!, created.id);
+          // Link to the inviting org's module (PAR role or CRM access) with the invited role.
+          await grantInviteAccess(tx, resolvedInvite!, created);
         });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "";
@@ -1133,14 +1093,14 @@ authRoutes.get("/google/callback", async (c) => {
       }
       user = inviteUser;
 
-      // Issue session and redirect to PAR area (not FinDesk, since this user was invited for PAR).
+      // Issue session and redirect to the invited module (not FinDesk — the invitee may have no access there).
       const { token, expiresAt } = await createSession(user.id, { ipAddress, userAgent });
       setSessionCookie(c, token, expiresAt);
       await recordLoginEvent(c, {
         email: user.email, success: true, app: "business", method: "invite",
         userId: user.id, tenantId: user.tenantId,
       });
-      return c.redirect(`${appUrl()}/#/business/par`);
+      return c.redirect(`${appUrl()}/#${inviteLandingPath(resolvedInvite)}`);
     }
 
     // SHELL-504: No existing account AND no valid invite. DO NOT silently create a new
@@ -1178,7 +1138,7 @@ authRoutes.get("/google/callback", async (c) => {
   // successful accept — they went back to the email link, which by then was consumed and read as
   // "Invitație invalidă" (ATIC, 2026-09-23).
   if (resolvedInvite && user.tenantId === resolvedInvite.tenantId) {
-    return c.redirect(`${appUrl()}/#/business/par`);
+    return c.redirect(`${appUrl()}/#${inviteLandingPath(resolvedInvite)}`);
   }
   return c.redirect(`${appUrl()}/#/business/fin/`);
 });
@@ -1206,7 +1166,7 @@ authRoutes.get("/google/pending", async (c) => {
   });
   if (invite) {
     const t = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
-    matchedInvite = { orgName: t?.name ?? "organizație", role: invite.parRole };
+    matchedInvite = { orgName: t?.name ?? "organizație", role: inviteRoleKey(invite) };
   }
   return c.json({ email: pending.email, name: pending.name, matchedInvite });
 });
@@ -1343,7 +1303,8 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
             email: pending.email.toLowerCase(),
             passwordHash: null,
             name: pending.name,
-            role: "teacher", // NON-privileged; PAR access is via par_members, not users.role
+            // PAR: NON-privileged (access via par_members). CRM: the invited role.
+            role: newUserRoleForInvite(invite),
             googleId: pending.sub,
             authProvider: "google",
             avatarUrl: pending.picture,
@@ -1352,17 +1313,7 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
         joinedUser = u;
       }
 
-      const member = await tx.query.parMembers.findFirst({
-        where: and(
-          eq(parMembers.tenantId, invite.tenantId),
-          eq(parMembers.userId, joinedUser.id),
-          eq(parMembers.role, invite.parRole)
-        ),
-      });
-      if (!member) {
-        await tx.insert(parMembers).values({ tenantId: invite.tenantId, userId: joinedUser.id, role: invite.parRole });
-      }
-      await grantInvitePayerScope(tx, invite, joinedUser.id);
+      await grantInviteAccess(tx, invite, joinedUser);
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "INVITE_ALREADY_CONSUMED") {
@@ -1378,7 +1329,7 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
     email: joinedUser.email, success: true, app: "business", method: "invite",
     userId: joinedUser.id, tenantId: joinedUser.tenantId,
   });
-  return c.json({ ok: true, redirect: "/#/business/par" });
+  return c.json({ ok: true, redirect: `/#${inviteLandingPath(invite)}` });
 });
 
 /**
@@ -1440,7 +1391,8 @@ authRoutes.post("/google/accept-matched-invite", async (c) => {
             email: pending.email.toLowerCase(),
             passwordHash: null,
             name: pending.name,
-            role: "teacher", // NON-privileged; PAR access is via par_members, not users.role
+            // PAR: NON-privileged (access via par_members). CRM: the invited role.
+            role: newUserRoleForInvite(invite),
             googleId: pending.sub,
             authProvider: "google",
             avatarUrl: pending.picture,
@@ -1449,17 +1401,7 @@ authRoutes.post("/google/accept-matched-invite", async (c) => {
         joinedUser = u;
       }
 
-      const member = await tx.query.parMembers.findFirst({
-        where: and(
-          eq(parMembers.tenantId, invite.tenantId),
-          eq(parMembers.userId, joinedUser.id),
-          eq(parMembers.role, invite.parRole)
-        ),
-      });
-      if (!member) {
-        await tx.insert(parMembers).values({ tenantId: invite.tenantId, userId: joinedUser.id, role: invite.parRole });
-      }
-      await grantInvitePayerScope(tx, invite, joinedUser.id);
+      await grantInviteAccess(tx, invite, joinedUser);
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "INVITE_ALREADY_CONSUMED") {
@@ -1475,7 +1417,7 @@ authRoutes.post("/google/accept-matched-invite", async (c) => {
     email: joinedUser.email, success: true, app: "business", method: "invite",
     userId: joinedUser.id, tenantId: joinedUser.tenantId,
   });
-  return c.json({ ok: true, redirect: "/#/business/par" });
+  return c.json({ ok: true, redirect: `/#${inviteLandingPath(invite)}` });
 });
 
 // AUTH-004: mount 2FA and session-management sub-routes

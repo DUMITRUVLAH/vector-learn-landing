@@ -83,7 +83,9 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
       and(
         eq(parInvites.tenantId, tenantId),
         eq(parInvites.email, normalizedEmail),
-        isNull(parInvites.acceptedAt)
+        isNull(parInvites.acceptedAt),
+        // O invitație CRM pentru același om e a altui ecran — n-o înlocuim de aici.
+        eq(parInvites.module, "par")
       )
     );
 
@@ -131,7 +133,9 @@ parInvitesRoutes.get("/", requirePARRole("par_admin"), async (c) => {
       and(
         eq(parInvites.tenantId, tenantId),
         isNull(parInvites.acceptedAt),
-        gt(parInvites.expiresAt, new Date())
+        gt(parInvites.expiresAt, new Date()),
+        // Invitațiile CRM (același tabel) se administrează din CRM → Echipă.
+        eq(parInvites.module, "par")
       )
     )
     .orderBy(desc(parInvites.createdAt));
@@ -148,7 +152,7 @@ parInvitesRoutes.delete("/:id", requirePARRole("par_admin"), async (c) => {
   const id = c.req.param("id");
   const [deleted] = await db
     .delete(parInvites)
-    .where(and(eq(parInvites.id, id), eq(parInvites.tenantId, tenantId), isNull(parInvites.acceptedAt)))
+    .where(and(eq(parInvites.id, id), eq(parInvites.tenantId, tenantId), isNull(parInvites.acceptedAt), eq(parInvites.module, "par")))
     .returning({ id: parInvites.id });
   if (!deleted) return c.json({ error: "not_found" }, 404);
   return c.json({ ok: true });
