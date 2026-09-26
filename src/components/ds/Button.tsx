@@ -75,7 +75,8 @@ export function Button({
   const classes = cn(
     BASE,
     VARIANTS[variant],
-    variant === "link" ? "h-auto p-0" : SIZES[size],
+    // Un link-buton rămâne text pe desktop, dar pe telefon tot degetul îl apasă: 44px în înălțime.
+    variant === "link" ? "h-auto p-0 max-sm:min-h-11" : SIZES[size],
     className,
   );
 

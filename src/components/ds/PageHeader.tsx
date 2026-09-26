@@ -61,7 +61,14 @@ export function PageHeader({
           </p>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        // Pe telefon acțiunile nu se mai înghesuie pe un rând care lățea pagina (Pipeline avea 809px
+        // pe un ecran de 390 și se deschidea micșorat la 48%): devin un rând care derulează lateral,
+        // iar acțiunea principală (butonul plin) trece prima, ca „Adaugă…" să fie mereu la vedere.
+        <div className="flex items-center gap-2 sm:flex-wrap sm:justify-end max-sm:-mb-1 max-sm:overflow-x-auto max-sm:pb-1 max-sm:[&>*]:shrink-0 max-sm:[&>[data-variant=default]]:order-first">
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 }

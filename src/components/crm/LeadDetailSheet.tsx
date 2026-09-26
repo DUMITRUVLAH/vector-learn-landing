@@ -1639,7 +1639,7 @@ export function LeadDetailSheet({
                                     {INTERACTION_LABEL[item.type]}
                                   </span>
                                   <time
-                                    className="text-[11px] text-muted-foreground"
+                                    className="text-xs text-muted-foreground"
                                     dateTime={item.occurredAt}
                                   >
                                     {formatInteractionDate(item.occurredAt)}

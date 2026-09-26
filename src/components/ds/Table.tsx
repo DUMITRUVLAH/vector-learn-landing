@@ -9,8 +9,11 @@ import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 export function Table({ className, children, ...rest }: HTMLAttributes<HTMLTableElement>) {
+  // `relative`: un descendent `position: absolute` (etichetele `sr-only`) nu e tăiat de containerul
+  // care derulează decât dacă acesta e blocul lui de conținere — altfel lățește toată pagina pe
+  // telefon și browserul o deschide micșorată (Pipeline CRM, 26.09.2026: 986px pe 390).
   return (
-    <div data-slot="table" className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div data-slot="table" className="relative overflow-x-auto rounded-lg border border-border bg-card">
       <table className={cn("w-full border-collapse text-sm", className)} {...rest}>
         {children}
       </table>

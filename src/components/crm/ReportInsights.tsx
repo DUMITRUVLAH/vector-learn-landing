@@ -135,7 +135,7 @@ export function ReportInsights({ insights, ctx, onOpenSegment }: ReportInsightsP
                 <button
                   type="button"
                   onClick={() => onOpenSegment(insight.dimension)}
-                  className="text-sm font-medium text-primary hover:underline"
+                  className="text-sm font-medium text-primary hover:underline max-sm:min-h-11"
                 >
                   Vezi pe {insight.dimensionLabel.toLowerCase()}
                 </button>

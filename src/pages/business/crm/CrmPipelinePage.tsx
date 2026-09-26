@@ -18,7 +18,7 @@
  * `drop` citește o valoare învechită (stale closure).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Loader2, AlertCircle, Users, Settings, Search, KanbanSquare, LayoutList, Download, BarChart3, SlidersHorizontal } from "lucide-react";
+import { Plus, Loader2, AlertCircle, Users, Settings, Search, KanbanSquare, LayoutList, Download, BarChart3, SlidersHorizontal, ListFilter } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
@@ -112,6 +112,9 @@ export function CrmPipelinePage() {
   const [search, setSearch] = useState(() => readPipelineUrl(routePath).q ?? "");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [onlyMine, setOnlyMine] = useState(false);
+  // Pe telefon, filtrele secundare (sursă, „ale mele", export, vederi, segmente) stau pliate sub
+  // un buton: desfăcute, ocupau un ecran întreg înaintea primului lead. Căutarea rămâne la vedere.
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   /** Segmentarea (cerința 4) se aplică PE SERVER, în ambele vederi — spre deosebire de filtrele
    *  de mai sus, care cern cardurile deja aduse. Motivul: firmografia stă pe firma leadului, iar
@@ -311,6 +314,7 @@ export function CrmPipelinePage() {
   const hasActiveFilters =
     search.trim() !== "" || sourceFilter !== "all" || onlyMine || crmSegmentCount(segments) > 0;
   const hasSegments = crmSegmentCount(segments) > 0;
+  const mobileFilterCount = (sourceFilter !== "all" ? 1 : 0) + (onlyMine ? 1 : 0) + crmSegmentCount(segments);
 
   /**
    * Mută leadul instant în state local (înainte de răspunsul serverului) și recalculează
@@ -438,7 +442,7 @@ export function CrmPipelinePage() {
               onClick={() => switchView("kanban")}
               aria-pressed={viewMode === "kanban"}
               className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors max-sm:h-11",
                 viewMode === "kanban" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
               )}
             >
@@ -450,7 +454,7 @@ export function CrmPipelinePage() {
               onClick={() => switchView("list")}
               aria-pressed={viewMode === "list"}
               className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors max-sm:h-11",
                 viewMode === "list" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
               )}
             >
@@ -543,7 +547,7 @@ export function CrmPipelinePage() {
                   onClick={() => switchPipeline(p.id)}
                   aria-pressed={p.id === activePipelineId}
                   className={cn(
-                    "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+                    "inline-flex min-h-10 items-center rounded-full border px-4 py-1.5 text-sm font-medium transition-colors max-sm:min-h-11",
                     p.id === activePipelineId
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-card text-foreground hover:bg-muted"
@@ -556,7 +560,7 @@ export function CrmPipelinePage() {
                 <button
                   type="button"
                   onClick={() => setShowPipelineManager(true)}
-                  className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-10 max-sm:min-h-11"
                 >
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   Pâlnie nouă
@@ -567,7 +571,8 @@ export function CrmPipelinePage() {
 
           {/* Bara de filtre — se aplică PE SERVER, în ambele vederi. */}
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="sm:w-72">
+            <div className="flex items-center gap-2 sm:contents">
+            <div className="min-w-0 flex-1 sm:w-72 sm:flex-none">
               <Label htmlFor="crm-filter-search" className="sr-only">
                 Caută leaduri
               </Label>
@@ -579,6 +584,18 @@ export function CrmPipelinePage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <Button
+              variant="outline"
+              className="shrink-0 sm:hidden"
+              onClick={() => setMobileFiltersOpen((v) => !v)}
+              aria-expanded={mobileFiltersOpen}
+              aria-controls="crm-mobile-filters"
+            >
+              <ListFilter className="h-4 w-4" aria-hidden="true" />
+              Filtre{mobileFilterCount > 0 ? ` (${mobileFilterCount})` : ""}
+            </Button>
+            </div>
+            <div id="crm-mobile-filters" className={cn("flex flex-col gap-2 sm:contents", !mobileFiltersOpen && "max-sm:hidden")}>
             <div className="sm:w-48">
               <Label htmlFor="crm-filter-source" className="sr-only">
                 Filtrează după sursă
@@ -598,7 +615,7 @@ export function CrmPipelinePage() {
                 Doar ale mele
               </label>
             )}
-            <div className="flex items-center gap-2 sm:ml-auto">
+            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
               {can("leads.export") && (
                 <Button variant="outline" onClick={() => void exportCsv()} disabled={exporting}>
                   {exporting ? (
@@ -615,10 +632,11 @@ export function CrmPipelinePage() {
                 Personalizează
               </Button>
             </div>
+            </div>
           </div>
 
           {/* Segmentarea firmografică — spre deosebire de bara de mai sus, întreabă serverul. */}
-          <div className="mb-4">
+          <div className={cn("mb-4", !mobileFiltersOpen && "max-sm:hidden")}>
             <SegmentFilterBar value={segments} onChange={applySegments} />
           </div>
 
@@ -703,17 +721,31 @@ export function CrmPipelinePage() {
             })}
           </div>
 
-          {/* Mobil (<lg): aceleași secțiuni, fără drag — mutarea vine din select. */}
-          <div className="flex flex-col gap-4 lg:hidden">
+          {/* Mobil (<lg): coloanele se glisează lateral, una câte una (ca tabla Trello pe telefon);
+              marginea coloanei următoare se vede, ca să fie clar că mai e ceva la dreapta. Înainte
+              erau stivuite: 18 leaduri = 11 ecrane de derulat până la „Client". Fără drag — mutarea
+              vine din selectul de pe cartonaș. */}
+          <div
+            // `relative` e obligatoriu: fără el, etichetele `sr-only` (position: absolute) din
+            // coloanele din dreapta nu sunt tăiate de containerul care derulează și lățesc TOT
+            // documentul până la ultima coloană (986px pe un iPhone → pagină micșorată la 40%).
+            className="relative -mx-4 flex snap-x snap-mandatory items-start gap-3 overflow-x-auto scroll-px-4 px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:hidden"
+            role="region"
+            aria-label="Etapele pâlniei — glisează lateral"
+          >
             {stages.map((stage) => {
               const columnLeads = grouped[stage.key] ?? [];
               const columnCount = counts[stage.key] ?? 0;
               const columnValueSum = valueSums[stage.key] ?? 0;
               return (
-                <div key={stage.key} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/25 p-3">
+                <div
+                  key={stage.key}
+                  className="flex w-[85%] max-w-sm shrink-0 snap-start flex-col gap-2 rounded-2xl bg-muted/60 p-2"
+                  aria-label={`Coloana ${stage.label}`}
+                >
                   <StageHeader stage={stage} count={columnCount} valueSum={columnValueSum} />
                   {columnLeads.length === 0 ? (
-                    <p className="px-1 py-2 text-xs text-muted-foreground">
+                    <p className="px-1 py-2 text-sm text-muted-foreground">
                       {hasActiveFilters ? "Niciun rezultat în acest stadiu." : "Niciun lead în acest stadiu."}
                     </p>
                   ) : (

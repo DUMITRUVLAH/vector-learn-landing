@@ -640,7 +640,7 @@ export function CrmReportsPage() {
                       aria-pressed={funnelView === v}
                       onClick={() => setFunnelView(v)}
                       className={cn(
-                        "h-8 rounded-md px-3 text-sm font-medium transition-colors",
+                        "h-8 rounded-md px-3 text-sm font-medium transition-colors max-sm:h-11",
                         funnelView === v ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
                       )}
                     >
@@ -648,7 +648,7 @@ export function CrmReportsPage() {
                     </button>
                   ))}
                 </div>
-                <Link to={`/business/crm/palnie${data.pipelineId ? `?pipelineId=${data.pipelineId}` : ""}`} className="text-sm font-medium text-primary">
+                <Link to={`/business/crm/palnie${data.pipelineId ? `?pipelineId=${data.pipelineId}` : ""}`} className="inline-flex items-center text-sm font-medium text-primary max-sm:min-h-11">
                   Tabloul pâlniei
                 </Link>
               </div>

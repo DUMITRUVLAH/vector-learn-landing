@@ -64,7 +64,7 @@ export function LeadCard({ lead, prefs, stages, isDragging, ownerName, onDragSta
       <button
         type="button"
         onClick={onOpen}
-        className="block w-full rounded-xl p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="block w-full rounded-xl p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:min-h-11"
         aria-label={`Deschide lead ${title}`}
       >
         <div className="flex items-start justify-between gap-3">

@@ -132,7 +132,7 @@ export function CrmHomePage() {
             <h2 id="crm-home-todo" className="text-base font-medium">
               De făcut
             </h2>
-            <Link to="/business/crm/astazi" className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+            <Link to="/business/crm/astazi" className="inline-flex items-center gap-1 text-sm font-medium text-primary max-sm:min-h-11">
               Toate în Astăzi
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -180,7 +180,7 @@ export function CrmHomePage() {
             <h2 id="crm-home-recent" className="text-base font-medium">
               Afaceri recente
             </h2>
-            <Link to="/business/crm/pipeline" className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+            <Link to="/business/crm/pipeline" className="inline-flex items-center gap-1 text-sm font-medium text-primary max-sm:min-h-11">
               Pipeline
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>

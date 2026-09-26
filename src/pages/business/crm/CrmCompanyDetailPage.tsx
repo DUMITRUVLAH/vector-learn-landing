@@ -97,7 +97,7 @@ export function CrmCompanyDetailPage() {
     <BusinessShell pageTitle={company?.name ?? "Client"} pageDescription={subtitle}>
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link to={COMPANIES_LIST_PATH} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <Link to={COMPANIES_LIST_PATH} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground max-sm:min-h-11">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Toți clienții
           </Link>
@@ -148,12 +148,12 @@ export function CrmCompanyDetailPage() {
                     <Fact
                       icon={Phone}
                       label="Telefon"
-                      value={company.phone && <a className="hover:underline" href={`tel:${company.phone}`}>{company.phone}</a>}
+                      value={company.phone && <a className="hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center" href={`tel:${company.phone}`}>{company.phone}</a>}
                     />
                     <Fact
                       icon={Mail}
                       label="Email"
-                      value={company.email && <a className="break-all hover:underline" href={`mailto:${company.email}`}>{company.email}</a>}
+                      value={company.email && <a className="break-all hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center" href={`mailto:${company.email}`}>{company.email}</a>}
                     />
                     <Fact
                       icon={Globe}

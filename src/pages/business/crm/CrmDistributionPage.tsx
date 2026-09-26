@@ -296,7 +296,7 @@ export function CrmDistributionPage() {
                     aria-pressed={active}
                     onClick={() => setSegments((prev) => ({ ...prev, tag: active ? undefined : tag }))}
                     className={
-                      "rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
+                      "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors max-sm:min-h-11 max-sm:text-sm " +
                       (active
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-border bg-card text-foreground hover:bg-muted")
@@ -374,7 +374,7 @@ export function CrmDistributionPage() {
                     setDone(null);
                   }}
                   className={
-                    "inline-flex h-9 items-center rounded-md px-4 text-sm font-medium transition-colors " +
+                    "inline-flex h-9 items-center rounded-md px-4 text-sm font-medium transition-colors max-sm:h-11 " +
                     (mode === key ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted")
                   }
                 >
@@ -397,7 +397,7 @@ export function CrmDistributionPage() {
           ) : mode === "manual" ? (
             <ul className="grid gap-2 sm:grid-cols-2">
               {salesMembers.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5">
+                <li key={m.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border p-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{m.fullName || m.email}</p>
                     <p className="truncate text-xs text-muted-foreground">{m.email}</p>
@@ -419,7 +419,7 @@ export function CrmDistributionPage() {
             <div className="space-y-3">
               <ul className="grid gap-2 sm:grid-cols-2">
                 {salesMembers.map((m) => (
-                  <li key={m.id} className="rounded-lg border border-border p-2.5">
+                  <li key={m.id} className="min-w-0 rounded-lg border border-border p-2.5">
                     <Checkbox
                       id={`auto-${m.id}`}
                       checked={autoUserIds.includes(m.id)}

@@ -137,67 +137,75 @@ export function CrmPermissionsPage() {
             </span>
           </div>
 
-          <Table aria-label="Drepturile echipei">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[180px]">Om</TableHead>
-                {permissions.map((p) => (
-                  <TableHead key={p} className="whitespace-nowrap text-center text-[11px]">
-                    {PERMISSION_LABELS[p]}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(data?.members ?? []).map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell>
-                    <p className="text-sm font-medium text-foreground">{m.name ?? m.email}</p>
-                    <Badge variant="secondary">{ROLE_LABELS[m.role] ?? m.role}</Badge>
-                  </TableCell>
+          {/* Pe telefon: un card pe om, cu drepturile una sub alta. Matricea de 15 coloane cu butoane
+              de 28px nu se putea nici citi, nici apăsa pe 390px. */}
+          <ul className="flex flex-col gap-3 sm:hidden" aria-label="Drepturile echipei">
+            {(data?.members ?? []).map((m) => (
+              <li key={m.id} className="rounded-xl border border-border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-sm font-medium text-foreground">{m.name ?? m.email}</p>
+                  <Badge variant="secondary">{ROLE_LABELS[m.role] ?? m.role}</Badge>
+                </div>
+                <ul className="mt-2 divide-y divide-border">
                   {permissions.map((p) => {
                     const state = stateFor(m, p);
-                    const key = `${m.id}:${p}`;
                     return (
-                      <TableCell key={p} className="text-center">
-                        <button
-                          type="button"
+                      <li key={p} className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-foreground">{PERMISSION_LABELS[p]}</span>
+                        <PermissionToggle
+                          label={PERMISSION_LABELS[p]}
+                          who={m.name ?? m.email}
+                          state={state}
+                          busy={busy === `${m.id}:${p}`}
                           onClick={() => void cycle(m.id, p, state)}
-                          disabled={busy === key}
-                          aria-label={`${PERMISSION_LABELS[p]} pentru ${m.name ?? m.email}: ${
-                            state === "role"
-                              ? "din rol"
-                              : state === "granted"
-                                ? "acordat"
-                                : state === "revoked"
-                                  ? "retras"
-                                  : "nu poate"
-                          }`}
-                          className={cn(
-                            "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted",
-                            state === "role" && "text-success",
-                            state === "granted" && "text-primary",
-                            state === "revoked" && "text-destructive",
-                            state === "none" && "text-muted-foreground/50"
-                          )}
-                        >
-                          {busy === key ? (
-                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                          ) : state === "revoked" ? (
-                            <X className="h-4 w-4" aria-hidden="true" />
-                          ) : state === "none" ? (
-                            <Minus className="h-4 w-4" aria-hidden="true" />
-                          ) : (
-                            <Check className="h-4 w-4" aria-hidden="true" />
-                          )}
-                        </button>
-                      </TableCell>
+                        />
+                      </li>
                     );
                   })}
+                </ul>
+              </li>
+            ))}
+          </ul>
+
+          <div className="max-sm:hidden">
+            <Table aria-label="Drepturile echipei">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[180px]">Om</TableHead>
+                  {permissions.map((p) => (
+                    <TableHead key={p} className="whitespace-nowrap text-center text-xs">
+                      {PERMISSION_LABELS[p]}
+                    </TableHead>
+                  ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {(data?.members ?? []).map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <p className="text-sm font-medium text-foreground">{m.name ?? m.email}</p>
+                      <Badge variant="secondary">{ROLE_LABELS[m.role] ?? m.role}</Badge>
+                    </TableCell>
+                    {permissions.map((p) => {
+                      const state = stateFor(m, p);
+                      const key = `${m.id}:${p}`;
+                      return (
+                        <TableCell key={p} className="text-center">
+                          <PermissionToggle
+                            label={PERMISSION_LABELS[p]}
+                            who={m.name ?? m.email}
+                            state={state}
+                            busy={busy === key}
+                            onClick={() => void cycle(m.id, p, state)}
+                          />
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
           <p className="text-xs text-muted-foreground">
             Click pe o celulă: din rol → acordat anume → retras → înapoi la rol. Verificarea se face pe server la
@@ -206,5 +214,44 @@ export function CrmPermissionsPage() {
         </div>
       )}
     </BusinessShell>
+  );
+}
+
+interface PermissionToggleProps {
+  label: string;
+  who: string;
+  state: CellState;
+  busy: boolean;
+  onClick: () => void;
+}
+
+/** Un drept al unui om: apăsat, trece la starea următoare. 28px pe desktop, 44px pe telefon. */
+function PermissionToggle({ label, who, state, busy, onClick }: PermissionToggleProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      aria-label={`${label} pentru ${who}: ${
+        state === "role" ? "din rol" : state === "granted" ? "acordat" : state === "revoked" ? "retras" : "nu poate"
+      }`}
+      className={cn(
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted max-sm:h-11 max-sm:w-11",
+        state === "role" && "text-success",
+        state === "granted" && "text-primary",
+        state === "revoked" && "text-destructive",
+        state === "none" && "text-muted-foreground/50"
+      )}
+    >
+      {busy ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      ) : state === "revoked" ? (
+        <X className="h-4 w-4" aria-hidden="true" />
+      ) : state === "none" ? (
+        <Minus className="h-4 w-4" aria-hidden="true" />
+      ) : (
+        <Check className="h-4 w-4" aria-hidden="true" />
+      )}
+    </button>
   );
 }

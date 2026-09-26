@@ -880,7 +880,9 @@ export function BusinessShell({
           /* CRM-G01 — semnătura Drive: conținutul stă pe o suprafață albă rotunjită care plutește
              pe fundalul nuanțat al aplicației; meniul și bara de sus NU sunt pe alb. */
           <div className="flex flex-1 flex-col bg-card md:mb-4 md:mr-4 md:rounded-2xl">
-            <main className="w-full px-4 pb-8 pt-4 sm:px-6">
+            {/* max-md:pb-24 — bara de navigare de jos e fixă (≈64px): fără spațiul ăsta, ultimul
+                rând al oricărei pagini rămânea sub ea, de neatins. */}
+            <main className="w-full px-4 pb-8 pt-4 max-md:pb-24 sm:px-6">
               {pageTitle ? (
                 <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} variant="gm3" />
               ) : null}
@@ -888,7 +890,7 @@ export function BusinessShell({
             </main>
           </div>
         ) : (
-        <main className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 sm:px-8">
+        <main className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 max-md:pb-24 sm:px-8">
           {/* An empty pageTitle means the page owns its own header (FinLayout passes ""),
               so we must not emit a stray empty <h1> above it. */}
           {pageTitle ? (
