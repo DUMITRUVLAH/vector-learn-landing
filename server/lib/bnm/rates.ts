@@ -11,16 +11,66 @@
  * `bnm_rates`. Fără persistență, un grafic pe 30 de zile ar lovi bnm.md de 30 de ori la fiecare
  * deschidere de pagină (pe Vercel memoria pornește goală la rece).
  */
-import { and, eq, inArray, desc } from "drizzle-orm";
+import { and, eq, inArray, desc, lte } from "drizzle-orm";
 import { db } from "../../db/client";
 import { bnmRates } from "../../db/schema/bnmRates";
 import { fetchBnmQuotes, fetchBnmQuotesCsv, type BnmQuote, type FxFetch } from "../fx";
 
 export type { BnmQuote };
 
+/**
+ * Ce s-a întâmplat cu rețeaua în timpul UNEI cereri. Se propagă prin toate zilele parcurse ca
+ * ruta să poată spune omului adevărul: „BNM n-a publicat încă" și „n-am putut ajunge la bnm.md"
+ * arată la fel în date (curs mai vechi), dar sunt două situații diferite.
+ */
+export interface FetchState {
+  /** true dacă vreo descărcare din cererea asta a eșuat fără răspuns (rețea/timeout/5xx). */
+  unreachable: boolean;
+}
+
 export interface RatesOptions {
   /** Injectabil ca testele să nu atingă rețeaua. */
   fetchImpl?: FxFetch;
+  /** Cât așteptăm un răspuns de la bnm.md. Scurt: suntem pe calea unei cereri HTTP. */
+  timeoutMs?: number;
+  /** Colector de diagnostic pentru cererea curentă (vezi `FetchState`). */
+  state?: FetchState;
+}
+
+/**
+ * Cât așteptăm bnm.md înainte să renunțăm. În mod normal răspunde în ~200 ms; peste 5 secunde
+ * nu mai e „încet", e „nu răspunde", iar noi avem oricum oglinda locală.
+ */
+const FETCH_TIMEOUT_MS = 5_000;
+
+/**
+ * Siguranța care ține pagina în viață când bnm.md nu ne mai răspunde.
+ *
+ * Pe 2026-09-26 cursul nu se mai încărca deloc: bnm.md a început să lase fără răspuns cererile
+ * venite din centre de date (Vercel și orice IP de cloud expiră; aceleași URL-uri merg instant
+ * dintr-o rețea din Moldova). Oglinda avea cursul până pe 24.09, dar nu ajungea nimeni la el:
+ * o cerere pentru azi plătea 8 s pe XML + 8 s pe CSV, iar eroarea de la CSV arunca din
+ * `getQuotesForDate` și oprea căutarea înapoi ÎNAINTE să ajungă la ziua memorată → 503.
+ *
+ * De aceea: (1) nicio descărcare nu mai aruncă în sus, (2) după primul eșec nu mai încercăm
+ * rețeaua un minut — altfel fiecare deschidere de pagină plătește din nou timeout-ul pentru
+ * fiecare zi lipsă.
+ */
+const UNREACHABLE_COOLDOWN_MS = 60_000;
+let unreachableUntil = 0;
+
+function sourceLooksReachable(): boolean {
+  return Date.now() >= unreachableUntil;
+}
+
+function markSourceUnreachable(state?: FetchState): void {
+  unreachableUntil = Date.now() + UNREACHABLE_COOLDOWN_MS;
+  if (state) state.unreachable = true;
+}
+
+/** Test-only: repune breaker-ul pe zero, ca un test să nu-l moștenească de la altul. */
+export function __resetBnmReachability(): void {
+  unreachableUntil = 0;
 }
 
 /** "YYYY-MM-DD" pentru o dată locală. */
@@ -107,21 +157,41 @@ export async function getQuotesForDate(iso: string, opts: RatesOptions = {}): Pr
   const cached = await readDay(iso);
   if (cached.length > 0) return cached;
   if (iso > isoDate(new Date())) return [];
+  // bnm.md tocmai a refuzat o cerere: nu mai plătim încă un timeout pentru fiecare zi lipsă.
+  if (!sourceLooksReachable()) {
+    if (opts.state) opts.state.unreachable = true;
+    return [];
+  }
 
   const date = fromIso(iso);
   const ageDays = Math.round((Date.now() - date.getTime()) / 86_400_000);
   const useXmlFirst = ageDays <= XML_HORIZON_DAYS;
+  const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
 
+  // „Fără răspuns" ≠ „ziua asta n-are curs". Un `ValCurs` gol e un răspuns valid (weekend, zi
+  // nepublicată, arhivă prea veche pentru XML) și se rezolvă încercând CSV-ul; o excepție
+  // înseamnă că n-am vorbit deloc cu bnm.md, iar atunci CSV-ul ar eșua identic.
+  let reachable = true;
   let quotes: BnmQuote[] = [];
   if (useXmlFirst) {
     try {
-      quotes = await fetchBnmQuotes(date, { fetchImpl: opts.fetchImpl });
+      quotes = await fetchBnmQuotes(date, { fetchImpl: opts.fetchImpl, timeoutMs });
     } catch {
-      quotes = [];
+      reachable = false;
     }
   }
-  if (quotes.length === 0) {
-    quotes = await fetchBnmQuotesCsv(date, { fetchImpl: opts.fetchImpl });
+  if (reachable && quotes.length === 0) {
+    try {
+      quotes = await fetchBnmQuotesCsv(date, { fetchImpl: opts.fetchImpl, timeoutMs });
+    } catch {
+      // Aici era bugul din 26.09.2026: excepția ieșea din funcție, `getEffectiveQuotes` n-o
+      // prindea, iar ruta răspundea 503 fără să se mai uite în oglindă, unde cursul exista.
+      reachable = false;
+    }
+  }
+  if (!reachable) {
+    markSourceUnreachable(opts.state);
+    return [];
   }
 
   await persistDay(iso, quotes);
@@ -134,6 +204,8 @@ export interface EffectiveRates {
   /** Data pentru care BNM chiar are curs (poate fi mai veche: zi viitoare / arhivă lipsă). */
   effectiveDate: string;
   quotes: BnmQuote[];
+  /** true dacă n-am putut vorbi cu bnm.md în cererea asta (deci cursul vine din oglindă). */
+  sourceUnreachable: boolean;
 }
 
 /**
@@ -146,13 +218,48 @@ export async function getEffectiveQuotes(
   opts: RatesOptions & { maxBack?: number } = {}
 ): Promise<EffectiveRates> {
   const maxBack = opts.maxBack ?? 7;
+  const state: FetchState = opts.state ?? { unreachable: false };
+  const withState = { ...opts, state };
+
   let cursor = iso;
   for (let i = 0; i <= maxBack; i++) {
-    const quotes = await getQuotesForDate(cursor, opts);
-    if (quotes.length > 0) return { requestedDate: iso, effectiveDate: cursor, quotes };
+    const quotes = await getQuotesForDate(cursor, withState);
+    if (quotes.length > 0) {
+      return { requestedDate: iso, effectiveDate: cursor, quotes, sourceUnreachable: state.unreachable };
+    }
     cursor = shiftDays(cursor, -1);
   }
-  return { requestedDate: iso, effectiveDate: iso, quotes: [] };
+
+  // Ultima plasă: cea mai recentă zi pe care o avem memorată, oricât de veche. Un curs oficial de
+  // săptămâna trecută, spus pe față ca atare, e util; o pagină goală nu e. Contează când bnm.md
+  // e inaccesibil zile la rând — atunci pasul cu pasul de mai sus nu are cum să găsească nimic.
+  const mirrored = await latestMirroredDay(iso);
+  if (mirrored) {
+    return {
+      requestedDate: iso,
+      effectiveDate: mirrored.date,
+      quotes: mirrored.quotes,
+      sourceUnreachable: state.unreachable,
+    };
+  }
+  return { requestedDate: iso, effectiveDate: iso, quotes: [], sourceUnreachable: state.unreachable };
+}
+
+/** Cea mai recentă zi memorată la sau înaintea lui `iso`. Un singur SELECT, pe indexul de dată. */
+async function latestMirroredDay(iso: string): Promise<{ date: string; quotes: BnmQuote[] } | null> {
+  try {
+    const [row] = await db
+      .select({ d: bnmRates.rateDate })
+      .from(bnmRates)
+      .where(lte(bnmRates.rateDate, iso))
+      .orderBy(desc(bnmRates.rateDate))
+      .limit(1);
+    if (!row?.d) return null;
+    const quotes = await readDay(row.d);
+    return quotes.length > 0 ? { date: row.d, quotes } : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface SeriesPoint {

@@ -26,6 +26,8 @@ export interface FxRatesResponse {
   requested_date: string;
   effective_date: string;
   is_stale: boolean;
+  /** De ce cursul e mai vechi: BNM n-a publicat ziua cerută, sau n-am ajuns la bnm.md. */
+  stale_reason: "not_published" | "source_unreachable" | null;
   base: "MDL";
   source: "BNM";
   source_url: string;

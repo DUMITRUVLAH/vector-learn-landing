@@ -441,6 +441,7 @@ export function ParExchange() {
     requestedDate: string;
     effectiveDate: string;
     isStale: boolean;
+    staleReason: "not_published" | "source_unreachable" | null;
   } | null>(null);
   const [series, setSeries] = useState<FxSeriesPoint[]>([]);
   const [seriesLoading, setSeriesLoading] = useState(true);
@@ -464,6 +465,7 @@ export function ParExchange() {
         requestedDate: res.requested_date,
         effectiveDate: res.effective_date,
         isStale: res.is_stale,
+        staleReason: res.stale_reason ?? null,
       });
     } catch {
       setError("Nu am putut prelua cursul de la BNM. Încearcă din nou peste câteva momente.");
@@ -577,8 +579,26 @@ export function ParExchange() {
 
         {data?.isStale ? (
           <Alert icon={<Banknote className="h-4 w-4" />}>
-            Pentru {formatDateRo(data.requestedDate)} BNM nu a publicat un curs nou (weekend, sărbătoare sau zi
-            nepublicată încă). Se aplică cursul din {formatDateRo(data.effectiveDate)}.
+            {data.staleReason === "source_unreachable" ? (
+              <>
+                Nu am putut contacta bnm.md chiar acum, așa că se aplică ultimul curs oficial pe care îl
+                avem — cel din {formatDateRo(data.effectiveDate)}. Pentru cursul de azi, verifică direct pe{" "}
+                <a
+                  href="https://www.bnm.md/ro/official_exchange_rates"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium underline underline-offset-4"
+                >
+                  bnm.md
+                </a>
+                .
+              </>
+            ) : (
+              <>
+                Pentru {formatDateRo(data.requestedDate)} BNM nu a publicat un curs nou (weekend, sărbătoare sau zi
+                nepublicată încă). Se aplică cursul din {formatDateRo(data.effectiveDate)}.
+              </>
+            )}
           </Alert>
         ) : null}
 

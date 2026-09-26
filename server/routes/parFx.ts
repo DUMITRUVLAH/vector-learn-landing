@@ -117,6 +117,16 @@ parFxRoutes.get("/rates", async (c) => {
     /** Data pentru care BNM chiar are curs — poate fi mai veche decât cea cerută. */
     effective_date: day.effectiveDate,
     is_stale: day.effectiveDate !== day.requestedDate,
+    /**
+     * De ce e mai vechi. Cele două cazuri arată identic în cifre, dar omul trebuie să le
+     * deosebească: „weekend/sărbătoare" e normal, „n-am ajuns la bnm.md" înseamnă că mâine
+     * cursul poate fi altul decât cel de pe ecran.
+     */
+    stale_reason: day.effectiveDate === day.requestedDate
+      ? null
+      : day.sourceUnreachable
+        ? "source_unreachable"
+        : "not_published",
     base: "MDL",
     source: "BNM",
     source_url: SOURCE_URL,

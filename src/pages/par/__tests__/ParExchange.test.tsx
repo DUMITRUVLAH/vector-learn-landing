@@ -70,6 +70,7 @@ beforeEach(() => {
     requested_date: "2026-08-28",
     effective_date: "2026-08-28",
     is_stale: false,
+    stale_reason: null,
     base: "MDL",
     source: "BNM",
     source_url: "https://www.bnm.md/ro/official_exchange_rates",
@@ -186,6 +187,7 @@ describe("ParExchange", () => {
       requested_date: "2026-08-30",
       effective_date: "2026-08-28",
       is_stale: true,
+      stale_reason: "not_published",
       base: "MDL",
       source: "BNM",
       source_url: "https://www.bnm.md/ro/official_exchange_rates",
@@ -196,6 +198,25 @@ describe("ParExchange", () => {
     // Ambele zile sunt numite: cea cerută și cea al cărei curs se aplică de fapt.
     expect(banner.textContent).toContain("30 august 2026");
     expect(banner.textContent).toContain("28 august 2026");
+  });
+
+  it("spune pe față când cursul e vechi pentru că n-am ajuns la bnm.md", async () => {
+    // Aceleași cifre ca la „weekend", dar cu totul alt înțeles: cursul de azi poate fi altul.
+    // Dacă pagina ar folosi același text, omul ar semna o cerere crezând că are cursul zilei.
+    vi.spyOn(fxApi, "getFxRates").mockResolvedValue({
+      requested_date: "2026-08-30",
+      effective_date: "2026-08-28",
+      is_stale: true,
+      stale_reason: "source_unreachable",
+      base: "MDL",
+      source: "BNM",
+      source_url: "https://www.bnm.md/ro/official_exchange_rates",
+      rates: RATES,
+    });
+    render(<ParExchange />);
+    const banner = await screen.findByText(/nu am putut contacta bnm\.md/i);
+    expect(banner.textContent).toContain("28 august 2026");
+    expect(screen.queryByText(/nu a publicat un curs nou/i)).not.toBeInTheDocument();
   });
 
   it("arată o eroare lizibilă când BNM nu răspunde", async () => {

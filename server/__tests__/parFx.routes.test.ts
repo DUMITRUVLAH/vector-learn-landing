@@ -18,6 +18,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { bnmRates } from "../db/schema/bnmRates";
+import { __resetBnmReachability } from "../lib/bnm/rates";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -112,6 +113,9 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await testDb.delete(bnmRates);
+  // Breaker-ul de indisponibilitate trăiește la nivel de modul (vezi lib/bnm/rates.ts): fără
+  // resetare, testul care simulează bnm.md căzut ar face următoarele teste să creadă același lucru.
+  __resetBnmReachability();
   published.clear();
   archiveOnly.clear();
   fetchCalls = [];
@@ -344,5 +348,99 @@ describe("arhiva BNM (CSV)", () => {
     const body = await res.json();
     expect(body.rate).toBeCloseTo(17.6543, 6);
     expect(body.result).toBeCloseTo(176.543, 4);
+  });
+});
+
+/**
+ * 26.09.2026 — pagina „Curs valutar" nu se mai încărca deloc pe prod.
+ *
+ * Cauza n-a fost lipsa cursului: oglinda avea 24.09, dar bnm.md începuse să lase fără răspuns
+ * cererile din centre de date. Excepția de la descărcarea CSV ieșea din `getQuotesForDate`,
+ * `getEffectiveQuotes` n-o prindea, deci căutarea înapoi se oprea la prima zi și ruta răspundea
+ * 503 fără să se uite vreodată în oglindă. Testele de aici execută exact acel scenariu.
+ */
+describe("când bnm.md nu răspunde (blocaj de rețea, nu lipsă de curs)", () => {
+  /** Pune o zi în oglinda locală, ca și cum ar fi fost descărcată cât timp BNM era accesibil. */
+  async function mirrorDay(day: string, eur: number, usd: number) {
+    await testDb.insert(bnmRates).values([
+      { rateDate: day, code: "EUR", name: "Euro", nominal: "1", value: String(eur), mdlPerUnit: eur.toFixed(8) },
+      { rateDate: day, code: "USD", name: "Dolar S.U.A.", nominal: "1", value: String(usd), mdlPerUnit: usd.toFixed(8) },
+    ]);
+  }
+
+  /** Exact ce face bnm.md din Vercel: conexiunea expiră, nu vine niciun răspuns. */
+  function networkDead() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        fetchCalls.push(String(url));
+        throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+      })
+    );
+  }
+
+  it("servește ultimul curs oficial memorat în loc de 503", async () => {
+    await mirrorDay(iso(-2), 20.1669, 17.6678);
+    networkDead();
+
+    const res = await app.request(`/api/par/fx/rates?date=${iso(0)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.effective_date).toBe(iso(-2));
+    expect(body.is_stale).toBe(true);
+    expect(body.stale_reason).toBe("source_unreachable");
+    const eur = body.rates.find((r: { code: string }) => r.code === "EUR");
+    expect(eur.mdl_per_unit).toBeCloseTo(20.1669, 6);
+  });
+
+  it("coboară la cea mai recentă zi din oglindă chiar dacă e mai veche decât căutarea pas cu pas", async () => {
+    // Zece zile în urmă: dincolo de `maxBack`, deci pasul cu pasul n-o găsește. Un blocaj de o
+    // săptămână la bnm.md nu trebuie să golească pagina.
+    await mirrorDay(iso(-10), 19.5, 17.0);
+    networkDead();
+
+    const res = await app.request(`/api/par/fx/rates?date=${iso(0)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.effective_date).toBe(iso(-10));
+    expect(body.stale_reason).toBe("source_unreachable");
+  });
+
+  it("distinge „n-am ajuns la BNM” de „BNM n-a publicat ziua asta”", async () => {
+    // Aceeași formă de răspuns (curs mai vechi), două cauze diferite — omul trebuie să știe care.
+    published.delete(ddmmyyyy(iso(0)));
+    const res = await app.request(`/api/par/fx/rates?date=${iso(0)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.is_stale).toBe(true);
+    expect(body.stale_reason).toBe("not_published");
+  });
+
+  it("nu mai lovește bnm.md pentru fiecare zi după primul eșec", async () => {
+    // Fără breaker, un grafic pe 20 de zile cu sursa moartă înseamnă ~40 de descărcări care
+    // expiră pe rând — adică un răspuns tăiat de timeout-ul platformei, nu un grafic.
+    networkDead();
+
+    const res = await app.request(`/api/par/fx/series?codes=EUR&from=${iso(-19)}&to=${iso(0)}`);
+    expect(res.status).toBe(200);
+    expect(fetchCalls.length).toBeLessThanOrEqual(2);
+  });
+
+  it("rămâne 503 dacă nici oglinda n-are nimic — nu inventăm un curs", async () => {
+    networkDead();
+    const res = await app.request(`/api/par/fx/rates?date=${iso(0)}`);
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("bnm_unavailable");
+  });
+
+  it("graficul desenează zilele memorate în loc să rămână gol", async () => {
+    await mirrorDay(iso(-3), 20.0, 17.2);
+    await mirrorDay(iso(-2), 20.1, 17.3);
+    networkDead();
+
+    const res = await app.request(`/api/par/fx/series?codes=EUR,USD&from=${iso(-4)}&to=${iso(0)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.points.map((p: { date: string }) => p.date)).toEqual([iso(-3), iso(-2)]);
   });
 });
