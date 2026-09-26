@@ -219,7 +219,7 @@ export function CrmPaymentAccountSettingsPage() {
       pageTitle="Aspect și numerotare"
       pageDescription="Rechizitele, logoul, culorile și formatul numărului — setate o dată, pe toate conturile de plată."
       actions={
-        <Button variant="ghost" size="sm" href={`#${PAYMENT_ACCOUNTS_PATH}`}>
+        <Button variant="ghost" size="sm" href={PAYMENT_ACCOUNTS_PATH}>
           Înapoi la conturi
         </Button>
       }

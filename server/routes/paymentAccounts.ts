@@ -11,6 +11,8 @@ import {
   finInventoryItems,
 } from "../db/schema";
 import { crmProducts } from "../db/schema/crmProducts";
+import { crmCompanies } from "../db/schema/crmCompanies";
+import { leads } from "../db/schema/leads";
 import { docNumberSequences } from "../db/schema/docs";
 import type { PaymentAccountTemplateBuyer, PaymentAccountTemplateItem } from "../db/schema/paymentAccountTemplates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -65,6 +67,15 @@ import { LOGO_MAX_BYTES, LOGO_MIME_TYPES, uploadOrgLogo } from "../lib/par/orgLo
 export const paymentAccountRoutes = new Hono<{ Variables: AuthVariables }>();
 
 paymentAccountRoutes.use("*", requireAuth);
+// Un id de șablon care nu e uuid ar ajunge la Postgres ca 22P02 (500) — e doar „nu există".
+paymentAccountRoutes.use("/templates/:tid/*", async (c, next) => {
+  if (!/^[0-9a-f-]{36}$/i.test(c.req.param("tid") ?? "")) return c.json({ error: "not_found" }, 404);
+  await next();
+});
+paymentAccountRoutes.use("/templates/:tid", async (c, next) => {
+  if (!/^[0-9a-f-]{36}$/i.test(c.req.param("tid") ?? "")) return c.json({ error: "not_found" }, 404);
+  await next();
+});
 
 // ─── Validare ────────────────────────────────────────────────────────────────
 
@@ -80,7 +91,8 @@ const itemSchema = z.object({
   description: z.string().trim().min(1).max(500),
   unit: z.string().trim().max(32).default("buc"),
   quantity: z.number().positive().max(1_000_000),
-  unitPriceCents: z.number().int().min(0),
+  // 10 milioane pe unitate — plafonul ține totalul în int4 (coloanele sunt `integer`, în bani).
+  unitPriceCents: z.number().int().min(0).max(1_000_000_000),
   vatRate: z.number().int().min(0).max(100).default(0),
   productId: z.string().uuid().optional().nullable(),
 });
@@ -104,7 +116,9 @@ const buyerShape = {
   buyerCity: optStr(255),
   buyerEmail: optStr(255),
   buyerPhone: optStr(64),
-  buyerIban: optStr(34).transform((v) => (v ? v.replace(/\s+/g, "").toUpperCase() : v)),
+  // Spațiile se scot ÎNAINTE de limita de 34: un IBAN scris „MD24 AG00 …" are 29 de caractere
+  // utile, dar trecea de 34 cu spații și bloca salvarea automată cu 400.
+  buyerIban: z.preprocess((v) => (typeof v === "string" ? v.replace(/\s+/g, "").toUpperCase() : v), optStr(34)),
   buyerBankName: optStr(255),
   buyerContact: optStr(255),
 };
@@ -157,10 +171,15 @@ function sellerSnapshot(i: Issuer) {
   };
 }
 
-async function writeItems(accountId: string, items: UpsertBody["items"]) {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Totalul maxim al unui cont: coloanele de sume sunt `integer` (bani). Peste el, 400 — nu un 500. */
+const MAX_TOTAL_CENTS = 2_000_000_000;
+
+async function writeItems(tx: Tx, accountId: string, items: UpsertBody["items"]) {
   const { lines } = computeDocumentTotals(items);
-  await db.delete(paymentAccountItems).where(eq(paymentAccountItems.accountId, accountId));
-  await db.insert(paymentAccountItems).values(
+  await tx.delete(paymentAccountItems).where(eq(paymentAccountItems.accountId, accountId));
+  await tx.insert(paymentAccountItems).values(
     items.map((it, i) => ({
       accountId,
       position: i,
@@ -194,6 +213,8 @@ async function loadAccount(tenantId: string, id: string) {
 // e atomic: două emiteri simultane primesc numere diferite — un SELECT max()+UPDATE nu garanta asta.
 
 const SEQ_YEAR = 0;
+/** Cât de mult poate sări înainte un număr manual și tot să continue secvența automată. */
+const MANUAL_JUMP_LIMIT = 1000;
 const seqKind = (series: string) => `cont_plata:${series}`.slice(0, 50);
 
 async function usedNumbers(tenantId: string, series: string): Promise<number[]> {
@@ -573,6 +594,90 @@ paymentAccountRoutes.get("/catalog", async (c) => {
   });
 });
 
+// ─── Pornire din CRM: lead sau fișa firmei ──────────────────────────────────
+//
+// Integrarea cerută de owner („trebuie legate de CRM"): butonul „Cont de plată" de pe lead
+// deschide editorul cu clientul și produsul deja puse. Clientul e FIRMA leadului când are una
+// (contul se plătește de firmă, nu de persoana care a sunat), altfel persoana. Nu scrie nimic —
+// doar propune; ciorna se creează la prima salvare, cu `leadId` legat.
+
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+paymentAccountRoutes.get("/prefill", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const leadId = c.req.query("leadId");
+  const companyIdParam = c.req.query("companyId");
+  if ((leadId && !UUID_RE.test(leadId)) || (companyIdParam && !UUID_RE.test(companyIdParam))) {
+    return c.json({ error: "invalid_id" }, 400);
+  }
+
+  let lead: typeof leads.$inferSelect | undefined;
+  if (leadId) {
+    [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.tenantId, tenantId))).limit(1);
+    if (!lead) return c.json({ error: "not_found" }, 404);
+  }
+  const companyId = lead?.companyId ?? companyIdParam ?? null;
+  let company: typeof crmCompanies.$inferSelect | undefined;
+  if (companyId) {
+    [company] = await db
+      .select()
+      .from(crmCompanies)
+      .where(and(eq(crmCompanies.id, companyId), eq(crmCompanies.tenantId, tenantId)))
+      .limit(1);
+    if (!company && !lead) return c.json({ error: "not_found" }, 404);
+  }
+
+  const buyer = company
+    ? {
+        buyerName: company.name,
+        buyerIdno: company.idno,
+        buyerAddress: company.address,
+        buyerEmail: company.email,
+        buyerPhone: company.phone,
+        buyerContact: lead?.fullName ?? null,
+        crmCompanyId: company.id,
+      }
+    : {
+        buyerName: lead?.company?.trim() || lead?.fullName || "",
+        buyerEmail: lead?.email ?? null,
+        buyerPhone: lead?.phone ?? null,
+        buyerContact: lead?.company?.trim() ? lead.fullName : null,
+        crmCompanyId: null,
+      };
+
+  const items: Array<{ description: string; unit: string; quantity: number; unitPriceCents: number; vatRate: number; productId: string | null }> = [];
+  if (lead?.productId) {
+    const [p] = await db
+      .select()
+      .from(crmProducts)
+      .where(and(eq(crmProducts.id, lead.productId), eq(crmProducts.tenantId, tenantId)))
+      .limit(1);
+    if (p) {
+      items.push({
+        description: p.name,
+        unit: p.unit || "buc",
+        quantity: Math.max(1, lead.productQty ?? 1),
+        unitPriceCents: p.listPriceCents,
+        vatRate: Math.round(Number(p.vatPercent ?? 0)),
+        productId: p.id,
+      });
+    }
+  }
+  // Fără produs din catalog: interesul leadului + valoarea lui sunt cel mai bun punct de pornire.
+  if (items.length === 0 && lead && (lead.interestCourse || lead.valueCents > 0)) {
+    items.push({
+      description: lead.interestCourse || lead.dealName || "Servicii",
+      unit: "buc",
+      quantity: 1,
+      unitPriceCents: Math.max(0, lead.valueCents),
+      vatRate: 0,
+      productId: null,
+    });
+  }
+
+  return c.json({ data: { leadId: lead?.id ?? null, buyer, items } });
+});
+
 // ─── Șabloane ────────────────────────────────────────────────────────────────
 
 const templateItemSchema = itemSchema.extend({ description: z.string().trim().min(1).max(500) });
@@ -692,36 +797,42 @@ paymentAccountRoutes.delete("/templates/:tid", async (c) => {
 async function createDraft(tenantId: string, body: UpsertBody) {
   const [settings, issuer] = await Promise.all([loadSettings(tenantId), loadIssuer(tenantId)]);
   const { totals } = computeDocumentTotals(body.items);
+  if (totals.totalCents > MAX_TOTAL_CENTS) throw new TotalTooLarge();
   const issueDate = body.issueDate ?? new Date();
   const dueDate =
     body.dueDate === null && settings.defaultDueDays > 0
       ? new Date(issueDate.getTime() + settings.defaultDueDays * 86_400_000)
       : body.dueDate;
-  const [account] = await db
-    .insert(paymentAccounts)
-    .values({
-      tenantId,
-      clientId: body.clientId ?? null,
-      crmCompanyId: body.crmCompanyId ?? null,
-      leadId: body.leadId ?? null,
-      templateId: body.templateId ?? null,
-      series: body.series ?? settings.series,
-      currency: body.currency ?? "MDL",
-      lang: body.lang ?? settings.defaultLang,
-      status: "draft",
-      issueDate,
-      dueDate: dueDate ?? null,
-      notes: body.notes ?? settings.defaultNotes ?? null,
-      ...sellerSnapshot(issuer),
-      ...buyerValues(body),
-      subtotalCents: totals.subtotalCents,
-      vatCents: totals.vatCents,
-      totalCents: totals.totalCents,
-    })
-    .returning();
-  await writeItems(account.id, body.items);
-  return account;
+  return db.transaction(async (tx) => {
+    const [account] = await tx
+      .insert(paymentAccounts)
+      .values({
+        tenantId,
+        clientId: body.clientId ?? null,
+        crmCompanyId: body.crmCompanyId ?? null,
+        leadId: body.leadId ?? null,
+        templateId: body.templateId ?? null,
+        series: body.series ?? settings.series,
+        currency: body.currency ?? "MDL",
+        lang: body.lang ?? settings.defaultLang,
+        status: "draft",
+        issueDate,
+        dueDate: dueDate ?? null,
+        notes: body.notes ?? settings.defaultNotes ?? null,
+        ...sellerSnapshot(issuer),
+        ...buyerValues(body),
+        subtotalCents: totals.subtotalCents,
+        vatCents: totals.vatCents,
+        totalCents: totals.totalCents,
+      })
+      .returning();
+    await writeItems(tx, account.id, body.items);
+    return account;
+  });
 }
+
+class TotalTooLarge extends Error {}
+const TOTAL_TOO_LARGE = { error: "total_too_large", message: "Totalul depășește limita unui cont (20 de milioane)." } as const;
 
 paymentAccountRoutes.post("/templates/:tid/use", async (c) => {
   const tenantId = c.get("user").tenantId;
@@ -780,8 +891,13 @@ paymentAccountRoutes.get("/", async (c) => {
 });
 
 paymentAccountRoutes.post("/", zValidator("json", upsertSchema), async (c) => {
-  const account = await createDraft(c.get("user").tenantId, c.req.valid("json"));
-  return c.json({ data: account }, 201);
+  try {
+    const account = await createDraft(c.get("user").tenantId, c.req.valid("json"));
+    return c.json({ data: account }, 201);
+  } catch (err) {
+    if (err instanceof TotalTooLarge) return c.json(TOTAL_TOO_LARGE, 400);
+    throw err;
+  }
 });
 
 paymentAccountRoutes.get("/:id", async (c) => {
@@ -806,27 +922,35 @@ paymentAccountRoutes.patch("/:id", zValidator("json", upsertSchema), async (c) =
   if (existing.status !== "draft") return c.json({ error: "only_draft_editable" }, 409);
 
   const { totals } = computeDocumentTotals(body.items);
-  const [updated] = await db
-    .update(paymentAccounts)
-    .set({
-      clientId: body.clientId ?? null,
-      crmCompanyId: body.crmCompanyId ?? null,
-      leadId: body.leadId ?? existing.leadId,
-      series: body.series ?? existing.series,
-      currency: body.currency ?? existing.currency,
-      lang: body.lang ?? existing.lang,
-      issueDate: body.issueDate ?? existing.issueDate,
-      dueDate: body.dueDate ?? null,
-      notes: body.notes ?? null,
-      ...buyerValues(body),
-      subtotalCents: totals.subtotalCents,
-      vatCents: totals.vatCents,
-      totalCents: totals.totalCents,
-      updatedAt: new Date(),
-    })
-    .where(eq(paymentAccounts.id, id))
-    .returning();
-  await writeItems(id, body.items);
+  if (totals.totalCents > MAX_TOTAL_CENTS) return c.json(TOTAL_TOO_LARGE, 400);
+  // Starea „ciornă" se verifică ÎN update, nu doar înainte: între citire și scriere contul poate fi
+  // emis din altă filă — atunci 0 rânduri, 409, iar pozițiile contului emis rămân neatinse.
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(paymentAccounts)
+      .set({
+        clientId: body.clientId ?? null,
+        crmCompanyId: body.crmCompanyId ?? null,
+        leadId: body.leadId ?? existing.leadId,
+        series: body.series ?? existing.series,
+        currency: body.currency ?? existing.currency,
+        lang: body.lang ?? existing.lang,
+        issueDate: body.issueDate ?? existing.issueDate,
+        dueDate: body.dueDate ?? null,
+        notes: body.notes ?? null,
+        ...buyerValues(body),
+        subtotalCents: totals.subtotalCents,
+        vatCents: totals.vatCents,
+        totalCents: totals.totalCents,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(paymentAccounts.id, id), eq(paymentAccounts.tenantId, tenantId), eq(paymentAccounts.status, "draft")))
+      .returning();
+    if (!row) return null;
+    await writeItems(tx, id, body.items);
+    return row;
+  });
+  if (!updated) return c.json({ error: "only_draft_editable" }, 409);
   return c.json({ data: updated });
 });
 
@@ -883,9 +1007,23 @@ paymentAccountRoutes.post("/:id/issue", async (c) => {
   let documentNumber: string;
   if (manual) {
     const taken = await takenDocumentNumbers(tenantId, id);
-    if (taken.has(manual)) return c.json({ error: "number_taken", message: `Numărul ${manual} e deja folosit.` }, 409);
-    documentNumber = manual;
-    number = parseManualNumber(numbering, manual, year);
+    const takenNorm = new Set([...taken].map((t) => t.trim().toUpperCase()));
+    // „CP-2026-5" și „cp-2026-0005" sunt ACELAȘI număr cu „CP-2026-0005": comparăm forma
+    // canonică și numărul din secvență, nu doar textul exact.
+    const n = parseManualNumber(numbering, manual, year);
+    const canonical = n != null ? formatDocumentNumber(numbering, n, year) : null;
+    const used = await usedNumbers(tenantId, numbering.series);
+    const clash =
+      takenNorm.has(manual.toUpperCase()) ||
+      (canonical != null && takenNorm.has(canonical.toUpperCase())) ||
+      (n != null && used.includes(n));
+    if (clash) return c.json({ error: "number_taken", message: `Numărul ${manual} e deja folosit.` }, 409);
+    // Intră în secvență doar un număr plauzibil: o greșeală de tastare („CP-2026-20260015")
+    // ar fi mutat altfel toată numerotarea automată, ireversibil (secvența nu dă niciodată înapoi).
+    const expected = nextSequenceNumber(used, numbering.start);
+    const inSequence = n != null && n <= expected + MANUAL_JUMP_LIMIT && n <= 10_000_000;
+    documentNumber = canonical && inSequence ? canonical : manual;
+    number = inSequence ? n : null;
   } else {
     const used = await usedNumbers(tenantId, numbering.series);
     const floor = nextSequenceNumber(used, numbering.start) - 1;
@@ -981,6 +1119,11 @@ paymentAccountRoutes.delete("/:id", async (c) => {
   const existing = await loadAccount(tenantId, c.req.param("id"));
   if (!existing) return c.json({ error: "not_found" }, 404);
   if (existing.status !== "draft") return c.json({ error: "only_draft_deletable" }, 409);
-  await db.delete(paymentAccounts).where(eq(paymentAccounts.id, existing.id));
+  const deleted = await db
+    .delete(paymentAccounts)
+    .where(and(eq(paymentAccounts.id, existing.id), eq(paymentAccounts.status, "draft")))
+    .returning({ id: paymentAccounts.id });
+  // Emis între timp (altă filă): nu-l ștergem — ar lăsa o gaură în registrul numerelor.
+  if (deleted.length === 0) return c.json({ error: "only_draft_deletable" }, 409);
   return c.json({ ok: true });
 });

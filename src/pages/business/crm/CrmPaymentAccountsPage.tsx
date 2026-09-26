@@ -99,7 +99,7 @@ export function CrmPaymentAccountsPage() {
       pageDescription="Numerotate automat, cu rechizitele și aspectul tău. Pozițiile vin din catalogul CRM."
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" href={`#${PAYMENT_ACCOUNTS_PATH}/setari`}>
+          <Button variant="ghost" size="sm" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
             <Settings2 className="h-4 w-4" aria-hidden="true" />
             Aspect și numerotare
           </Button>

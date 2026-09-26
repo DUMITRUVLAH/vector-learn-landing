@@ -98,8 +98,17 @@ export function BuyerPicker({ value, onChange, disabled }: BuyerPickerProps) {
     function onDoc(e: MouseEvent) {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
     }
+    // Escape închide lista și când focusul e pe o opțiune, nu doar în câmp.
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    boxRef.current?.addEventListener("keydown", onKey);
+    const box = boxRef.current;
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      box?.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   async function pick(hit: Hit) {
@@ -158,12 +167,12 @@ export function BuyerPicker({ value, onChange, disabled }: BuyerPickerProps) {
           autoComplete="off"
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => hits.length > 0 && setOpen(true)}
+          onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
           placeholder="Nume firmă sau IDNO…"
           icon={loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
         />
         {open && query.trim().length >= 2 && (
           <ul
-            role="listbox"
             aria-label="Rezultatele căutării clientului"
             className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
           >
@@ -173,11 +182,11 @@ export function BuyerPicker({ value, onChange, disabled }: BuyerPickerProps) {
               </li>
             )}
             {hits.map((hit) => (
-              <li key={hit.key} role="option" aria-selected={false}>
+              <li key={hit.key}>
                 <button
                   type="button"
                   onClick={() => pick(hit)}
-                  className="flex min-h-[44px] w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+                  className="flex min-h-[44px] w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   {hit.kind === "crm" ? (
                     <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />

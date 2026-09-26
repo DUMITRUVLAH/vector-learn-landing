@@ -172,40 +172,6 @@ export interface PaymentAccountTemplate {
   createdAt: string;
 }
 
-export interface SellerProfile {
-  id: string;
-  tenantId: string;
-  name: string;
-  idno: string | null;
-  legalForm: string | null;
-  vatCode: string | null;
-  address: string | null;
-  city: string | null;
-  iban: string | null;
-  bankName: string | null;
-  bankCode: string | null;
-  contactEmail: string | null;
-  contactPhone: string | null;
-  defaultSeries: string;
-  defaultVatRate: number;
-}
-
-export interface CompanyClient {
-  id: string;
-  tenantId: string;
-  idno: string | null;
-  name: string;
-  legalForm: string | null;
-  status: string | null;
-  address: string | null;
-  city: string | null;
-  cuatmCode: string | null;
-  email: string | null;
-  phone: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface PaymentAccountInput extends Partial<Omit<PaymentAccountBuyer, "buyerName">> {
   buyerName: string;
   clientId?: string | null;
@@ -236,35 +202,6 @@ export function searchRegistry(q: string): Promise<{ data: RegistryCompany[] }> 
 
 export function getRegistryCompany(idno: string): Promise<{ data: RegistryCompanyDetail }> {
   return api(`/api/registry/companies/${encodeURIComponent(idno)}`);
-}
-
-// ── Seller profile ──
-
-export function getSellerProfile(): Promise<{ data: SellerProfile | null }> {
-  return api(`/api/seller-profile`);
-}
-
-export function saveSellerProfile(
-  input: Partial<SellerProfile> & { name: string }
-): Promise<{ data: SellerProfile }> {
-  return api(`/api/seller-profile`, { method: "PUT", body: JSON.stringify(input) });
-}
-
-// ── Company clients ──
-
-export function listClients(q = ""): Promise<{ data: CompanyClient[] }> {
-  return api(`/api/company-clients${q ? `?q=${encodeURIComponent(q)}` : ""}`);
-}
-
-export function importClientByIdno(idno: string): Promise<{ data: CompanyClient }> {
-  return api(`/api/company-clients/import`, {
-    method: "POST",
-    body: JSON.stringify({ idno }),
-  });
-}
-
-export function deleteClient(id: string): Promise<{ ok: true }> {
-  return api(`/api/company-clients/${id}`, { method: "DELETE" });
 }
 
 // ── Payment accounts ──
@@ -349,6 +286,20 @@ export function paymentAccountSampleUrl(v: string | number): string {
   return `/api/payment-accounts/settings/sample.pdf?v=${encodeURIComponent(String(v))}#navpanes=0&view=FitH`;
 }
 
+/** Contul pornit din CRM: clientul (firma leadului sau persoana) + produsul leadului. */
+export interface PaymentAccountPrefill {
+  leadId: string | null;
+  buyer: Partial<PaymentAccountBuyer> & { buyerName: string; crmCompanyId: string | null };
+  items: Array<{ description: string; unit: string; quantity: number; unitPriceCents: number; vatRate: number; productId: string | null }>;
+}
+
+export function getPaymentAccountPrefill(from: { leadId?: string | null; companyId?: string | null }): Promise<{ data: PaymentAccountPrefill }> {
+  const params = new URLSearchParams();
+  if (from.leadId) params.set("leadId", from.leadId);
+  if (from.companyId) params.set("companyId", from.companyId);
+  return api(`/api/payment-accounts/prefill?${params.toString()}`, { cache: "reload" });
+}
+
 // ── Setări (design + numerotare) ──
 
 export function getPaymentAccountSettings(): Promise<{ data: PaymentAccountSettingsView }> {
@@ -412,12 +363,3 @@ export function paymentAccountErrorMessage(err: unknown, fallback: string): stri
   return err instanceof Error && err.message && !/^http_\d+$/.test(err.message) ? err.message : fallback;
 }
 
-// ── Helpers ──
-
-export function formatMdl(cents: number, currency = "MDL"): string {
-  return new Intl.NumberFormat("ro-MD", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(cents / 100);
-}

@@ -44,6 +44,8 @@ import {
 import {
   createPaymentAccount,
   deletePaymentAccount,
+  deletePaymentAccountTemplate,
+  getPaymentAccountPrefill,
   duplicatePaymentAccount,
   getNextPaymentAccountNumber,
   getPaymentAccount,
@@ -119,6 +121,8 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
   const [dueDate, setDueDate] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [templateId, setTemplateId] = useState<string | null>(null);
+  /** Leadul din CRM din care a pornit contul (butonul „Cont de plată” de pe fișa leadului). */
+  const [leadId, setLeadId] = useState<string | null>(null);
 
   // ── Număr ──
   const [autoNumber, setAutoNumber] = useState<string>("");
@@ -179,6 +183,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
     setDueDate(isoDay(a.dueDate));
     setNotes(a.notes ?? "");
     setTemplateId(a.templateId);
+    setLeadId(a.leadId);
     setPreviewVersion(a.updatedAt);
     setSavedAt(a.updatedAt);
   }, []);
@@ -204,8 +209,32 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
           setNotes(s.defaultNotes ?? "");
           setDueDate(s.defaultDueDays > 0 ? addDays(todayIso(), s.defaultDueDays) : "");
           setLines([newLine(s.defaultVatRate)]);
-          // Cont nou fără șabloane: nu e ce alege — începe direct.
-          if (tplRes.data.length > 0) setTemplatesOpen(true);
+          const from = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+          const fromLead = from.get("lead");
+          const fromCompany = from.get("company");
+          if (fromLead || fromCompany) {
+            // Pornit din CRM: clientul și produsul leadului sunt deja puse — fără alegere de șablon.
+            const { data: pre } = await getPaymentAccountPrefill({ leadId: fromLead, companyId: fromCompany });
+            if (!alive) return;
+            setLeadId(pre.leadId);
+            setBuyer({ ...EMPTY_BUYER, ...pre.buyer, buyerName: pre.buyer.buyerName ?? "" } as BuyerValue);
+            if (pre.items.length > 0) {
+              setLines(
+                pre.items.map((it) => ({
+                  ...newLine(),
+                  description: it.description,
+                  unit: it.unit,
+                  quantity: String(it.quantity),
+                  price: it.unitPriceCents > 0 ? centsToPrice(it.unitPriceCents) : "",
+                  vatRate: it.vatRate,
+                  productId: it.productId,
+                }))
+              );
+            }
+          } else if (tplRes.data.length > 0) {
+            // Cont nou fără șabloane: nu e ce alege — începe direct.
+            setTemplatesOpen(true);
+          }
         }
         hydrated.current = true;
       } catch (e) {
@@ -246,6 +275,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
       ...buyer,
       buyerName: buyer.buyerName.trim(),
       templateId,
+      leadId,
       currency,
       lang,
       issueDate: issueDate || null,
@@ -253,7 +283,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
       notes: notes.trim() || null,
       items,
     };
-  }, [buyer, lines, currency, lang, issueDate, dueDate, notes, templateId]);
+  }, [buyer, lines, currency, lang, issueDate, dueDate, notes, templateId, leadId]);
 
   const inputKey = input ? JSON.stringify(input) : "";
 
@@ -347,11 +377,13 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
       setError("Completează clientul și cel puțin o poziție cu preț înainte de emitere.");
       return;
     }
+    const number = manualMode && manualNumber.trim() ? manualNumber.trim() : autoNumber;
+    // Emiterea consumă un număr din serie și îngheață contul — un click scăpat nu se mai desface.
+    if (!window.confirm(`Emiți contul ${number ? `nr. ${number} ` : ""}pentru ${buyer.buyerName}, ${money(totals.total)}? După emitere nu se mai modifică.`)) return;
     await run("issue", async () => {
       const savedId = await save();
       if (!savedId) return;
-      const number = manualMode && manualNumber.trim() ? manualNumber.trim() : null;
-      await issuePaymentAccount(savedId, number);
+      await issuePaymentAccount(savedId, manualMode && manualNumber.trim() ? manualNumber.trim() : null);
       await reload(savedId);
       setManualMode(false);
       setNotice("Contul a fost emis. PDF-ul se descarcă.");
@@ -382,8 +414,12 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
 
   async function handleUseTemplate(tpl: PaymentAccountTemplate) {
     setTemplatesOpen(false);
+    // O salvare încă în zbor trebuie să se termine întâi — altfel ar scrie peste ciorna nouă.
+    await chain.current;
     const current = buyer.buyerName.trim() ? buyer : null;
-    if (current || tpl.buyer?.buyerName) {
+    // Ciorna există deja: șablonul se aplică PE EA (salvarea automată o actualizează), nu se face
+    // una nouă lângă — altfel prima rămânea orfană în listă.
+    if (!idRef.current && (current || tpl.buyer?.buyerName)) {
       // Clientul (din formular sau din șablon) există → ciorna se face pe server, cu numărul ei.
       const res = await run("template", () => startFromPaymentAccountTemplate(tpl.id, current ?? undefined));
       if (res) {
@@ -394,7 +430,8 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
       }
       return;
     }
-    // Șablon fără client: completăm formularul, clientul îl alegi tu, ciorna se salvează singură.
+    // Pe ciorna existentă sau fără client: completăm formularul; ciorna se salvează singură.
+    if (tpl.buyer?.buyerName && !current) setBuyer({ ...EMPTY_BUYER, ...tpl.buyer, buyerName: tpl.buyer.buyerName } as BuyerValue);
     setTemplateId(tpl.id);
     setCurrency(tpl.currency);
     if (tpl.notes) setNotes(tpl.notes);
@@ -454,7 +491,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
               Din șablon
             </Button>
           )}
-          <Button variant="ghost" size="sm" href={`#${PAYMENT_ACCOUNTS_PATH}/setari`}>
+          <Button variant="ghost" size="sm" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
             <Settings2 className="h-4 w-4" aria-hidden="true" />
             Aspect și numerotare
           </Button>
@@ -477,7 +514,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
           {isDraft && missing.length > 0 && (
             <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />} title="Lipsesc rechizitele tale">
               Contul iese fără: {missing.join(", ")}.{" "}
-              <a className="font-medium underline" href={`#${PAYMENT_ACCOUNTS_PATH}/setari`}>
+              <a className="font-medium underline" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
                 Completează-le o dată
               </a>{" "}
               — apar apoi pe toate conturile.
@@ -670,7 +707,9 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
                 </>
               ) : (
                 <>
-                  <Button href={id ? paymentAccountPdfUrl(id, { download: true }) : undefined}>
+                  {/* Descărcarea e o cerere REALĂ către API, nu o rută a aplicației — de aceea nu `href`
+                      (acela navighează prin routerul intern). */}
+                  <Button onClick={() => id && window.location.assign(paymentAccountPdfUrl(id, { download: true }))}>
                     <Download className="h-4 w-4" aria-hidden="true" />
                     Descarcă PDF
                   </Button>
@@ -717,7 +756,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
             ) : (
               <div className="flex h-[60vh] min-h-[420px] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border px-6 text-center text-sm text-muted-foreground">
                 <p>Alege clientul și adaugă o poziție — PDF-ul apare aici, exact cum îl primește clientul.</p>
-                <a className="font-medium text-primary underline" href={`#${PAYMENT_ACCOUNTS_PATH}/setari`}>
+                <a className="font-medium text-primary underline" href={`${PAYMENT_ACCOUNTS_PATH}/setari`}>
                   Vezi o mostră și alege aspectul
                 </a>
               </div>
@@ -746,11 +785,11 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
               0
             );
             return (
-              <li key={t.id}>
+              <li key={t.id} className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => handleUseTemplate(t)}
-                  className="flex min-h-[56px] w-full items-center justify-between gap-3 px-2 py-3 text-left hover:bg-muted focus:bg-muted focus:outline-none"
+                  className="flex min-h-[56px] min-w-0 flex-1 items-center justify-between gap-3 px-2 py-3 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-medium text-foreground">{t.name}</span>
@@ -761,6 +800,19 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-foreground">{formatMoney(total, t.currency)}</span>
                 </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Șterge șablonul ${t.name}`}
+                  onClick={async () => {
+                    if (!window.confirm(`Ștergi șablonul „${t.name}”? Conturile făcute din el rămân.`)) return;
+                    const ok = await run("deleteTpl", () => deletePaymentAccountTemplate(t.id));
+                    if (ok) setTemplates((list) => list.filter((x) => x.id !== t.id));
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+                </Button>
               </li>
             );
           })}

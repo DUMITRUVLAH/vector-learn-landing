@@ -120,6 +120,7 @@ describe("CONTPLATA — lista", () => {
     expect(screen.getByRole("link", { name: "CP-2026-0001" })).toHaveAttribute("href", "#/business/crm/conturi-plata/a1");
     expect(screen.getByText("Cu termenul depășit")).toBeInTheDocument();
     expect(screen.getByText("ciornă")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Aspect și numerotare/ })).toHaveAttribute("href", "#/business/crm/conturi-plata/setari");
   });
 
   it("[normal] fără conturi, îndeamnă la primul", async () => {

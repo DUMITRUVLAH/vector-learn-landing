@@ -38,7 +38,7 @@ import {
   Undo2,
   X,
   FileText,
-  ExternalLink, Eye, Send } from "lucide-react";
+  ExternalLink, Eye, Send, ReceiptText } from "lucide-react";
 import {
   DateField,
   Sheet,
@@ -1683,14 +1683,25 @@ export function LeadDetailSheet({
                         <h3 className="text-sm font-semibold text-foreground">
                           Oferte și contracte
                         </h3>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setNewDocOpen(true)}
-                        >
-                          <FileText className="h-4 w-4" aria-hidden="true" />
-                          Act nou
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          {/* CONTPLATA-faza-1: contul de plată pornește cu firma și produsul leadului. */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            href={`/business/crm/conturi-plata/nou?lead=${lead.id}`}
+                          >
+                            <ReceiptText className="h-4 w-4" aria-hidden="true" />
+                            Cont de plată
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setNewDocOpen(true)}
+                          >
+                            <FileText className="h-4 w-4" aria-hidden="true" />
+                            Act nou
+                          </Button>
+                        </div>
                       </div>
                       {documents.length === 0 ? (
                         <p className="text-sm text-muted-foreground">

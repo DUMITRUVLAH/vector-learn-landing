@@ -31,6 +31,7 @@ const api = {
   searchRegistry: vi.fn(),
   getRegistryCompany: vi.fn(),
   startFromPaymentAccountTemplate: vi.fn(),
+  getPaymentAccountPrefill: vi.fn(),
 };
 vi.mock("@/lib/api/paymentAccounts", async (orig) => {
   const real = await orig<typeof import("@/lib/api/paymentAccounts")>();
@@ -47,6 +48,7 @@ vi.mock("@/lib/api/paymentAccounts", async (orig) => {
     searchRegistry: (q: string) => api.searchRegistry(q),
     getRegistryCompany: (idno: string) => api.getRegistryCompany(idno),
     startFromPaymentAccountTemplate: (id: string, b?: unknown) => api.startFromPaymentAccountTemplate(id, b),
+    getPaymentAccountPrefill: (f: unknown) => api.getPaymentAccountPrefill(f),
   };
 });
 vi.mock("@/lib/api/crmCompanies", () => ({ listCrmCompanies: () => Promise.resolve({ items: [] }) }));
@@ -163,6 +165,24 @@ describe("CONTPLATA — editorul", () => {
     await waitFor(() => expect(api.updatePaymentAccount).toHaveBeenCalled(), { timeout: 3000 });
     expect(api.createPaymentAccount).toHaveBeenCalledTimes(1);
     expect(api.updatePaymentAccount.mock.calls[0][0]).toBe("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+  });
+
+  it("[blocant] pornit de pe fișa leadului: clientul și produsul sunt deja puse, iar ciorna poartă leadul", async () => {
+    window.history.replaceState(null, "", "#/business/crm/conturi-plata/nou?lead=cccccccc-cccc-cccc-cccc-cccccccccccc");
+    api.getPaymentAccountPrefill.mockResolvedValue({
+      data: {
+        leadId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        buyer: { buyerName: "Firma Leadului SRL", buyerIdno: "1002003004005", buyerEmail: "office@firma.md", crmCompanyId: "dddddddd-dddd-dddd-dddd-dddddddddddd" },
+        items: [{ description: "Pachet corporate", unit: "pachet", quantity: 3, unitPriceCents: 900_000, vatRate: 20, productId: "11111111-1111-1111-1111-111111111111" }],
+      },
+    });
+    render(<Editor />);
+    await waitFor(() => expect((screen.getByLabelText(/Denumirea clientului/) as HTMLInputElement).value).toBe("Firma Leadului SRL"));
+    expect((screen.getByLabelText(/Poziția 1/) as HTMLInputElement).value).toBe("Pachet corporate");
+    expect((screen.getByLabelText("Cant.") as HTMLInputElement).value).toBe("3");
+    expect(api.getPaymentAccountPrefill).toHaveBeenCalledWith({ leadId: "cccccccc-cccc-cccc-cccc-cccccccccccc", companyId: null });
+    await waitFor(() => expect(api.createPaymentAccount).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.createPaymentAccount.mock.calls[0][0]).toMatchObject({ leadId: "cccccccc-cccc-cccc-cccc-cccccccccccc", crmCompanyId: "dddddddd-dddd-dddd-dddd-dddddddddddd" });
   });
 
   it("[normal] „folosite anterior” completează serviciul dintr-un cont vechi", async () => {

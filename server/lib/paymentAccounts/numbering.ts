@@ -82,7 +82,8 @@ export function parseManualNumber(
     .replaceAll("\u0000S", escapeRe(settings.series))
     .replaceAll("\u0000A", String(year))
     .replaceAll("\u0000N", "(\\d+)");
-  const m = new RegExp(`^${escaped}$`).exec(documentNumber.trim());
+  // Fără diferență de majuscule: „cp-2026-0300” e același număr cu „CP-2026-0300”.
+  const m = new RegExp(`^${escaped}$`, "i").exec(documentNumber.trim());
   if (!m) return null;
   const n = parseInt(m[1], 10);
   return Number.isFinite(n) && n > 0 ? n : null;

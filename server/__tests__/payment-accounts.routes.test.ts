@@ -17,6 +17,8 @@ import * as schema from "../db/schema/index";
 import { tenants, users, paymentAccounts, finInventoryItems } from "../db/schema";
 import { crmProducts } from "../db/schema/crmProducts";
 import { finOrgProfile } from "../db/schema/finCore";
+import { leads } from "../db/schema/leads";
+import { crmCompanies } from "../db/schema/crmCompanies";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -178,6 +180,25 @@ describe("CONTPLATA — numerotare automată cu suprascriere manuală", () => {
     await app.request("/api/payment-accounts/settings", json({ series: "CP", numberStart: 1 }, "PUT"));
   });
 
+  it("[blocant] același număr scris altfel („CP-AN-1”, cu litere mici) e tot duplicat → 409", async () => {
+    for (const variant of [`CP-${YEAR}-1`, `cp-${YEAR}-0001`, ` CP-${YEAR}-0001 `]) {
+      const res = await issue((await draft()).id, variant);
+      expect(res.status, variant).toBe(409);
+    }
+  });
+
+  it("[blocant] o greșeală de tastare uriașă nu mută secvența automată", async () => {
+    const before = ((await (await app.request("/api/payment-accounts/next-number")).json()) as { data: { documentNumber: string } }).data.documentNumber;
+    expect(await issuedNumber((await draft()).id, `CP-${YEAR}-${YEAR}0015`)).toBe(`CP-${YEAR}-${YEAR}0015`);
+    expect(await issuedNumber((await draft()).id)).toBe(before);
+  });
+
+  it("[normal] numărul manual cu litere mici în forma seriei se păstrează canonic", async () => {
+    const next = ((await (await app.request("/api/payment-accounts/next-number")).json()) as { data: { number: number } }).data.number;
+    const n = String(next + 5).padStart(4, "0");
+    expect(await issuedNumber((await draft()).id, `cp-${YEAR}-${n}`)).toBe(`CP-${YEAR}-${n}`);
+  });
+
   it("[normal] contul emis nu se mai editează și nu se emite de două ori", async () => {
     const { id } = await draft();
     await issuedNumber(id);
@@ -216,6 +237,21 @@ describe("CONTPLATA — toate datele clientului și ale noastre", () => {
       buyerContact: "Ion Popescu",
       buyerCity: "Chișinău",
     });
+  });
+
+  it("[blocant] IBAN-ul scris cu spații (peste 34 de caractere cu tot cu ele) se salvează compact", async () => {
+    const { id } = await draft({ buyerIban: " MD24  AG00  0225  1000  1310  4168 " });
+    const [row] = await testDb.select().from(paymentAccounts).where(eq(paymentAccounts.id, id));
+    expect(row.buyerIban).toBe("MD24AG000225100013104168");
+  });
+
+  it("[normal] un total peste limita coloanei → 400 cu mesaj, nu 500", async () => {
+    const res = await app.request(
+      "/api/payment-accounts",
+      json({ ...BUYER, items: [{ description: "Uriaș", quantity: 1000, unitPriceCents: 1_000_000_000, vatRate: 0 }] })
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("total_too_large");
   });
 
   it("[blocant] la emitere se îngheață rechizitele din „Datele firmei”", async () => {
@@ -371,6 +407,11 @@ describe("CONTPLATA — șabloane (ca la PAR) și duplicare", () => {
     expect(await issuedNumber((await draft()).id)).toBe(`CP-${YEAR}-0001`);
   });
 
+  it("[normal] un id de șablon care nu e uuid → 404, nu 500", async () => {
+    expect((await app.request("/api/payment-accounts/templates/nu-e-uuid", json({ name: "x" }, "PATCH"))).status).toBe(404);
+    expect((await app.request("/api/payment-accounts/templates/nu-e-uuid/use", json({}))).status).toBe(404);
+  });
+
   it("[normal] „Duplică” face o ciornă nouă cu același client și aceleași poziții", async () => {
     const source = await draft();
     await issuedNumber(source.id);
@@ -378,5 +419,38 @@ describe("CONTPLATA — șabloane (ca la PAR) și duplicare", () => {
     expect(res.status).toBe(201);
     const copy = ((await res.json()) as { data: { id: string; status: string; buyerIban: string; documentNumber: string | null } }).data;
     expect(copy).toMatchObject({ status: "draft", buyerIban: "MD24AG000225100013104168", documentNumber: null });
+  });
+});
+
+describe("CONTPLATA — pornit din CRM (lead / fișa firmei)", () => {
+  it("[blocant] leadul cu firmă și produs dă clientul = FIRMA și poziția = produsul, cu cantitatea leadului", async () => {
+    const [co] = await testDb
+      .insert(crmCompanies)
+      .values({ tenantId: tenantA, name: "Firma Leadului SRL", idno: "1002003004005", email: "office@firma.md", phone: "+37360000000", address: "str. Lead 1" })
+      .returning();
+    const [p] = await testDb.insert(crmProducts).values({ tenantId: tenantA, name: "Pachet corporate", unit: "pachet", listPriceCents: 900_000, vatPercent: "20" }).returning();
+    const [lead] = await testDb
+      .insert(leads)
+      .values({ tenantId: tenantA, fullName: "Ion Contact", stage: "new", source: "manual", companyId: co.id, productId: p.id, productQty: 3 })
+      .returning();
+    const res = await app.request(`/api/payment-accounts/prefill?leadId=${lead.id}`);
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as {
+      data: { leadId: string; buyer: Record<string, unknown>; items: Array<Record<string, unknown>> };
+    };
+    expect(data.leadId).toBe(lead.id);
+    expect(data.buyer).toMatchObject({ buyerName: "Firma Leadului SRL", buyerIdno: "1002003004005", buyerEmail: "office@firma.md", buyerContact: "Ion Contact", crmCompanyId: co.id });
+    expect(data.items).toEqual([expect.objectContaining({ description: "Pachet corporate", quantity: 3, unitPriceCents: 900_000, vatRate: 20, productId: p.id })]);
+
+    // Ciorna creată din el poartă legătura cu leadul.
+    const { id } = await draft({ leadId: lead.id, crmCompanyId: co.id });
+    const [row] = await testDb.select().from(paymentAccounts).where(eq(paymentAccounts.id, id));
+    expect(row.leadId).toBe(lead.id);
+  });
+
+  it("[blocant] leadul altei organizații → 404 (nu-i scurge datele)", async () => {
+    const [foreign] = await testDb.insert(leads).values({ tenantId: tenantB, fullName: "Străin", stage: "new", source: "manual" }).returning();
+    expect((await app.request(`/api/payment-accounts/prefill?leadId=${foreign.id}`)).status).toBe(404);
+    expect((await app.request(`/api/payment-accounts/prefill?leadId=nu-e-uuid`)).status).toBe(400);
   });
 });

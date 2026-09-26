@@ -147,8 +147,17 @@ function LineRow({ index, line, currency, disabled, formatMoney, onPatch, onRemo
     function onDoc(e: MouseEvent) {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
     }
+    // Escape închide lista și când focusul e pe o opțiune, nu doar în câmp.
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    boxRef.current?.addEventListener("keydown", onKey);
+    const box = boxRef.current;
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      box?.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   function pickProduct(p: CatalogProduct) {
@@ -191,6 +200,7 @@ function LineRow({ index, line, currency, disabled, formatMoney, onPatch, onRemo
           autoComplete="off"
           placeholder="Scrie sau alege din catalog / servicii anterioare…"
           onFocus={() => !disabled && setOpen(true)}
+          onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
           onChange={(e) => {
             // Textul schimbat de mână rupe legătura cu produsul — altfel raportarea pe produs ar minți.
             onPatch({ description: e.target.value, productId: null, stock: null });
@@ -212,7 +222,7 @@ function LineRow({ index, line, currency, disabled, formatMoney, onPatch, onRemo
                     key={p.id}
                     type="button"
                     onClick={() => pickProduct(p)}
-                    className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+                    className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <Package className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
@@ -245,7 +255,7 @@ function LineRow({ index, line, currency, disabled, formatMoney, onPatch, onRemo
                     key={`${r.description}-${r.unitPriceCents}-${r.unit}`}
                     type="button"
                     onClick={() => pickRecent(r)}
-                    className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+                    className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <History className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
