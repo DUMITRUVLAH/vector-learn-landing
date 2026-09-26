@@ -1116,7 +1116,7 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
     return new Response(bytes, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": contentDisposition("attachment", fileName),
+        "Content-Disposition": contentDisposition(c.req.query("inline") === "1" ? "inline" : "attachment", fileName),
       },
     });
   }
@@ -1136,7 +1136,7 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
   return new Response(Buffer.from(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": contentDisposition("attachment", fileName),
+      "Content-Disposition": contentDisposition(c.req.query("inline") === "1" ? "inline" : "attachment", fileName),
     },
   });
 });

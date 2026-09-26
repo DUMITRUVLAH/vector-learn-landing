@@ -9,8 +9,9 @@
  * îi verifică octeții). Un buton care tace pe tot parcursul arată identic cu o aplicație blocată
  * — de-aici starea vizibilă „Se încarcă…" / „Se verifică…", ca la dosarele PAR.
  */
+import { openInAppViewer } from "@/lib/par/attachmentViewerBus";
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Upload, Trash2, FileText, ExternalLink } from "lucide-react";
+import { Loader2, Upload, Trash2, FileText, Eye } from "lucide-react";
 import { Button } from "@/components/ds";
 import {
   listCrmLeadFiles,
@@ -126,16 +127,20 @@ export function LeadFilesTab({ leadId, onToast }: LeadFilesTabProps) {
             <li key={file.id} className="flex items-center gap-2 rounded-lg border border-border p-2.5">
               <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                {/* Deschiderea trece prin ruta de preview a serverului — calea din Storage nu
-                    ajunge niciodată în browser. `rel=noreferrer` fiindcă e o filă nouă. */}
+                {/* CRM-U05: fișierul se deschide ÎN aplicație (vizualizatorul PAR: PDF, imagini,
+                    Word, Excel), prin ruta de preview a serverului — calea din Storage nu ajunge
+                    în browser. Linkul rămâne pentru clic-dreapta / filă nouă. */}
                 <a
                   href={file.previewUrl}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={(e) => {
+                    if (openInAppViewer(file.fileName, file.previewUrl, file.id)) e.preventDefault();
+                  }}
                   className="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:underline"
                 >
                   <span className="truncate">{file.fileName}</span>
-                  <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <Eye className="h-3 w-3 shrink-0" aria-hidden="true" />
                 </a>
                 <p className="text-xs text-muted-foreground">
                   {formatSize(file.sizeBytes)} ·{" "}

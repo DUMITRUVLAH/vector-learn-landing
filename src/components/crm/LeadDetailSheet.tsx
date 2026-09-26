@@ -11,6 +11,7 @@
  * fiecare deschidere — nu depinde de cardul din board, ca să poată fi refolosită și dintr-o
  * listă/căutare viitoare.
  */
+import { openInAppViewer } from "@/lib/par/attachmentViewerBus";
 import { combineDue, formatDue, isDueOverdue } from "@/lib/crm/taskDue";
 import {
   useCallback,
@@ -37,8 +38,7 @@ import {
   Undo2,
   X,
   FileText,
-  ExternalLink,
-} from "lucide-react";
+  ExternalLink, Eye } from "lucide-react";
 import {
   DateField,
   Sheet,
@@ -1709,6 +1709,16 @@ export function LeadDetailSheet({
                                     aria-hidden="true"
                                   />
                                 </Link>
+                                {/* CRM-U05: actul se vede pe loc, ca PDF, fără descărcare. */}
+                                <button
+                                  type="button"
+                                  onClick={() => openInAppViewer(d.docNumber ?? d.title, `/api/docs/documents/${d.id}/pdf`, d.id)}
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                                  aria-label={`Vezi ${d.docNumber ?? d.title}`}
+                                >
+                                  <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                                  Vezi
+                                </button>
                                 <Badge
                                   variant={
                                     d.status === "draft"

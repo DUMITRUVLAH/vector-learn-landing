@@ -9,6 +9,7 @@
  * Actul în sine se deschide în editorul de acte al FinFlow: acolo se finalizează,
  * se descarcă PDF și se trimite. CRM-ul nu rescrie ecranul acela.
  */
+import { openInAppViewer } from "@/lib/par/attachmentViewerBus";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Copy, Eye, FileText, Link2, Loader2, ExternalLink } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
@@ -215,10 +216,22 @@ export function CrmDocumentsPage() {
                 {filtered.map((d) => (
                   <TableRow key={d.id}>
                     <TableCell className="font-medium">
-                      <Link to={crmDocPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
-                        {d.docNumber ? `nr. ${d.docNumber}` : d.title}
-                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                      </Link>
+                      <span className="inline-flex items-center gap-2">
+                        <Link to={crmDocPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
+                          {d.docNumber ? `nr. ${d.docNumber}` : d.title}
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                        </Link>
+                        {/* CRM-U05: PDF-ul se vede în aplicație, fără descărcare. */}
+                        <button
+                          type="button"
+                          onClick={() => openInAppViewer(d.docNumber ?? d.title, `/api/docs/documents/${d.id}/pdf`, d.id)}
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                          aria-label={`Vezi ${d.docNumber ?? d.title}`}
+                        >
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                          Vezi
+                        </button>
+                      </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{d.counterpartyName || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">

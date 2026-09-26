@@ -83,3 +83,13 @@ export function openParAttachmentViewer(target: ParAttachmentTarget): boolean {
   listener(target);
   return true;
 }
+
+/**
+ * CRM-U05 — orice fișier servit inline de pe propria origine (fișierele leadului, PDF-ul unui act)
+ * se deschide în același vizualizator ca atașamentele PAR. `false` = vizualizatorul nu e montat
+ * (test izolat) — apelantul cade pe o filă nouă.
+ */
+export function openInAppViewer(fileName: string, url: string, id = url): boolean {
+  const inline = url.includes("?") ? `${url}&inline=1` : `${url}${INLINE}`;
+  return openParAttachmentViewer({ parId: "app", attachmentId: id, fileName, url: inline });
+}

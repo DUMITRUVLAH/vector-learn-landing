@@ -49,8 +49,21 @@ describe("securityHeaders — încadrarea", () => {
     }
   });
 
+  it("[blocant] CRM-U05: fișierul leadului și PDF-ul actului se văd în vizualizatorul aplicației", async () => {
+    for (const path of ["/api/crm/lead-files/f-1/preview", "/api/docs/documents/d-1/pdf"]) {
+      const res = await appWith(path).request(path);
+      expect(res.headers.get("X-Frame-Options"), path).toBe("SAMEORIGIN");
+      expect(res.headers.get("Content-Security-Policy"), path).toContain("frame-ancestors 'self'");
+    }
+  });
+
   it("orice altă rută rămâne de neîncadrat", async () => {
     for (const path of [
+      "/api/crm/lead-files",
+      "/api/crm/lead-files/f-1",
+      "/api/docs/documents/d-1",
+      "/api/docs/documents/d-1/pdf/ensure",
+      "/api/docs/documents/d-1/finalize",
       "/api/health",
       "/api/par/par-1",
       "/api/par/par-1/attachments",
