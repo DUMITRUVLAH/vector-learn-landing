@@ -484,6 +484,11 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
 - **Webhook/callback handlers that mutate financial state** must REJECT anything they cannot
   cryptographically verify — "no secret configured" means "don't trust" (400), never "skip the check".
   Secrets at rest use AES-256-GCM (`server/lib/crypto.ts`), never base64.
+- **Documents (PDF + preview) — the class that bit three times:** a new printable document renders its
+  PDF with **pdfmake on the server** (`server/lib/docs/pdfFonts.ts`), never Chromium/Playwright (absent on
+  Vercel → silent HTML fallback), and its in-app preview is an `<iframe>` pointing at a **same-origin GET
+  route listed in `FRAMEABLE_BY_US`**, never a `blob:` URL (CSP `frame-src 'self'` blocks it). See
+  [docs/solutions/frontend/document-preview-blob-and-chromium-pdf.md].
 - **Outbound side-effects (email/SMS) must be gated by recipient + environment, never by "is the API
   key missing".** The dev `.env` holds the real `RESEND_API_KEY`, so every PAR e2e sweep against the
   `@atic.demo.io` demo tenant sent live mail that hard-bounced on `noreply@finflow.best` — test traffic
