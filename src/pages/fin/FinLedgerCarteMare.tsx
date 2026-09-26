@@ -13,7 +13,6 @@ import { useEffect, useState } from "react";
 import {
   Loader2,
   ArrowLeft,
-  BookOpen,
   AlertTriangle,
   TrendingUp,
   TrendingDown,
@@ -90,35 +89,22 @@ export function FinLedgerCarteMare({ accountCode }: FinLedgerCarteMareProps) {
   const account = data?.account;
 
   return (
-    <AppShell pageTitle={account ? `Cont ${account.code} — Carte Mare` : "Carte Mare — FinDesk"}>
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+    <AppShell
+      pageTitle={account ? `Cont ${account.code} — ${account.name}` : `Carte mare, cont ${accountCode}`}
+      pageDescription="Toate mișcările debit/credit ale contului, cu soldul cumulat."
+    >
+      {/* NAV-09: un singur titlu — cel din antet. */}
+      <div className="space-y-6">
 
         {/* Breadcrumb */}
         <a
-          href="#/app/fin/ledger"
+          href="#/business/fin/ledger"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-          aria-label="Inapoi la Balanta de verificare"
+          aria-label="Înapoi la balanța de verificare"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Balanta de verificare
+          Balanța de verificare
         </a>
-
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <BookOpen className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">
-              {account
-                ? `Cont ${account.code} — ${account.name}`
-                : `Carte mare cont ${accountCode}`}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Toate miscarile debit/credit cu sold cumulativ
-            </p>
-          </div>
-        </div>
 
         {/* Filters */}
         <div className="rounded-lg border bg-card p-4">

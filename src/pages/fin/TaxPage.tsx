@@ -548,16 +548,25 @@ export function TaxPage() {
   return (
     <AppShell
       pageTitle="TVA & declarații"
-      pageDescription="Perioade fiscale, calcul TVA + impozit venit, export PDF/CSV"
+      pageDescription="Perioadele fiscale, calculul TVA și al impozitului pe venit, export PDF/CSV."
       actions={
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 max-sm:min-h-[44px] rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          aria-label="Adaugă perioadă fiscală nouă"
-        >
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          Perioadă nouă
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {/* NAV-09: termenele și restanțele declarațiilor aveau pagină proprie, fără niciun link. */}
+          <a
+            href="#/business/fin/tax/dashboard"
+            className="inline-flex min-h-[44px] items-center gap-2 px-4 rounded-lg border border-border text-sm font-medium text-foreground no-underline hover:bg-muted hover:no-underline"
+          >
+            Termene și restanțe
+          </a>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            aria-label="Adaugă perioadă fiscală nouă"
+          >
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            Perioadă nouă
+          </button>
+        </div>
       }
     >
       {showCreate && (

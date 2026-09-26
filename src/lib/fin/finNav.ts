@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Settings,
   Shield,
+  TrendingUp,
   Users,
   Wallet,
   Zap,
@@ -146,9 +147,10 @@ export const FIN_NAV_GROUPS: FinNavGroup[] = [
   {
     section: "Contabilitate & rapoarte",
     items: [
-      // NAV-07: pagina e un tablou de analiză (venituri, profit, cashflow), nu registrul contabil —
-      // „Registru general" promitea altceva decât deschidea.
-      { label: "Analiză financiară", href: "/business/fin/ledger", icon: Landmark, tone: "indigo", description: "Venituri, cheltuieli, profit și cashflow." },
+      // NAV-09: „Registru general" deschidea tabloul de analiză fiindcă registrul real (balanță, jurnal,
+      // reconciliere) nu era rutat. Acum fiecare rând deschide ce promite.
+      { label: "Registru general", href: "/business/fin/ledger", icon: Landmark, tone: "indigo", description: "Balanța de verificare, jurnalul și cartea mare pe cont." },
+      { label: "Analiză financiară", href: "/business/fin/insights", icon: TrendingUp, tone: "emerald", description: "Venituri, cheltuieli, profit și cashflow." },
       { label: "Buget", href: "/business/fin/budget", icon: BarChart3, tone: "violet", description: "Planificat față de realizat." },
       { label: "Export & rapoarte", href: "/business/fin/export", icon: BarChart3, tone: "sky", description: "Exporturi pentru contabil și rapoarte." },
       { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks, tone: "rose", description: "Facturi recurente în bloc, import CSV." },

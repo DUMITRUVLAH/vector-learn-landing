@@ -37,7 +37,8 @@ const ROUTES = [
   { path: "/business/fin/calendar", nav: ["Calendar fiscal", "Rezidenți IT Park|Salarizare"] },
   { path: "/business/fin/invoices", main: ["Cont de plată", "e-Factura SFS"], single: "Facturi" },
   { path: "/business/fin/einvoices", main: ["Cont de plată", "e-Factura SFS"], single: "Facturi" },
-  { path: "/business/fin/invoices/document", main: ["e-Factura SFS"], single: "Facturi" },
+  // Fila e editorul CONTPLATA (alt chat), care își alege titlul; aici cerem doar un titlu și filele.
+  { path: "/business/fin/invoices/document", main: ["e-Factura SFS"], oneTitle: true },
   { path: "/business/fin/statement", main: ["Încarcă extras", "Istoric extrase"] },
   { path: "/business/fin/statement/upload", main: ["Încarcă extras", "Istoric extrase"] },
   { path: "/business/crm/contracte", nav: ["Contracte & facturare", "Pipeline"] },
@@ -76,7 +77,9 @@ async function main() {
     ];
     // Un singur titlu de pagină — paginile Facturi / e-Factura aveau două <h1>.
     const h1s = await page.locator("main h1").count();
-    const titleOk = !r.single || (h1s === 1 && (await page.locator("main h1").first().innerText()).trim() === r.single);
+    const titleOk =
+      (!r.single || (h1s === 1 && (await page.locator("main h1").first().innerText()).trim() === r.single)) &&
+      (!r.oneTitle || h1s === 1);
     check(
       r.path,
       onRoute && missing.length === 0 && errors.length === 0 && titleOk,
@@ -140,6 +143,41 @@ async function main() {
     }
     await ctx.request.delete(`${BASE}/api/itpark/engagements/${engId}`);
   }
+
+  // NAV-09: pagini care existau fără rută sau cu id citit după prefixul vechi.
+  const partyName = `E2E Partener ${Date.now()}`;
+  const partyRes = await ctx.request.post(`${BASE}/api/fin/parties`, { data: { kind: "client", name: partyName, country: "MD" } });
+  const partyJson = partyRes.ok() ? await partyRes.json() : null;
+  const partyId = partyJson?.id ?? partyJson?.data?.id ?? partyJson?.party?.id;
+  check("Partener creat prin API", !!partyId, `status ${partyRes.status()}`);
+  const extra = [
+    { path: "/business/fin/ledger", title: "Registru general" },
+    { path: "/business/fin/insights", title: "Analiză financiară" },
+    { path: "/business/fin/tax/dashboard", title: "Termene și restanțe" },
+    { path: "/business/fin/ledger/account/5211" },
+    ...(partyId ? [{ path: `/business/fin/parties/${partyId}`, contains: partyName }] : []),
+  ];
+  for (const pg of extra) {
+    errors.length = 0;
+    await page.goto(`${BASE}/#${pg.path}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2500);
+    const finalPath = new URL(page.url()).hash.slice(1);
+    const main = await page.locator("main").innerText().catch(() => "");
+    const h1 = (await page.locator("main h1").allInnerTexts()).map((t) => t.trim());
+    const problems = [
+      finalPath !== pg.path && `a ajuns la ${finalPath}`,
+      h1.length !== 1 && `${h1.length} titluri h1 ${JSON.stringify(h1)}`,
+      pg.title && h1[0] !== pg.title && `titlu „${h1[0]}”`,
+      pg.contains && !main.includes(pg.contains) && `lipsește „${pg.contains}”`,
+      errors.length && `JS: ${errors[0]}`,
+    ].filter(Boolean);
+    check(pg.path.replace(partyId ?? "~", ":id"), problems.length === 0, problems.join(" · "));
+  }
+  // Un link vechi /app/fin/* (din email) ajunge pe pagina nouă, nu pe tabloul general.
+  await page.goto(`${BASE}/#/app/fin/calendar`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2000);
+  check("link vechi /app/fin/calendar → /business/fin/calendar", new URL(page.url()).hash === "#/business/fin/calendar", new URL(page.url()).hash);
+  if (partyId) await ctx.request.delete(`${BASE}/api/fin/parties/${partyId}`);
 
   // Acțiunea, nu doar butonul: „Factură nouă" de pe ecranul de start deschide formularul.
   await page.goto(`${BASE}/#/business/fin/`, { waitUntil: "domcontentloaded" });

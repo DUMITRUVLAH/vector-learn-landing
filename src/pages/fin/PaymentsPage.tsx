@@ -232,7 +232,7 @@ export default function PaymentsPage() {
       }
     >
       {/* NAV-07: titlul stă o singură dată, în antet, cu numele din meniu. Butonul „Import extras"
-          ducea la /app/fin/cash/import — ruta aplicației „learn", nu a FinFlow. */}
+          ducea în aplicația „learn" (prefixul vechi), nu în FinFlow. */}
       <div className="space-y-6">
         {/* Stats */}
         {!loadingPayments && (

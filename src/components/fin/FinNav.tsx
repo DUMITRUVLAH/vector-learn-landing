@@ -118,7 +118,7 @@ const FIN_NAV: FinNavGroup[] = [
     items: [
       { id: "tax", label: "TVA & Declarații", href: "/business/fin/tax", icon: Calculator },
       // /app/fin/insight → /business/fin/ledger (FinInsightsPage is mounted at /business/fin/ledger)
-      { id: "insight", label: "Insight CFO", href: "/business/fin/ledger", icon: BarChart3 },
+      { id: "insight", label: "Insight CFO", href: "/business/fin/insights", icon: BarChart3 },
       { id: "calendar", label: "Calendar fiscal", href: "/business/fin/calendar", icon: CalendarDays },
     ],
   },

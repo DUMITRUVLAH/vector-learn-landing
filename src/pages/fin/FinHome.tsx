@@ -232,7 +232,7 @@ export function FinHome() {
           value={thisMonth ? formatFinMoney(thisMonth.revenue) : "—"}
           icon={<TrendingUp className="h-5 w-5" />}
           tone="emerald"
-          href="/business/fin/ledger"
+          href="/business/fin/insights"
           loading={metrics.status === "loading"}
           hint={thisMonth ? `Profit: ${formatFinMoney(thisMonth.profit)}` : undefined}
         />

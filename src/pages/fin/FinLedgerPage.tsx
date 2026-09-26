@@ -241,7 +241,7 @@ export function FinLedgerPage() {
 
   if (sessionStatus === "loading") {
     return (
-      <AppShell pageTitle="General Ledger — FinDesk">
+      <AppShell pageTitle="Registru general">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se incarca" />
         </div>
@@ -254,25 +254,10 @@ export function FinLedgerPage() {
   ) ?? [];
 
   return (
-    <AppShell pageTitle="General Ledger — FinDesk">
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <BookOpen className="h-5 w-5 text-primary" aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">
-                General Ledger — Registru Contabil
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Double-entry accounting · GAP-ANALYSIS G1
-              </p>
-            </div>
-          </div>
-
+    <AppShell
+      pageTitle="Registru general"
+      pageDescription="Balanța de verificare, jurnalul contabil și reconcilierea cu documentele."
+      actions={
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleSeed}
@@ -285,7 +270,7 @@ export function FinLedgerPage() {
               ) : (
                 <Plus className="h-4 w-4" aria-hidden="true" />
               )}
-              Seed conturi SNC
+              Încarcă planul de conturi SNC
             </button>
 
             <button
@@ -293,10 +278,13 @@ export function FinLedgerPage() {
               className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
-              Posteza plata
+              Postează o plată
             </button>
           </div>
-        </div>
+      }
+    >
+      {/* NAV-07: un singur titlu — cel din antet, cu numele din meniu. */}
+      <div className="space-y-6">
 
         {/* Feedback banners */}
         {seedMsg && (
@@ -465,7 +453,7 @@ export function FinLedgerPage() {
                       {!balance || balance.accounts.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                            Niciun cont. Apasati "Seed conturi SNC" pentru initializare.
+                            Niciun cont. Apasati "Încarcă planul de conturi SNC" pentru initializare.
                           </td>
                         </tr>
                       ) : (
@@ -520,7 +508,7 @@ export function FinLedgerPage() {
                               </td>
                               <td className="px-4 py-2.5 text-right">
                                 <a
-                                  href={`#/app/fin/ledger/account/${account.code}`}
+                                  href={`#/business/fin/ledger/account/${account.code}`}
                                   className="inline-flex items-center gap-1 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                                   aria-label={`Carte mare cont ${account.code}`}
                                 >

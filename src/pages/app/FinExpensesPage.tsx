@@ -513,7 +513,7 @@ export function FinExpensesPage() {
 
   // Auth redirect
   useEffect(() => {
-    if (sessionStatus === "unauthenticated") navigate("/app/login");
+    if (sessionStatus === "unauthenticated") navigate("/business/login");
   }, [sessionStatus, navigate]);
 
   // Fetch expenses

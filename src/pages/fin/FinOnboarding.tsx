@@ -269,7 +269,7 @@ export function FinOnboarding() {
       .then((s) => {
         setState(s);
         // If already done, redirect immediately
-        if (s.step === "done") navigate("/app/fin");
+        if (s.step === "done") navigate("/business/fin/");
       })
       .catch(() => setError("Nu am putut încărca turul de instalare."))
       .finally(() => setLoading(false));
@@ -282,7 +282,7 @@ export function FinOnboarding() {
       try {
         const updated = await patchOnboarding(target);
         setState(updated);
-        if (target === "done") navigate("/app/fin");
+        if (target === "done") navigate("/business/fin/");
       } catch {
         setError("Nu am putut avansa pasul. Încearcă din nou.");
       } finally {

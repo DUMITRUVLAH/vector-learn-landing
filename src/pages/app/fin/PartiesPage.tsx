@@ -400,7 +400,7 @@ export function PartiesPage() {
 
   // Auth guard
   useEffect(() => {
-    if (sessionStatus === "unauthenticated") navigate("/app/login");
+    if (sessionStatus === "unauthenticated") navigate("/business/login");
   }, [sessionStatus, navigate]);
 
   // Debounce search

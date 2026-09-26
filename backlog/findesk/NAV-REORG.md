@@ -53,6 +53,7 @@ e-Factura, mutarea în CRM a ce ține de vânzări și un prim ecran mai bun.
 | NAV-06 | Tabloul de bord general: fără dale-placeholder („Disponibil în FinDesk →”) | livrat |
 | NAV-07 | Un titlu per pagină, cu numele din meniu (11 pagini aveau două `<h1>`) | livrat |
 | NAV-08 | IT Park: modulul întreg rutat în `/business/fin/itpark/*` (azi doar detaliul, rupt) | livrat |
+| NAV-09 | Fără `/app/fin`: 23 de linkuri + redirecționare, 3 pagini orfane rutate, fișa partenerului reparată | livrat |
 
 ## Backlog descoperit (nu intră în faza asta)
 

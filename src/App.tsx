@@ -166,6 +166,9 @@ const AgreementsPage = lazyWithTimeout(() => import("./pages/fin/AgreementsPage"
 const CashImportPage = lazyWithTimeout(() => import("./pages/fin/CashImportPage"));
 const FinCalendarPage = lazyWithTimeout(() => import("./pages/fin/FinCalendarPage").then(m => ({ default: m.FinCalendarPage })));
 const FinMassPage = lazyWithTimeout(() => import("./pages/fin/FinMassPage").then(m => ({ default: m.FinMassPage })));
+const FinLedgerPage = lazyWithTimeout(() => import("./pages/fin/FinLedgerPage").then((m) => ({ default: m.FinLedgerPage })));
+const FinLedgerCarteMare = lazyWithTimeout(() => import("./pages/fin/FinLedgerCarteMare").then((m) => ({ default: m.FinLedgerCarteMare })));
+const TaxDashboardPage = lazyWithTimeout(() => import("./pages/fin/TaxDashboardPage").then((m) => ({ default: m.TaxDashboardPage })));
 const TaxPage = lazyWithTimeout(() => import("./pages/fin/TaxPage").then(m => ({ default: m.TaxPage })));
 const FinPaymentsPage = lazyWithTimeout(() => import("./pages/fin/PaymentsPage"));
 
@@ -233,6 +236,11 @@ function Routes() {
   // Redirect any legacy /app/par/* link to /business/par/* so it never renders the CRM shell
   // (which would show the grădiniță sidebar) and never causes the double-sidebar flash.
   if (path.startsWith("/app/par")) return <RedirectHash to={path.replace("/app/par", "/business/par")} />;
+  // FinDesk s-a mutat de pe /app/fin pe /business/fin; paginile vechi și emailurile trimise încă
+  // poartă linkuri /app/fin/*, care cădeau în RedirectToBusiness (tabloul general) și pierdeau pagina.
+  if (path.startsWith("/app/fin")) return <RedirectHash to={path.replace("/app/fin", "/business/fin")} />;
+  // Ecranul de start FinDesk e `/business/fin/`; fără slash final nu potrivea nicio rută.
+  if (path === "/business/fin") return <RedirectHash to="/business/fin/" />;
 
   // SHELL-503: legacy invite URL redirect — /app/invite → /business/invite (preserves query string).
   // The query string is in the hash, so reconstruct it with whatever follows "?".
@@ -343,11 +351,19 @@ function Routes() {
     }
   }
   if (path.startsWith("/business/fin/assets")) return <BusinessGuardPage><AssetsPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/fin/ledger")) return <BusinessGuardPage><FinInsightsPage /></BusinessGuardPage>;
+  // Registrul contabil (balanță, jurnal, reconciliere) și cartea mare existau, dar nu erau rutate:
+  // „Registru general" deschidea tabloul de analiză. Analiza are acum ruta ei.
+  {
+    const account = path.match(/^\/business\/fin\/ledger\/account\/([^/?#]+)/);
+    if (account) return <BusinessGuardPage><Suspense fallback={null}><FinLedgerCarteMare accountCode={decodeURIComponent(account[1])} /></Suspense></BusinessGuardPage>;
+  }
+  if (path.startsWith("/business/fin/ledger")) return <BusinessGuardPage><Suspense fallback={null}><FinLedgerPage /></Suspense></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/insights")) return <BusinessGuardPage><FinInsightsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/budget")) return <BusinessGuardPage><BudgetPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/export")) return <BusinessGuardPage><FinExportCenter /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/cash")) return <BusinessGuardPage><CashPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/mass")) return <BusinessGuardPage><Suspense fallback={null}><FinMassPage /></Suspense></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/tax/dashboard")) return <BusinessGuardPage><Suspense fallback={null}><TaxDashboardPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/tax")) return <BusinessGuardPage><Suspense fallback={null}><TaxPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/onboarding")) return <BusinessGuardPage><FinOnboarding /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/company")) return <BusinessGuardPage><FinCompany /></BusinessGuardPage>;

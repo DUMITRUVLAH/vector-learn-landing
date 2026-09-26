@@ -522,9 +522,13 @@ function MetricsTab({ partyId }: MetricsTabProps) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-function extractPartyId(path: string): string | null {
-  const m = path.match(/\/app\/fin\/parties\/([^/?#]+)/);
-  return m ? m[1] : null;
+/**
+ * NAV-09: id-ul se citește fără prefix. Cu `/\/app\/fin\/parties\/…/`, pe ruta reală
+ * `/business/fin/parties/<id>` ieșea null — aceeași capcană ca fișa IT Park și ParDetail.
+ */
+export function extractPartyId(path: string): string | null {
+  const m = path.match(/\/parties\/([^/?#]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
 export function PartyDetailPage() {
@@ -557,7 +561,7 @@ export function PartyDetailPage() {
 
   // Auth guard
   useEffect(() => {
-    if (sessionStatus === "unauthenticated") navigate("/app/login");
+    if (sessionStatus === "unauthenticated") navigate("/business/login");
   }, [sessionStatus, navigate]);
 
   // Load party
@@ -684,7 +688,7 @@ export function PartyDetailPage() {
         </div>
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold">{party.name}</h1>
+            {/* Numele e deja titlul paginii (antetul shellului); aici rămân doar etichetele. */}
             <span className={cn("inline-block px-2 py-0.5 rounded-full text-xs font-medium", kindMeta.cls)}>
               {kindMeta.label}
             </span>
@@ -787,7 +791,7 @@ export function PartyDetailPage() {
                       {eng.residentName} — {eng.reportingYear}
                     </span>
                     <a
-                      href={`#/app/fin/itpark/${eng.id}`}
+                      href={`#/business/fin/itpark/${eng.id}`}
                       className="text-xs font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded"
                       aria-label={`Deschide dosarul ITPark ${eng.residentName} ${eng.reportingYear}`}
                     >

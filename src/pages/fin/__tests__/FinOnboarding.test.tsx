@@ -31,7 +31,7 @@ vi.mock("../FinLayout", () => ({
 // ── Mock router ────────────────────────────────────────────────────────────────
 const mockNavigate = vi.fn();
 vi.mock("@/router/HashRouter", () => ({
-  useRouter: () => ({ path: "/app/fin/onboarding", navigate: mockNavigate }),
+  useRouter: () => ({ path: "/business/fin/onboarding", navigate: mockNavigate }),
   Link: ({ children, to, ...rest }: { children: React.ReactNode; to: string; [k: string]: unknown }) => (
     <a href={`#${to}`} {...rest}>{children}</a>
   ),
@@ -136,15 +136,15 @@ describe("FinOnboarding", () => {
     });
   });
 
-  it("T-CORE-005-2 when step=done on load, immediately redirects to /app/fin", async () => {
+  it("T-CORE-005-2 when step=done on load, immediately redirects to /business/fin/", async () => {
     globalThis.fetch = mockFetchGet("done");
     render(<FinOnboarding />);
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/app/fin");
+      expect(mockNavigate).toHaveBeenCalledWith("/business/fin/");
     });
   });
 
-  it("T-CORE-005-5 skip button sends PATCH done and navigates to /app/fin", async () => {
+  it("T-CORE-005-5 skip button sends PATCH done and navigates to /business/fin/", async () => {
     let callCount = 0;
     globalThis.fetch = vi.fn().mockImplementation(() => {
       callCount++;
@@ -170,16 +170,16 @@ describe("FinOnboarding", () => {
     });
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/app/fin");
+      expect(mockNavigate).toHaveBeenCalledWith("/business/fin/");
     });
   });
 
-  it("T-CORE-005-3d step 1 'Deschide profilul firmei' links to /app/fin/company", async () => {
+  it("T-CORE-005-3d step 1 'Deschide profilul firmei' links to /business/fin/company", async () => {
     globalThis.fetch = mockFetchGet("company");
     render(<FinOnboarding />);
     await waitFor(() => expect(screen.getByText("Deschide profilul firmei")).toBeInTheDocument());
     const link = screen.getByRole("link", { name: /deschide profilul firmei/i });
-    expect(link).toHaveAttribute("href", "#/app/fin/company");
+    expect(link).toHaveAttribute("href", "#/business/fin/company");
   });
 
   it("T-CORE-005-3e step 2 and 3 show 'În curând' badge when modules not available", async () => {

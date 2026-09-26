@@ -181,8 +181,8 @@ export function TaxDashboardPage() {
 
   return (
     <AppShell
-      pageTitle="Dashboard fiscal"
-      pageDescription="Calendar termene, alerte scadenţe, istoric declaraţii"
+      pageTitle="Termene și restanțe"
+      pageDescription="Declarațiile cu termen apropiat, cele restante și istoricul depunerilor."
     >
       <div className="space-y-8">
         {/* Header actions */}
@@ -328,7 +328,7 @@ export function TaxDashboardPage() {
                     Nicio perioadă fiscală înregistrată.
                   </p>
                   <a
-                    href="#/app/fin/tax"
+                    href="#/business/fin/tax"
                     className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline"
                   >
                     Creează prima perioadă fiscală

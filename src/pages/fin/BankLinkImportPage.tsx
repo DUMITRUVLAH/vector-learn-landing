@@ -40,7 +40,7 @@ interface PreviewRow {
 function previewOFX(text: string): PreviewRow[] {
   const rows: PreviewRow[] = [];
   // Match <STMTTRN>...</STMTTRN> blocks
-  const blockRx = /<STMTTRN>([\s\S]*?)<\/STMTTRN>|STMTTRN\s*([\s\S]*?)(?=STMTTRN|\z)/gi;
+  const blockRx = /<STMTTRN>([\s\S]*?)<\/STMTTRN>|STMTTRN\s*([\s\S]*?)(?=STMTTRN|$)/gi; // JS n-are ancora \z (Ruby/PCRE) — acolo însemna litera „z"
   const get = (block: string, tag: string): string => {
     const m = new RegExp(`<${tag}>([^<\n\r]*)`, "i").exec(block);
     return m ? m[1].trim() : "";
@@ -197,7 +197,7 @@ export default function BankLinkImportPage() {
       {/* Back */}
       <div className="mb-4">
         <Link
-          to="/app/fin/banklink"
+          to="/business/fin/banklink"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -218,7 +218,7 @@ export default function BankLinkImportPage() {
         <div className="rounded-xl border border-dashed border-border bg-card py-12 text-center">
           <p className="text-sm text-muted-foreground">
             Nu ai conexiuni active.{" "}
-            <Link to="/app/fin/banklink" className="text-primary underline">
+            <Link to="/business/fin/banklink" className="text-primary underline">
               Adaugă una
             </Link>{" "}
             mai întâi.
@@ -445,7 +445,7 @@ export default function BankLinkImportPage() {
                     Alt import
                   </button>
                   <Link
-                    to={`/app/fin/banklink/transactions?connectionId=${selectedConn}`}
+                    to={`/business/fin/banklink/transactions?connectionId=${selectedConn}`}
                     className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90"
                   >
                     <List className="h-4 w-4" />
