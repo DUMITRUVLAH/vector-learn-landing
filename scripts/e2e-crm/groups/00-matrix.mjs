@@ -278,7 +278,8 @@ export function register(suite) {
     expectNo5xx(r);
     expect(!r.text.includes(MARK), `clientul B vede date ale clientului A: ${r.text.slice(0, 160)}`);
     for (const [k, id] of Object.entries(ctx.aIds)) {
-      if (k !== "member") expect(!r.text.includes(id), `răspunsul conține id-ul ${k} al clientului A`);
+      // Id-ul pus chiar de B în URL poate fi ecou în răspuns (`{pipelineId, stages: []}`) — nu e scurgere.
+      if (k !== "member" && !url.includes(id)) expect(!r.text.includes(id), `răspunsul conține id-ul ${k} al clientului A`);
     }
   });
 
