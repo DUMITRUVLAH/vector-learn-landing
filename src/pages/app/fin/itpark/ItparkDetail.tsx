@@ -7,6 +7,9 @@
  * Taburi: Anexa 2 (placeholder) | Anexa 3 (revenue lines — ITPARK-201) | Anexa 4 (placeholder) | Scrisori (placeholder)
  */
 import { useState, useEffect, lazy, Suspense } from "react";
+import { AppShell } from "@/components/app/AppShell";
+import { useRouter } from "@/router/HashRouter";
+import { itparkIdFromPath, itparkListPath, itparkSubPath, type ItparkSubPage } from "@/lib/itpark/paths";
 import { getEngagement, autoLinkEngagementParty, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
 
 // ITPARK-201: Tabel linii venit (lazy pentru a nu bloca randarea paginii)
@@ -14,11 +17,13 @@ const RevenueLinesTable = lazy(() => import("./RevenueLinesTable"));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * NAV-08: id-ul se citește fără prefix. Cu vechiul `/\/app\/fin\/itpark\/…$/`, pe ruta
+ * `/business/fin/itpark/<id>` ieșea gol și fișa rămânea pe spinner pentru totdeauna.
+ */
 function useRouteId(): string {
-  const hash = typeof window !== "undefined" ? window.location.hash : "";
-  // hash = "#/app/fin/itpark/<id>"
-  const match = hash.match(/\/app\/fin\/itpark\/([^/]+)$/);
-  return match ? match[1] : "";
+  const { path } = useRouter();
+  return itparkIdFromPath(path);
 }
 
 function fmtDate(iso: string | null): string {
@@ -57,29 +62,29 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "scrisori", label: "Scrisori" },
 ];
 
-// ─── Placeholder tab content ───────────────────────────────────────────────────
+// ─── Filele care au pagină proprie ────────────────────────────────────────────
 
-function TabPlaceholder({ label }: { label: string }) {
+/**
+ * NAV-08: Anexa 2, Anexa 4 și Scrisorile au pagini complete, dar fila arăta „va fi disponibilă în
+ * Faza C" — fiindcă paginile nu erau rutate. Acum fila spune ce e acolo și duce la pagină.
+ */
+const TAB_PAGES: Record<Exclude<TabId, "anexa3">, { sub: ItparkSubPage; description: string; cta: string }> = {
+  anexa2: { sub: "anexa2", description: "Informația despre rezident și activitățile eligibile.", cta: "Deschide Anexa 2" },
+  anexa4: { sub: "anexa4", description: "Calculul ponderii veniturilor eligibile și concluzia verificării.", cta: "Deschide Anexa 4" },
+  scrisori: { sub: "scrisori", description: "Scrisoarea de angajament și scrisoarea de reprezentare, gata de semnat.", cta: "Deschide scrisorile" },
+};
+
+function TabPageLink({ tab, engagementId }: { tab: Exclude<TabId, "anexa3">; engagementId: string }) {
+  const page = TAB_PAGES[tab];
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <svg
-        aria-hidden="true"
-        className="h-10 w-10 text-muted-foreground"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
+    <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+      <p className="max-w-sm text-sm text-muted-foreground">{page.description}</p>
+      <a
+        href={`#${itparkSubPath(engagementId, page.sub)}`}
+        className="inline-flex min-h-[44px] items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground no-underline hover:bg-primary/90 hover:no-underline"
       >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-        />
-      </svg>
-      <h3 className="mt-3 text-base font-medium text-foreground">{label}</h3>
-      <p className="mt-1 text-sm text-muted-foreground max-w-xs">
-        Această secțiune va fi disponibilă după introducerea liniilor de venit (Faza C).
-      </p>
+        {page.cta}
+      </a>
     </div>
   );
 }
@@ -132,7 +137,7 @@ function FinDeskSection({ engagement, onLinked }: FinDeskSectionProps) {
               </a>
             </div>
             <a
-              href={`#/app/fin/invoices?partyId=${engagement.finPartyId}`}
+              href={`#/business/fin/invoices?partyId=${engagement.finPartyId}`}
               className="shrink-0 text-xs font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded"
               aria-label="Vezi facturile FinDesk ale acestui rezident"
             >
@@ -176,7 +181,12 @@ export default function ItparkDetail() {
   const [activeTab, setActiveTab] = useState<TabId>("anexa2");
 
   useEffect(() => {
-    if (!id) return;
+    // Fără id nu avem ce încărca — altfel spinnerul rămânea pe ecran pentru totdeauna.
+    if (!id) {
+      setLoading(false);
+      setError("Dosarul nu există sau linkul e greșit.");
+      return;
+    }
     setLoading(true);
     setError(null);
     getEngagement(id)
@@ -193,32 +203,58 @@ export default function ItparkDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-64" aria-busy="true" aria-label="Se încarcă dosarul">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" />
-      </div>
+      <AppShell pageTitle="Dosar IT Park">
+        <div className="flex items-center justify-center min-h-64" aria-busy="true" aria-label="Se încarcă dosarul">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" />
+        </div>
+      </AppShell>
     );
   }
 
-  if (error) {
+  if (error || !engagement) {
     return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive" role="alert">
-        <p className="font-medium">Eroare la încărcare</p>
-        <p className="text-sm mt-1">{error}</p>
-      </div>
+      <AppShell pageTitle="Dosar IT Park">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive" role="alert">
+          <p className="font-medium">Eroare la încărcare</p>
+          <p className="text-sm mt-1">{error ?? "Dosarul nu a fost găsit."}</p>
+          <a href={`#${itparkListPath()}`} className="mt-2 inline-block text-sm underline">
+            Înapoi la dosare
+          </a>
+        </div>
+      </AppShell>
     );
   }
-
-  if (!engagement) return null;
 
   return (
+    <AppShell
+      pageTitle={engagement.residentName}
+      pageDescription={`Dosar de verificare MITP · ${engagement.reportingYear}`}
+      actions={
+        // Autodeclarația și lista de pregătire aveau pagini complete, dar niciun link spre ele.
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={`#${itparkSubPath(id, "declaratie")}`}
+            className="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground no-underline hover:bg-muted hover:no-underline"
+          >
+            Autodeclarație
+          </a>
+          <a
+            href={`#${itparkSubPath(id, "ready")}`}
+            className="inline-flex min-h-[44px] items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground no-underline hover:bg-primary/90 hover:no-underline"
+          >
+            Verifică pregătirea
+          </a>
+        </div>
+      }
+    >
     <div className="space-y-6">
       {/* Breadcrumb */}
       <nav aria-label="Navigare" className="flex items-center gap-2 text-sm text-muted-foreground">
         <a
-          href="#/app/fin/itpark"
+          href="#/business/fin/itpark"
           className="hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary rounded"
         >
-          Dosare MITP
+          Rezidenți IT Park
         </a>
         <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -231,9 +267,6 @@ export default function ItparkDetail() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl font-bold text-foreground truncate">
-                {engagement.residentName}
-              </h1>
               <span
                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_CLASSES[engagement.status]}`}
               >
@@ -242,16 +275,6 @@ export default function ItparkDetail() {
             </div>
             <p className="text-sm text-muted-foreground font-mono">IDNO: {engagement.idno}</p>
           </div>
-          <a
-            href={`#/app/fin/itpark/${id}/edit`}
-            className="shrink-0 inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-muted transition-colors min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            aria-label="Editează dosarul"
-          >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Editează
-          </a>
         </div>
 
         {/* Metadata grid */}
@@ -346,12 +369,13 @@ export default function ItparkDetail() {
                   <RevenueLinesTable engagementId={id} />
                 </Suspense>
               ) : (
-                <TabPlaceholder label={tab.label} />
+                <TabPageLink tab={tab.id} engagementId={id} />
               )
             )}
           </div>
         ))}
       </div>
     </div>
+    </AppShell>
   );
 }

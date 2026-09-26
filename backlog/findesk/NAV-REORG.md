@@ -52,9 +52,12 @@ e-Factura, mutarea în CRM a ce ține de vânzări și un prim ecran mai bun.
 | NAV-05 | Primul ecran FinDesk: tablou de lucru + module pe grupe | livrat |
 | NAV-06 | Tabloul de bord general: fără dale-placeholder („Disponibil în FinDesk →”) | livrat |
 | NAV-07 | Un titlu per pagină, cu numele din meniu (11 pagini aveau două `<h1>`) | livrat |
-| NAV-08 | IT Park: modulul întreg rutat în `/business/fin/itpark/*` (azi doar detaliul, rupt) | în lucru |
+| NAV-08 | IT Park: modulul întreg rutat în `/business/fin/itpark/*` (azi doar detaliul, rupt) | livrat |
 
 ## Backlog descoperit (nu intră în faza asta)
+
+- **IT Park: editarea unui dosar nu există.** Fișa avea buton „Editează” spre `/:id/edit`, rută
+  inexistentă (scos în NAV-08). API-ul `updateEngagement` există; lipsește doar formularul.
 
 - Contractul din CRM se leagă de un partener FinDesk (`fin_parties`), nu de firma din CRM
   (`crm companies`). Un contract pornit din fișa clientului CRM ar trebui să preia firma automat.

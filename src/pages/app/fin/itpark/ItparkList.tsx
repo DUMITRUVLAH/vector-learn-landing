@@ -3,7 +3,9 @@
  * Route: /app/fin/itpark
  * CORE: backlog/fin/itpark/ITPARK-CORE.md §1
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
+import { AppShell } from "@/components/app/AppShell";
+import { itparkDashboardPath, itparkNewPath } from "@/lib/itpark/paths";
 import { listEngagements, deleteEngagement, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -87,8 +89,35 @@ export default function ItparkList() {
     }
   }
 
+  // NAV-08: pagina n-avea shell — în aplicația veche îl dădea un layout de rută. Pe /business ieșea
+  // fără meniu și fără titlu, deci îl aduce ea.
+  const shell = (children: ReactNode) => (
+    <AppShell
+      pageTitle="Rezidenți IT Park"
+      pageDescription="Dosarele de verificare anuală MITP (proceduri convenite ISRS 4400)."
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={`#${itparkDashboardPath()}`}
+            className="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground no-underline hover:bg-muted hover:no-underline"
+          >
+            Conformitate
+          </a>
+          <a
+            href={`#${itparkNewPath()}`}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground no-underline shadow-sm hover:bg-primary/90 hover:no-underline"
+          >
+            Dosar nou
+          </a>
+        </div>
+      }
+    >
+      {children}
+    </AppShell>
+  );
+
   if (loading) {
-    return (
+    return shell(
       <div className="flex items-center justify-center min-h-64" aria-busy="true" aria-label="Se încarcă dosarele">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" />
       </div>
@@ -96,7 +125,7 @@ export default function ItparkList() {
   }
 
   if (error) {
-    return (
+    return shell(
       <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive" role="alert">
         <p className="font-medium">Eroare la încărcare</p>
         <p className="text-sm mt-1">{error}</p>
@@ -110,27 +139,8 @@ export default function ItparkList() {
     );
   }
 
-  return (
+  return shell(
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Dosare MITP</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Dosare de verificare anuală (proceduri convenite ISRS 4400)
-          </p>
-        </div>
-        <a
-          href="#/app/fin/itpark/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary min-h-[44px]"
-        >
-          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Dosar nou
-        </a>
-      </div>
-
       {/* Empty state */}
       {engagements.length === 0 ? (
         <div
@@ -156,7 +166,7 @@ export default function ItparkList() {
             Creează primul dosar de verificare MITP pentru un rezident și un an.
           </p>
           <a
-            href="#/app/fin/itpark/new"
+            href="#/business/fin/itpark/new"
             className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 min-h-[44px]"
           >
             Creează primul dosar
@@ -184,7 +194,7 @@ export default function ItparkList() {
                 >
                   <td className="px-4 py-3 font-medium text-foreground">
                     <a
-                      href={`#/app/fin/itpark/${eng.id}`}
+                      href={`#/business/fin/itpark/${eng.id}`}
                       className="hover:text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary rounded"
                     >
                       {eng.residentName}
@@ -205,7 +215,7 @@ export default function ItparkList() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <a
-                        href={`#/app/fin/itpark/${eng.id}`}
+                        href={`#/business/fin/itpark/${eng.id}`}
                         className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium border border-border bg-background hover:bg-muted transition-colors min-h-[36px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
                         aria-label={`Deschide dosarul ${eng.residentName}`}
                       >

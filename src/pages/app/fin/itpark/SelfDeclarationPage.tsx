@@ -16,7 +16,7 @@ import { getDoc, upsertDoc } from "@/lib/api/itparkDocs";
 import { DateField } from "@/components/ds";
 function useEngagementId(): string {
   const { path } = useRouter();
-  const match = path.match(/^\/app\/fin\/itpark\/([^/]+)\/declaratie$/);
+  const match = path.match(/\/itpark\/([^/?#]+)\/declaratie(?:[?#]|$)/);
   return match ? match[1] : "";
 }
 
@@ -130,7 +130,7 @@ export function SelfDeclarationPage() {
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Breadcrumb */}
         <nav aria-label="Navigare" className="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
-          <a href={`#/app/fin/itpark/${id}`} className="hover:text-foreground hover:underline">{engagement?.residentName ?? "Dosar"}</a>
+          <a href={`#/business/fin/itpark/${id}`} className="hover:text-foreground hover:underline">{engagement?.residentName ?? "Dosar"}</a>
           <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           <span className="text-foreground font-medium">Declarație pe proprie răspundere</span>
         </nav>

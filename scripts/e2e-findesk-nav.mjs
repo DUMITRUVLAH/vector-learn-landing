@@ -103,6 +103,44 @@ async function main() {
     check(`titlu = meniu: ${row.label}`, ok, ok ? "" : `h1=${JSON.stringify(h1)}${errors.length ? ` JS: ${errors[0]}` : ""}`);
   }
 
+  // NAV-08: IT Park, cap-coadă — un dosar real, apoi fișa și fiecare sub-pagină. Înainte, orice rută
+  // IT Park rămânea pe spinner (fișa nu găsea id-ul) și sub-paginile nu erau rutate deloc.
+  const resident = `E2E Rezident ${Date.now()}`;
+  const created = await ctx.request.post(`${BASE}/api/itpark/engagements`, {
+    data: { residentName: resident, idno: "1003600000000", vatPayer: false, periodStart: "2026-01-01", periodEnd: "2026-12-31", reportingYear: 2026 },
+  });
+  const engagement = created.ok() ? await created.json() : null;
+  const engId = engagement?.id ?? engagement?.data?.id ?? engagement?.engagement?.id;
+  check("IT Park: dosar creat prin API", !!engId, `status ${created.status()}`);
+  if (engId) {
+    const pages = [
+      { path: `/business/fin/itpark/${engId}`, title: resident },
+      { path: `/business/fin/itpark`, title: "Rezidenți IT Park", contains: resident },
+      { path: `/business/fin/itpark/new`, title: "Dosar IT Park nou" },
+      { path: `/business/fin/itpark/dashboard`, title: "Conformitate IT Park" },
+      ...["anexa2", "anexa3", "anexa4", "scrisori", "ready", "declaratie"].map((sub) => ({ path: `/business/fin/itpark/${engId}/${sub}` })),
+    ];
+    for (const pg of pages) {
+      errors.length = 0;
+      await page.goto(`${BASE}/#${pg.path}`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(2500);
+      const finalPath = new URL(page.url()).hash.slice(1);
+      const main = await page.locator("main").innerText().catch(() => "");
+      const h1 = (await page.locator("main h1").allInnerTexts()).map((t) => t.trim());
+      const problems = [
+        finalPath !== pg.path && `a ajuns la ${finalPath}`,
+        h1.length !== 1 && `${h1.length} titluri h1 ${JSON.stringify(h1)}`,
+        pg.title && h1[0] !== pg.title && `titlu „${h1[0]}”`,
+        pg.contains && !main.includes(pg.contains) && `lipsește „${pg.contains}”`,
+        /Eroare la încărcare|nu a fost găsit/i.test(main) && "eroare pe ecran",
+        (await page.locator('[role="status"].animate-spin, [aria-busy="true"]').count()) > 0 && "încă pe spinner",
+        errors.length && `JS: ${errors[0]}`,
+      ].filter(Boolean);
+      check(`IT Park ${pg.path.replace(engId, ":id")}`, problems.length === 0, problems.join(" · "));
+    }
+    await ctx.request.delete(`${BASE}/api/itpark/engagements/${engId}`);
+  }
+
   // Acțiunea, nu doar butonul: „Factură nouă" de pe ecranul de start deschide formularul.
   await page.goto(`${BASE}/#/business/fin/`, { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Factură nouă" }).first().click();

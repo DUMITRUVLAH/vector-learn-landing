@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
+import { itparkIdFromPath } from "@/lib/itpark/paths";
 import { getEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import { listLines, type RevenueLine } from "@/lib/api/itparkLines";
 import { computeAnexa3 } from "@/lib/itpark/calc";
@@ -157,8 +158,8 @@ function ThresholdBanner({
 export function Anexa4Page() {
   const { path, navigate } = useRouter();
 
-  // Extract engagementId from URL: /app/fin/itpark/:id/anexa4
-  const engagementId = path.match(/^\/app\/fin\/itpark\/([^/]+)\/anexa4$/)?.[1] ?? "";
+  // Extract engagementId from URL: /business/fin/itpark/:id/anexa4
+  const engagementId = itparkIdFromPath(path);
 
   const [eng, setEng] = useState<ItparkEngagement | null>(null);
   const [lines, setLines] = useState<RevenueLine[]>([]);
@@ -255,16 +256,16 @@ export function Anexa4Page() {
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/app/fin/itpark/${eng.id}`)}
+            onClick={() => navigate(`/business/fin/itpark/${eng.id}`)}
             className="rounded-md p-1.5 hover:bg-muted transition-colors"
             aria-label="Înapoi la dosar"
           >
             <ChevronLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <div>
-            <h1 className="text-lg font-semibold text-foreground leading-tight">
+            <h2 className="text-lg font-semibold text-foreground leading-tight">
               Anexa 4 — Raport lunar eligibilitate
-            </h1>
+            </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {eng.residentName} · {eng.reportingYear}
             </p>
@@ -546,7 +547,7 @@ export function Anexa4Page() {
             Adăugați linii de venit din tab-ul Anexa 3 pentru a genera raportul lunar.
           </p>
           <a
-            href={`#/app/fin/itpark/${eng.id}/anexa3`}
+            href={`#/business/fin/itpark/${eng.id}/anexa3`}
             className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px]"
           >
             Mergi la Anexa 3

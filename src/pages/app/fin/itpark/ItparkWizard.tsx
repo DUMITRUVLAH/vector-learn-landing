@@ -10,6 +10,7 @@
  * Autocomplete IDNO: GET /api/registry/companies/:idno → pre-completează denumire + adresă.
  * Fallback graceful dacă lookup eșuează (timeout/offline/404) — câmpurile rămân editabile manual.
  */
+import { AppShell } from "@/components/app/AppShell";
 import { useState, useRef, useCallback } from "react";
 import { createEngagement } from "../../../../lib/api/itparkEngagements";
 
@@ -475,7 +476,7 @@ export default function ItparkWizard() {
         adjustedRevenueCents: 0,
       });
       // Redirect la detaliu
-      window.location.hash = `#/app/fin/itpark/${eng.id}`;
+      window.location.hash = `#/business/fin/itpark/${eng.id}`;
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Eroare la salvare");
       setSubmitting(false);
@@ -485,19 +486,20 @@ export default function ItparkWizard() {
   const stepNums: StepNum[] = [1, 2, 3];
 
   return (
-    <div className="max-w-xl mx-auto space-y-6">
+    <AppShell pageTitle="Dosar IT Park nou" pageDescription="Rezidentul, perioada și contractul MITP — apoi liniile de venit.">
+    {/* NAV-08: pagina n-avea shell; titlul stă în antet, nu într-un <h1> propriu. */}
+    <div className="max-w-xl space-y-6">
       {/* Header */}
       <div>
         <nav aria-label="Navigare" className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-          <a href="#/app/fin/itpark" className="hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary rounded">
-            Dosare MITP
+          <a href="#/business/fin/itpark" className="hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary rounded">
+            Rezidenți IT Park
           </a>
           <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           <span className="text-foreground font-medium">Dosar nou</span>
         </nav>
-        <h1 className="text-2xl font-bold text-foreground">Dosar de verificare nou</h1>
       </div>
 
       {/* Step progress */}
@@ -604,5 +606,6 @@ export default function ItparkWizard() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }

@@ -140,6 +140,16 @@ const PartiesPage = lazyWithTimeout(() => import("./pages/app/fin/PartiesPage").
 const PartyDetailPage = lazyWithTimeout(() => import("./pages/app/fin/PartyDetailPage").then((m) => ({ default: m.PartyDetailPage })));
 const FinExportCenter = lazyWithTimeout(() => import("./pages/app/fin/ExportCenter").then((m) => ({ default: m.FinExportCenter })));
 const ItparkDetail = lazyWithTimeout(() => import("./pages/app/fin/itpark/ItparkDetail"));
+// NAV-08: restul modulului IT Park — scris pentru /app/fin/itpark/*, niciodată rutat pe /business.
+const ItparkList = lazyWithTimeout(() => import("./pages/app/fin/itpark/ItparkList"));
+const ItparkWizard = lazyWithTimeout(() => import("./pages/app/fin/itpark/ItparkWizard"));
+const ItparkDashboardPage = lazyWithTimeout(() => import("./pages/app/fin/itpark/ItparkDashboardPage"));
+const ItparkAnexa2Page = lazyWithTimeout(() => import("./pages/app/fin/itpark/Anexa2Page").then((m) => ({ default: m.Anexa2Page })));
+const ItparkAnexa3Page = lazyWithTimeout(() => import("./pages/app/fin/itpark/Anexa3Page").then((m) => ({ default: m.Anexa3Page })));
+const ItparkAnexa4Page = lazyWithTimeout(() => import("./pages/app/fin/itpark/Anexa4Page").then((m) => ({ default: m.Anexa4Page })));
+const ItparkLettersPage = lazyWithTimeout(() => import("./pages/app/fin/itpark/LettersPage").then((m) => ({ default: m.LettersPage })));
+const ItparkReadinessPage = lazyWithTimeout(() => import("./pages/app/fin/itpark/ReadinessChecklistPage").then((m) => ({ default: m.ReadinessChecklistPage })));
+const ItparkSelfDeclarationPage = lazyWithTimeout(() => import("./pages/app/fin/itpark/SelfDeclarationPage").then((m) => ({ default: m.SelfDeclarationPage })));
 const FinInsightsPage = lazyWithTimeout(() => import("./pages/finance/FinInsightsPage").then((m) => ({ default: m.FinInsightsPage })));
 const CXPage = lazyWithTimeout(() => import("./pages/app/CXPage").then((m) => ({ default: m.CXPage })));
 
@@ -312,7 +322,26 @@ function Routes() {
   // FIX-502: /business/fin/payroll/runs/:id must be matched before the list route
   if (path.match(/^\/business\/fin\/payroll\/runs\/[^/]+/)) return <BusinessGuardPage><PayrollRunDetailPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/payroll")) return <BusinessGuardPage><PayrollFINPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/fin/itpark")) return <BusinessGuardPage><ItparkDetail /></BusinessGuardPage>;
+  // NAV-08: IT Park — de la specific la general. Înainte, orice /business/fin/itpark* randa fișa unui
+  // dosar, care nu găsea id-ul și rămânea pe spinner; lista și anexele nu erau accesibile deloc.
+  {
+    const it = path.match(/^\/business\/fin\/itpark(?=[/?#]|$)(?:\/([^/?#]+))?(?:\/([^/?#]+))?/);
+    if (it) {
+      const [, seg, sub] = it;
+      const page =
+        !seg ? <ItparkList />
+        : seg === "new" ? <ItparkWizard />
+        : seg === "dashboard" ? <ItparkDashboardPage />
+        : sub === "anexa2" ? <ItparkAnexa2Page />
+        : sub === "anexa3" ? <ItparkAnexa3Page />
+        : sub === "anexa4" ? <ItparkAnexa4Page />
+        : sub === "scrisori" ? <ItparkLettersPage />
+        : sub === "ready" ? <ItparkReadinessPage />
+        : sub === "declaratie" ? <ItparkSelfDeclarationPage />
+        : <ItparkDetail />;
+      return <BusinessGuardPage><Suspense fallback={null}>{page}</Suspense></BusinessGuardPage>;
+    }
+  }
   if (path.startsWith("/business/fin/assets")) return <BusinessGuardPage><AssetsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/ledger")) return <BusinessGuardPage><FinInsightsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/budget")) return <BusinessGuardPage><BudgetPage /></BusinessGuardPage>;

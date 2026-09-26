@@ -22,6 +22,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Loader2, Printer, AlertCircle, ChevronLeft } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
+import { itparkIdFromPath } from "@/lib/itpark/paths";
 import { getEngagement, updateEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import { listLines, type RevenueLine } from "@/lib/api/itparkLines";
 import { computeAnexa3 } from "@/lib/itpark/calc";
@@ -127,8 +128,8 @@ function EditableField({ label, value, onChange, type = "text", placeholder }: E
 export function Anexa2Page() {
   const { path, navigate } = useRouter();
 
-  // Extract engagementId from URL: /app/fin/itpark/:id/anexa2
-  const engagementId = path.match(/^\/app\/fin\/itpark\/([^/]+)\/anexa2$/)?.[1] ?? "";
+  // Extract engagementId from URL: /business/fin/itpark/:id/anexa2
+  const engagementId = itparkIdFromPath(path);
 
   const [eng, setEng] = useState<ItparkEngagement | null>(null);
   const [lines, setLines] = useState<RevenueLine[]>([]);
@@ -244,16 +245,16 @@ export function Anexa2Page() {
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/app/fin/itpark/${eng.id}`)}
+            onClick={() => navigate(`/business/fin/itpark/${eng.id}`)}
             className="rounded-md p-1.5 hover:bg-muted transition-colors"
             aria-label="Înapoi la dosar"
           >
             <ChevronLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <div>
-            <h1 className="text-lg font-semibold text-foreground leading-tight">
+            <h2 className="text-lg font-semibold text-foreground leading-tight">
               Anexa 2 — Informații generale
-            </h1>
+            </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {eng.residentName} · {eng.reportingYear}
             </p>

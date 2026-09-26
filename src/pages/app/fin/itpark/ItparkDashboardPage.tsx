@@ -6,6 +6,7 @@
  * Afișează per rezident: pondere eligibilă YTD, status prag (conform/warning/risc),
  * status dosar, zile până la 30 apr. Summary cards globale.
  */
+import { AppShell } from "@/components/app/AppShell";
 import { useState, useEffect, useMemo } from "react";
 import {
   getDashboard,
@@ -194,15 +195,10 @@ export default function ItparkDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard conformitate MITP</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Pondere eligibilă YTD per rezident — prag de conformitate 70% (termen 30 apr {deadlineYear})
-          </p>
-        </div>
+    <AppShell
+      pageTitle="Conformitate IT Park"
+      pageDescription={`Ponderea eligibilă YTD per rezident — pragul e 70% (termen 30 aprilie ${deadlineYear}).`}
+      actions={
         <div className="flex items-center gap-2">
           <label htmlFor="year-select" className="text-sm text-muted-foreground font-medium">
             An:
@@ -218,7 +214,7 @@ export default function ItparkDashboardPage() {
             ))}
           </select>
           <a
-            href="#/app/fin/itpark"
+            href="#/business/fin/itpark"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px]"
           >
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -227,8 +223,10 @@ export default function ItparkDashboardPage() {
             Lista dosarelor
           </a>
         </div>
-      </div>
-
+      }
+    >
+    {/* NAV-08: pagina n-avea shell și avea propriul <h1>; titlul stă acum în antet. */}
+    <div className="space-y-6">
       {/* Error */}
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive" role="alert">
@@ -333,7 +331,7 @@ export default function ItparkDashboardPage() {
             Creează dosare de verificare MITP pentru a vedea datele de conformitate.
           </p>
           <a
-            href="#/app/fin/itpark/new"
+            href="#/business/fin/itpark/new"
             className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 min-h-[44px]"
           >
             Creează dosar nou
@@ -406,7 +404,7 @@ export default function ItparkDashboardPage() {
                 <tr key={item.engagementId} className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3 font-medium text-foreground">
                     <a
-                      href={`#/app/fin/itpark/${item.engagementId}`}
+                      href={`#/business/fin/itpark/${item.engagementId}`}
                       className="hover:text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary rounded"
                     >
                       {item.residentName}
@@ -466,7 +464,7 @@ export default function ItparkDashboardPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <a
-                      href={`#/app/fin/itpark/${item.engagementId}`}
+                      href={`#/business/fin/itpark/${item.engagementId}`}
                       className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium border border-border bg-background hover:bg-muted transition-colors min-h-[36px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
                       aria-label={`Deschide dosarul ${item.residentName}`}
                     >
@@ -480,5 +478,6 @@ export default function ItparkDashboardPage() {
         </div>
       )}
     </div>
+    </AppShell>
   );
 }

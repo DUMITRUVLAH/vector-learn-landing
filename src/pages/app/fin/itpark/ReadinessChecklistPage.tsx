@@ -61,7 +61,7 @@ interface CheckItem {
 
 function useEngagementId(): string {
   const { path } = useRouter();
-  const match = path.match(/^\/app\/fin\/itpark\/([^/]+)\/ready$/);
+  const match = path.match(/\/itpark\/([^/?#]+)\/ready(?:[?#]|$)/);
   return match ? match[1] : "";
 }
 
@@ -293,16 +293,16 @@ export function ReadinessChecklistPage() {
         {/* Breadcrumb */}
         <nav aria-label="Navigare" className="flex items-center gap-2 text-sm text-muted-foreground">
           <a
-            href="#/app/fin/itpark"
+            href="#/business/fin/itpark"
             className="hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary rounded"
           >
-            Dosare MITP
+            Rezidenți IT Park
           </a>
           <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           <a
-            href={`#/app/fin/itpark/${id}`}
+            href={`#/business/fin/itpark/${id}`}
             className="hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary rounded"
           >
             {engagement.residentName}
@@ -318,7 +318,7 @@ export function ReadinessChecklistPage() {
           <div className="flex items-center gap-3">
             <ClipboardCheck className="h-6 w-6 text-primary shrink-0" aria-hidden="true" />
             <div>
-              <h1 className="text-lg font-bold text-foreground">Checklist pregătire dosar</h1>
+              <h2 className="text-lg font-bold text-foreground">Checklist pregătire dosar</h2>
               <p className="text-sm text-muted-foreground">
                 {engagement.residentName} · {engagement.reportingYear}
               </p>

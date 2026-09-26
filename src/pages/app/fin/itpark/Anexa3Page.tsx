@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
+import { itparkIdFromPath } from "@/lib/itpark/paths";
 import { getEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import { listLines, type RevenueLine } from "@/lib/api/itparkLines";
 import { computeAnexa3, type CaemBreakdown } from "@/lib/itpark/calc";
@@ -45,8 +46,8 @@ const MONTHS_RO = [
 export function Anexa3Page() {
   const { path, navigate } = useRouter();
 
-  // Extract engagementId from URL: /app/fin/itpark/:id/anexa3
-  const engagementId = path.match(/^\/app\/fin\/itpark\/([^/]+)\/anexa3$/)?.[1] ?? "";
+  // Extract engagementId from URL: /business/fin/itpark/:id/anexa3
+  const engagementId = itparkIdFromPath(path);
 
   const [eng, setEng] = useState<ItparkEngagement | null>(null);
   const [lines, setLines] = useState<RevenueLine[]>([]);
@@ -127,16 +128,16 @@ export function Anexa3Page() {
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/app/fin/itpark/${eng.id}`)}
+            onClick={() => navigate(`/business/fin/itpark/${eng.id}`)}
             className="rounded-md p-1.5 hover:bg-muted transition-colors"
             aria-label="Înapoi la dosar"
           >
             <ChevronLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <div>
-            <h1 className="text-lg font-semibold text-foreground leading-tight">
+            <h2 className="text-lg font-semibold text-foreground leading-tight">
               Anexa 3 — Lista veniturilor din vânzări
-            </h1>
+            </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {eng.residentName} · {eng.reportingYear} · {lineCount} linii
             </p>
@@ -196,7 +197,7 @@ export function Anexa3Page() {
                   Nicio linie de venit adăugată încă.
                   <br />
                   <a
-                    href={`#/app/fin/itpark/${eng.id}`}
+                    href={`#/business/fin/itpark/${eng.id}`}
                     className="text-primary underline underline-offset-2 mt-1 inline-block"
                   >
                     Adăugați linii din dosar

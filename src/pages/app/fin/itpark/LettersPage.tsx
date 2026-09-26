@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
+import { itparkIdFromPath } from "@/lib/itpark/paths";
 import { getEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import {
   listDocs,
@@ -308,9 +309,9 @@ function LetterCard({ kind, letterData, existingDoc, engagementId, onSaved }: Le
 export function LettersPage() {
   const { path, navigate } = useRouter();
 
-  // Extract engagementId from URL: /app/fin/itpark/:id/scrisori
+  // Extract engagementId from URL: /business/fin/itpark/:id/scrisori
   const engagementId =
-    path.match(/^\/app\/fin\/itpark\/([^/]+)\/scrisori$/)?.[1] ?? "";
+    itparkIdFromPath(path);
 
   const [eng, setEng] = useState<ItparkEngagement | null>(null);
   const [docs, setDocs] = useState<PacketDocument[]>([]);
@@ -397,16 +398,16 @@ export function LettersPage() {
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/app/fin/itpark/${eng.id}`)}
+            onClick={() => navigate(`/business/fin/itpark/${eng.id}`)}
             className="rounded-md p-1.5 hover:bg-muted transition-colors"
             aria-label="Înapoi la dosar"
           >
             <ChevronLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <div>
-            <h1 className="text-lg font-semibold text-foreground leading-tight">
+            <h2 className="text-lg font-semibold text-foreground leading-tight">
               Scrisori de confirmare
-            </h1>
+            </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {eng.residentName} · {eng.reportingYear} ·{" "}
               <span
