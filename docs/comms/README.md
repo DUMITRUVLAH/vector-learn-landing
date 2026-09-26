@@ -172,7 +172,8 @@ Deciziile de mai jos vin din revizia de securitate și corectitudine din 2026-09
 | Variabilă | Obligatorie | Pentru |
 |---|---|---|
 | `ENCRYPTION_KEY` | **da** | criptarea tokenurilor tuturor canalelor |
-| `APP_URL` | recomandat | URL-ul public stabil pentru webhook-uri (ex. `https://finflow.best`). Fără ea se folosește originea cererii, iar un URL de preview moare la următorul deploy |
+| `APP_URL` | recomandat | URL-ul public stabil (acum `https://finflow.best`). Fără ea se folosește originea cererii, iar un URL de preview moare la următorul deploy |
+| `COMMS_WEBHOOK_BASE_URL` | nu | domeniul exact pentru webhook-uri, ex. `https://www.finflow.best`. **De ce contează:** furnizorii NU urmează redirecționări, iar `finflow.best` răspunde 308 → `www.finflow.best`. Fără variabilă, serverul urmează singur redirecționarea când înregistrează webhook-ul (verificat de test) |
 | `CRON_SECRET` | da (există deja) | cronul zilnic |
 | `WHATSAPP_GRAPH_VERSION` | nu | implicit `v25.0` |
 | `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN` | doar pentru aplicația platformei (Embedded Signup) | webhook-ul comun al tuturor numerelor |

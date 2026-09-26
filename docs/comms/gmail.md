@@ -54,13 +54,13 @@ openid  email  https://www.googleapis.com/auth/gmail.readonly  https://www.googl
    - *Audience*: **Internal** (A), sau **External** + *Testing* + adaugă utilizatorii-test (B).
    - *Data Access*: adaugă scope-urile de mai sus.
 4. *Clients → Create client → **Web application***:
-   - **Authorized redirect URI:** `https://<domeniul-app>/api/comms/gmail/oauth/callback`, ex. `https://finflow.best/api/comms/gmail/oauth/callback`;
+   - **Authorized redirect URI:** `https://www.finflow.best/api/comms/gmail/oauth/callback`. **Cu `www`:** `finflow.best` redirecționează spre `www`, iar aplicația trimite la Google domeniul final;
    - pentru dezvoltare locală, și `http://localhost:3131/api/comms/gmail/oauth/callback`.
 5. Copiază **Client ID** și **Client secret** în Vercel:
    ```
    GOOGLE_OAUTH_CLIENT_ID=…apps.googleusercontent.com
    GOOGLE_OAUTH_CLIENT_SECRET=…
-   APP_URL=https://finflow.best        # ca redirect-ul să fie stabil
+   # APP_URL există deja (https://finflow.best); aplicația urmează singură redirecționarea spre www
    ```
 6. **Opțional: push în timp real (Pub/Sub).** Fără el, mesajele noi se aduc la deschiderea inboxului (max o dată pe minut per cutie) și zilnic prin cron.
    ```bash
@@ -69,14 +69,14 @@ openid  email  https://www.googleapis.com/auth/gmail.readonly  https://www.googl
      --member=serviceAccount:gmail-api-push@system.gserviceaccount.com --role=roles/pubsub.publisher
    gcloud iam service-accounts create gmail-push-invoker
    gcloud pubsub subscriptions create gmail-inbound-push --topic=gmail-inbound \
-     --push-endpoint=https://finflow.best/api/comms/webhooks/gmail \
+     --push-endpoint=https://www.finflow.best/api/comms/webhooks/gmail \
      --push-auth-service-account=gmail-push-invoker@<PROIECT>.iam.gserviceaccount.com \
-     --push-auth-token-audience=https://finflow.best/api/comms/webhooks/gmail
+     --push-auth-token-audience=https://www.finflow.best/api/comms/webhooks/gmail
    ```
    În Vercel:
    ```
    GMAIL_PUBSUB_TOPIC=projects/<PROIECT>/topics/gmail-inbound
-   GMAIL_PUSH_AUDIENCE=https://finflow.best/api/comms/webhooks/gmail
+   GMAIL_PUSH_AUDIENCE=https://www.finflow.best/api/comms/webhooks/gmail
    GMAIL_PUSH_SA_EMAIL=gmail-push-invoker@<PROIECT>.iam.gserviceaccount.com
    ```
    Agentul de serviciu Pub/Sub (`service-<NR_PROIECT>@gcp-sa-pubsub.iam.gserviceaccount.com`) are

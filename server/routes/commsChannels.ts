@@ -28,9 +28,9 @@ import {
   isMockChannel,
   mockAllowed,
   providerFetch,
-  publicBaseUrl,
   publicChannel,
   decryptCredentials,
+  webhookBaseUrl,
   webhookUrlFor,
 } from "../lib/comms/channelStore";
 import { ingestEvents } from "../lib/comms/ingest";
@@ -98,7 +98,7 @@ async function assertExternalFree(kind: string, externalId: string, selfId: stri
 
 commsChannelsRoutes.get("/", async (c) => {
   const user = c.get("user");
-  const base = publicBaseUrl(c.req.url);
+  const base = await webhookBaseUrl(c.req.url);
   const rows = await db
     .select()
     .from(commChannels)
@@ -127,7 +127,7 @@ commsChannelsRoutes.get("/", async (c) => {
 commsChannelsRoutes.post("/", manage, zValidator("json", createInput), async (c) => {
   const user = c.get("user");
   const body = c.req.valid("json");
-  const base = publicBaseUrl(c.req.url);
+  const base = await webhookBaseUrl(c.req.url);
   const secret = newWebhookSecret();
 
   if (body.mock) {
@@ -224,7 +224,7 @@ commsChannelsRoutes.patch("/:id", manage, zValidator("json", patchInput), async 
     })
     .where(eq(commChannels.id, ch.id))
     .returning();
-  return c.json({ channel: publicChannel(row, publicBaseUrl(c.req.url)) });
+  return c.json({ channel: publicChannel(row, await webhookBaseUrl(c.req.url)) });
 });
 
 commsChannelsRoutes.post("/:id/credentials", manage, zValidator("json", z.object({ credentials: credentialsSchema })), async (c) => {
@@ -235,7 +235,7 @@ commsChannelsRoutes.post("/:id/credentials", manage, zValidator("json", z.object
   const adapter = getAdapter(ch.kind)!;
   const creds: Credentials = { ...decryptCredentials(ch), ...c.req.valid("json").credentials };
   if (ch.kind === "telegram" && !creds.headerSecret) creds.headerSecret = newWebhookSecret();
-  const base = publicBaseUrl(c.req.url);
+  const base = await webhookBaseUrl(c.req.url);
   // Tokenul nou se salvează ÎNAINTE de connect (Viber îl folosește la verificarea webhook-ului).
   const previous = ch.credentialsEnc;
   await db.update(commChannels).set({ credentialsEnc: encryptCredentials(creds) }).where(eq(commChannels.id, ch.id));
@@ -296,7 +296,7 @@ commsChannelsRoutes.post("/:id/test", manage, async (c) => {
       creds: decryptCredentials(ch),
       config: (ch.config ?? {}) as Record<string, unknown>,
       fetch: providerFetch(),
-      webhookUrl: webhookUrlFor(publicBaseUrl(c.req.url), ch.kind, ch.webhookSecret),
+      webhookUrl: webhookUrlFor(await webhookBaseUrl(c.req.url), ch.kind, ch.webhookSecret),
       webhookSecret: ch.webhookSecret,
     });
     await db

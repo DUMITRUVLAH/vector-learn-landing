@@ -11,8 +11,8 @@ Până atunci, fiecare canal se poate testa ca **simulat** (bifa din dialogul de
 
 ## 0. O singură dată, pe platformă (Vercel), înainte de orice canal real
 
-- [ ] `ENCRYPTION_KEY`: **obligatorie**. Fără ea, tokenurile nu pot fi stocate în producție. (Era deja semnalată ca lipsă la auditul din 29.08.)
-- [ ] `APP_URL=https://finflow.best` (sau domeniul final). Webhook-urile trebuie să bată la un URL stabil, nu la unul de preview.
+- [x] `ENCRYPTION_KEY`: **setată pe prod** (verificat 2026-09-26). Tokenurile se stochează criptat.
+- [x] `APP_URL`: există (`https://finflow.best`). Domeniul redirecționează spre `www`, iar furnizorii nu urmează redirecționări, deci aplicația înregistrează singură webhook-urile pe `https://www.finflow.best` (verificat pe prod la livrare).
 - [ ] `CRON_SECRET`: există deja; noul cron `/api/comms/cron/daily` îl folosește.
 
 ## 1. Telegram: cel mai rapid, 5 minute, gratuit
@@ -48,7 +48,7 @@ Până atunci, fiecare canal se poate testa ca **simulat** (bifa din dialogul de
 
 - [ ] Google Cloud Console: proiect, activezi **Gmail API**.
 - [ ] Google Auth Platform: Branding (domeniu, privacy policy), Audience (Internal/External), Data Access (scope-urile din [gmail.md §2](gmail.md)).
-- [ ] Client OAuth tip **Web application**, cu redirect URI `https://finflow.best/api/comms/gmail/oauth/callback`.
+- [ ] Client OAuth tip **Web application**, cu redirect URI `https://www.finflow.best/api/comms/gmail/oauth/callback`.
 - [ ] În Vercel: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`.
 - [ ] Opțional, pentru timp real: Pub/Sub, cu comenzile din [gmail.md §3.6](gmail.md), plus `GMAIL_PUBSUB_TOPIC`, `GMAIL_PUSH_AUDIENCE`, `GMAIL_PUSH_SA_EMAIL`.
 - [ ] Fiecare agent: Canale → **Conectează cu Google**.

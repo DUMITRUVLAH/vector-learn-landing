@@ -638,3 +638,25 @@ describe("revizia de corectitudine", () => {
     expect(await testDb.select().from(commConversations)).toHaveLength(0);
   });
 });
+
+describe("domeniul public al webhook-urilor", () => {
+  it("[blocant] un domeniu care redirecționează (finflow.best → www) NU ajunge în webhook: furnizorii nu urmează redirecționări", async () => {
+    const prevApp = process.env.APP_URL;
+    process.env.APP_URL = "https://apex-redirect.test";
+    vi.stubGlobal("fetch", async (url: string) =>
+      url.startsWith("https://apex-redirect.test/")
+        ? new Response(null, { status: 308, headers: { location: "https://www.apex-redirect.test/api/health" } })
+        : new Response("{}", { status: 200 })
+    );
+    try {
+      const ch = await connectTelegram();
+      expect(ch.webhookUrl.startsWith("https://www.apex-redirect.test/api/comms/webhooks/telegram/")).toBe(true);
+      const hook = calls.find((c) => c.url.endsWith("/setWebhook"))!;
+      expect(String(hook.json?.url)).toMatch(/^https:\/\/www\.apex-redirect\.test\//);
+    } finally {
+      vi.unstubAllGlobals();
+      if (prevApp === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = prevApp;
+    }
+  });
+});

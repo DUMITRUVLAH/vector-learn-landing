@@ -16,7 +16,7 @@ import { db } from "../db/client";
 import { commChannels } from "../db/schema/comms";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireCommsAccess } from "../lib/comms/access";
-import { encryptCredentials, publicBaseUrl } from "../lib/comms/channelStore";
+import { encryptCredentials, webhookBaseUrl } from "../lib/comms/channelStore";
 import {
   buildAuthUrl,
   ensureGmailWatch,
@@ -57,12 +57,13 @@ commsGmailRoutes.post("/oauth/start", zValidator("json", z.object({ name: z.stri
     if (err instanceof CommsError) return c.json({ error: err.code, message: err.message }, err.httpStatus);
     throw err;
   }
-  const url = buildAuthUrl({ state, challenge, redirectUri: gmailRedirectUri(publicBaseUrl(c.req.url)), loginHint: user.email });
+  const url = buildAuthUrl({ state, challenge, redirectUri: gmailRedirectUri(await webhookBaseUrl(c.req.url)), loginHint: user.email });
   return c.json({ url });
 });
 
 commsGmailRoutes.get("/oauth/callback", async (c) => {
-  const base = publicBaseUrl(c.req.url);
+  // Același domeniu final ca la start: `redirect_uri` trebuie să fie IDENTIC la schimbul codului.
+  const base = await webhookBaseUrl(c.req.url);
   const back = (q: string) => c.redirect(`${base}/#/business/crm/canale?${q}`, 302);
   const user = c.get("user");
   const state = verifyState(c.req.query("state"));

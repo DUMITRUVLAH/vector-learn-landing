@@ -122,6 +122,40 @@ export function webhookUrlFor(baseUrl: string, kind: string, secret: string): st
  * Originea publică la care furnizorii pot ajunge. `APP_URL` are prioritate (un preview Vercel
  * are URL-uri care se schimbă la fiecare deploy — un webhook legat de el moare la următorul).
  */
+/**
+ * Originea la care FURNIZORII trimit webhook-urile. Diferă de `publicBaseUrl` într-un punct care
+ * contează: furnizorii NU urmează redirecționări (Telegram o spune explicit, Meta la fel), iar
+ * `finflow.best` răspunde 308 → `www.finflow.best`. Un webhook înregistrat pe domeniul fără www
+ * n-ar primi niciodată nimic. Deci: `COMMS_WEBHOOK_BASE_URL` dacă e setată, altfel domeniul public
+ * urmat până la capătul redirecționărilor (rezultatul se ține 10 minute).
+ */
+const resolvedBases = new Map<string, { origin: string; at: number }>();
+export async function webhookBaseUrl(requestUrl: string): Promise<string> {
+  const explicit = process.env.COMMS_WEBHOOK_BASE_URL?.replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const base = publicBaseUrl(requestUrl);
+  if (!base.startsWith("https://")) return base; // local: nimic de urmat
+  const hit = resolvedBases.get(base);
+  if (hit && Date.now() - hit.at < 600_000) return hit.origin;
+  let origin = base;
+  try {
+    let current = base;
+    for (let hop = 0; hop < 3; hop++) {
+      const res = await fetch(`${current}/api/health`, { redirect: "manual", signal: AbortSignal.timeout(5000) });
+      const loc = res.headers.get("location");
+      if (![301, 302, 307, 308].includes(res.status) || !loc) break;
+      const next = new URL(loc, current).origin;
+      if (!next.startsWith("https://") || next === current) break;
+      current = next;
+    }
+    origin = current;
+  } catch {
+    // rețeaua indisponibilă: rămânem pe domeniul configurat
+  }
+  resolvedBases.set(base, { origin, at: Date.now() });
+  return origin;
+}
+
 export function publicBaseUrl(requestUrl: string): string {
   const app = process.env.APP_URL ?? process.env.PUBLIC_APP_URL;
   if (app?.startsWith("https://")) return app.replace(/\/+$/, "");
