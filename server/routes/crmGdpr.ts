@@ -17,7 +17,7 @@
  * fișă a unui om. Agentul de vânzări n-are nevoie de ele ca să-și facă treaba.
  */
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   leads,
@@ -31,7 +31,7 @@ import {
 import { crmLeadTasks } from "../db/schema/crmTasks";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
-import { logCrmAudit } from "../lib/crm/audit";
+import { logCrmAudit, scrubCrmAuditPii } from "../lib/crm/audit";
 
 export const crmGdprRoutes = new Hono<{ Variables: AuthVariables }>();
 crmGdprRoutes.use("/*", requireAuth);
@@ -116,10 +116,21 @@ crmGdprRoutes.post("/anonymize/:leadId", requireCrmPermission("leads.delete"), a
   const leadId = c.req.param("leadId");
 
   const [lead] = await db
-    .select({ id: leads.id, fullName: leads.fullName })
+    .select({
+      id: leads.id,
+      fullName: leads.fullName,
+      fullNameNormalized: leads.fullNameNormalized,
+      phone: leads.phone,
+      phoneNormalized: leads.phoneNormalized,
+      email: leads.email,
+      emailNormalized: leads.emailNormalized,
+    })
     .from(leads)
     .where(and(eq(leads.id, leadId), eq(leads.tenantId, user.tenantId)));
   if (!lead) return c.json({ error: "not_found" }, 404);
+
+  /** Retragerea deja consemnată rămâne data ei: e dovada cererii, nu se rescrie la anonimizare. */
+  const revokedAtOrNow = sql`coalesce(${leads.consentRevokedAt}, now())`;
 
   // Leadul: identitatea dispare, cifrele rămân (valoare, etapă, motiv de pierdere — fapte
   // comerciale ale firmei, nu date ale persoanei).
@@ -136,7 +147,7 @@ crmGdprRoutes.post("/anonymize/:leadId", requireCrmPermission("leads.delete"), a
       consentText: null,
       ipAtConsent: null,
       userAgentAtConsent: null,
-      consentRevokedAt: new Date(),
+      consentRevokedAt: revokedAtOrNow,
       updatedAt: new Date(),
     })
     .where(and(eq(leads.id, leadId), eq(leads.tenantId, user.tenantId)));
@@ -160,13 +171,20 @@ crmGdprRoutes.post("/anonymize/:leadId", requireCrmPermission("leads.delete"), a
   // Valorile din câmpurile personalizate pot conține orice a scris agentul acolo.
   await db.delete(leadFieldValues).where(and(eq(leadFieldValues.tenantId, user.tenantId), eq(leadFieldValues.leadId, leadId)));
 
+  // Jurnalul leadului: intrările rămân (cine a creat, cine a modificat, când), dar numele, emailul
+  // și telefonul din ele se șterg — altfel ștergerea ar fi doar cosmetică, cu datele intacte în
+  // `audit_log`. A doua anonimizare nu mai găsește date reale pe lead, deci nu mai are ce căuta.
+  const piiValues = [lead.fullName, lead.fullNameNormalized, lead.phone, lead.phoneNormalized, lead.email, lead.emailNormalized]
+    .filter((v): v is string => typeof v === "string" && v !== GDPR_REMOVED);
+  await scrubCrmAuditPii(user.tenantId, leadId, piiValues, GDPR_REMOVED);
+
+  // Intrarea anonimizării NU mai poartă numele: ar fi exact copia pe care tocmai am șters-o.
   await logCrmAudit({
     tenantId: user.tenantId,
     actorId: user.id,
     action: "gdpr.anonymized",
     target: "crm_lead",
     targetId: leadId,
-    before: { fullName: lead.fullName },
   });
 
   return c.json({ ok: true });
@@ -183,21 +201,32 @@ crmGdprRoutes.post("/revoke/:leadId", requireCrmPermission("leads.edit"), async 
   const user = c.get("user");
   const leadId = c.req.param("leadId");
 
+  const [existing] = await db
+    .select({ consentRevokedAt: leads.consentRevokedAt })
+    .from(leads)
+    .where(and(eq(leads.id, leadId), eq(leads.tenantId, user.tenantId)));
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  // Data PRIMEI retrageri e dovada: din clipa aceea firma nu mai avea voie să contacteze omul.
+  // O a doua apăsare n-are voie s-o mute mai târziu — ar ascunde exact contactele făcute între ele.
   const [row] = await db
     .update(leads)
-    .set({ consentRevokedAt: new Date(), updatedAt: new Date() })
+    .set({ consentRevokedAt: sql`coalesce(${leads.consentRevokedAt}, now())`, updatedAt: new Date() })
     .where(and(eq(leads.id, leadId), eq(leads.tenantId, user.tenantId)))
     .returning({ id: leads.id, consentRevokedAt: leads.consentRevokedAt });
   if (!row) return c.json({ error: "not_found" }, 404);
 
-  await db.insert(leadInteractions).values({
-    tenantId: user.tenantId,
-    leadId,
-    type: "system",
-    direction: "internal",
-    body: "Consimțământ retras: leadul nu mai poate fi contactat comercial.",
-    userId: user.id,
-  });
+  // Mesajul din cronologie o singură dată: retragerea e un fapt, nu un contor de apăsări.
+  if (!existing.consentRevokedAt) {
+    await db.insert(leadInteractions).values({
+      tenantId: user.tenantId,
+      leadId,
+      type: "system",
+      direction: "internal",
+      body: "Consimțământ retras: leadul nu mai poate fi contactat comercial.",
+      userId: user.id,
+    });
+  }
 
   await logCrmAudit({
     tenantId: user.tenantId,

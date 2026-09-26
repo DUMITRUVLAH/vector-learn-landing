@@ -26,6 +26,7 @@ import { crmKpiTargets } from "../db/schema/crmKpiTargets";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { ensureTenantStages } from "../lib/crm/stages";
+import { userHasCrmPermission } from "../lib/crm/permissionCheck";
 import { callFunnel } from "../lib/crm/callOutcomes";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 import { parseSegmentFilters, segmentConditions } from "../lib/crm/segments";
@@ -94,7 +95,15 @@ crmReportsRoutes.get("/", async (c) => {
 
   const from = c.req.query("from") ?? null;
   const to = c.req.query("to") ?? null;
-  const owner = c.req.query("owner");
+  /**
+   * `reports.view_team` (matricea din `permissions.ts`): fără el, omul își vede DOAR cifrele lui.
+   * Nu 403 — agentul are nevoie de raportul propriu —, ci un raport tăiat la sursă: leadurile,
+   * taskurile, oamenii și normele se citesc numai ale lui, deci nicio secțiune (clasament, per
+   * agent, pâlnie) nu mai are de unde scoate cifrele colegilor. Un `owner=<coleg>` din URL e ignorat.
+   */
+  const canViewTeam = await userHasCrmPermission(user, "reports.view_team");
+  const owner = canViewTeam ? c.req.query("owner") : user.id;
+  const selfOnly = !canViewTeam;
   /**
    * CRM-G02 — raportul e AL UNEI PÂLNII. Până acum amesteca etapele tuturor pâlniilor ordonate
    * după `orderIndex`, deci „conversia" lega „Lead nou" din Vânzări de „A cerut detalii" din
@@ -157,9 +166,11 @@ crmReportsRoutes.get("/", async (c) => {
       })
       .from(leads)
       .where(
-        pipelineId
-          ? and(eq(leads.tenantId, tenantId), leadsInPipeline(pipelineId, isDefaultPipeline))
-          : eq(leads.tenantId, tenantId)
+        and(
+          eq(leads.tenantId, tenantId),
+          pipelineId ? leadsInPipeline(pipelineId, isDefaultPipeline) : undefined,
+          selfOnly ? eq(leads.assignedTo, user.id) : undefined
+        )
       )
       .orderBy(desc(leads.createdAt))
       .limit(MAX_ROWS);
@@ -193,7 +204,7 @@ crmReportsRoutes.get("/", async (c) => {
         completedAt: crmLeadTasks.completedAt,
       })
       .from(crmLeadTasks)
-      .where(eq(crmLeadTasks.tenantId, tenantId))
+      .where(and(eq(crmLeadTasks.tenantId, tenantId), selfOnly ? eq(crmLeadTasks.assignedTo, user.id) : undefined))
       .limit(MAX_ROWS);
 
     const productRows = await db
@@ -205,7 +216,7 @@ crmReportsRoutes.get("/", async (c) => {
     const memberRows = await db
       .select({ id: users.id, name: users.name })
       .from(users)
-      .where(eq(users.tenantId, tenantId));
+      .where(and(eq(users.tenantId, tenantId), selfOnly ? eq(users.id, user.id) : undefined));
 
     // Normele (CC-5). Lipsa tabelei nu are voie să rupă raportul: fără ea, ecranul arată exact
     // ca înainte — cifre fără grad de realizare.
@@ -219,7 +230,7 @@ crmReportsRoutes.get("/", async (c) => {
           target: crmKpiTargets.target,
         })
         .from(crmKpiTargets)
-        .where(eq(crmKpiTargets.tenantId, tenantId));
+        .where(and(eq(crmKpiTargets.tenantId, tenantId), selfOnly ? eq(crmKpiTargets.userId, user.id) : undefined));
     } catch (err) {
       console.error("[crm/reports] normele nu s-au putut citi:", err instanceof Error ? err.message : err);
     }
@@ -486,7 +497,9 @@ crmReportsRoutes.get("/funnel", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
   const query = c.req.query();
-  const owner = query.owner || null;
+  // Aceeași regulă ca raportul general: fără `reports.view_team`, pâlnia e doar a omului.
+  const canViewTeam = await userHasCrmPermission(user, "reports.view_team");
+  const owner = canViewTeam ? query.owner || null : user.id;
   const range: DateRange = { from: query.from ?? null, to: query.to ?? null };
 
   try {
@@ -505,6 +518,7 @@ crmReportsRoutes.get("/funnel", async (c) => {
       .orderBy(crmPipelineStages.orderIndex);
 
     const conditions = [eq(leads.tenantId, tenantId), isNull(leads.mergedIntoId)];
+    if (!canViewTeam) conditions.push(eq(leads.assignedTo, user.id));
     if (pipelineId) {
       const cond = leadsInPipeline(pipelineId, pipelineId === pipeline?.id && Boolean(pipeline?.isDefault));
       if (cond) conditions.push(cond);
@@ -588,7 +602,7 @@ crmReportsRoutes.get("/funnel", async (c) => {
     const memberRows = await db
       .select({ id: users.id, name: users.name, email: users.email })
       .from(users)
-      .where(eq(users.tenantId, tenantId));
+      .where(and(eq(users.tenantId, tenantId), canViewTeam ? undefined : eq(users.id, user.id)));
 
     // Pâlnia pe fiecare agent: doar pentru cei care CHIAR au leaduri în segment — o coloană
     // goală per coleg ar îneca exact comparația pentru care există secțiunea.

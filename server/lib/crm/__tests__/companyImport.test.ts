@@ -56,6 +56,12 @@ describe("rebaseHeader", () => {
     expect(t.rows).toEqual([["Alfa SRL", "1003600012345"]]);
   });
 
+  it("[blocant] după un rând gol, numărul rândului rămâne cel din fișier", () => {
+    const t = rebaseHeader({ headers: ["Denumire", "Telefon"], rows: [["Unu", "1"], ["", ""], ["", "3"]] }, 1);
+    const drafts = applyCompanyMapping(t, { 0: "name", 1: "phone" }, 1);
+    expect(drafts.map((d) => d.rowNumber)).toEqual([2, 4]);
+  });
+
   it("antetele goale primesc un nume, ca omul să le poată mapa", () => {
     const t = rebaseHeader({ headers: ["Denumire", ""], rows: [["Alfa", "x"]] }, 1);
     expect(t.headers[1]).toBe("Coloana 2");

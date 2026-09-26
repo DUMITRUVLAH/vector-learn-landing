@@ -88,6 +88,14 @@ describe("Pâlnia — câți au ajuns până unde", () => {
     // Și se vede că s-a oprit acolo: n-a avansat la Comandă.
     expect(row(rows, "negociere").dropRatePct).toBe(100);
   });
+
+  it("[blocant] un lead pierdut DIRECT din prima etapă se numără acolo (etapa de plecare contează)", () => {
+    // O singură tranziție, suspect→pierdut: `to` nu e în lanț, deci doar `from` spune unde a stat.
+    const rows = funnelBreakdown([lead("x", "pierdut")], STAGES, [{ leadId: "x", from: "suspect", to: "pierdut" }]);
+    expect(row(rows, "suspect").reached).toBe(1);
+    expect(row(rows, "suspect").dropped).toBe(1);
+    expect(row(rows, "suspect").dropRatePct).toBe(100);
+  });
 });
 
 describe("Rata de cădere", () => {

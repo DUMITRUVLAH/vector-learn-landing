@@ -131,6 +131,26 @@ function companyKeyOf(draft: ImportDraftLead): string | null {
   return normalizeCompanyName(draft.company);
 }
 
+/**
+ * Cheia de firmă pentru TOT fișierul: un rând fără cod fiscal al cărui nume apare, în același
+ * fișier, pe un rând CU cod fiscal ține de aceeași firmă („Director Sigma" cu IDNO și „Contabil
+ * Sigma" fără). Cheia doar per rând ar crea două fișe pentru o singură firmă. Importul de firme
+ * face la fel (`planCompanyImport` verifică și cheia pe nume).
+ */
+function companyKeyResolver(drafts: ImportDraftLead[]): (draft: ImportDraftLead) => string | null {
+  const idnoByName = new Map<string, string>();
+  for (const d of drafts) {
+    const idno = normalizeIdno(d.idno);
+    const name = normalizeCompanyName(d.company);
+    if (idno && name && !idnoByName.has(name)) idnoByName.set(name, `idno:${idno}`);
+  }
+  return (draft) => {
+    const own = companyKeyOf(draft);
+    if (!own || own.startsWith("idno:")) return own;
+    return idnoByName.get(own) ?? own;
+  };
+}
+
 function normalizeCompanyName(raw: string | null | undefined): string | null {
   if (!raw) return null;
   return raw.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, " ").trim().toLowerCase() || null;
@@ -214,6 +234,9 @@ async function buildImportPlan(
     input.format === "xlsx"
       ? await parseWorkbookTable(Buffer.from(input.text, "base64"))
       : parseDelimited(input.text, delimiter);
+  // `rowNumber` la lead-uri e poziția în date (antetul exclus) — o păstrăm, dar calculată din
+  // rândul REAL din fișier, ca un rând gol sărit să nu decaleze numerele de după el.
+  const dataRowNumbers = table.rowNumbers?.map((n) => n - 1);
   // Câmpurile personalizate ale workspace-ului: și propunerea de mapare, și validarea țintelor
   // `cf:<cheie>` se sprijină pe ele, deci se citesc ÎNAINTE de a interpreta maparea.
   const customFieldRows = await loadCustomFields(tenantId);
@@ -239,7 +262,7 @@ async function buildImportPlan(
     effectiveMapping[Number(idx)] = target as ImportTarget;
   }
 
-  const drafts = applyMapping(table.rows, effectiveMapping);
+  const drafts = applyMapping(table.rows, effectiveMapping, dataRowNumbers);
 
   // Oamenii și etapele workspace-ului — o singură citire pentru tot fișierul.
   await ensureTenantStages(tenantId);
@@ -462,6 +485,9 @@ crmImportRoutes.post("/preview", zValidator("json", planInput), async (c) => {
   try {
     const plan = await buildImportPlan(user.tenantId, {
       text: body.text,
+      // Fără `format`, un registru Excel (base64) era citit ca CSV: antetul ieșea „UEsDBAoAAA…"
+      // și importul crea zero lead-uri.
+      format: body.format,
       delimiter: body.delimiter ?? null,
       mapping: (body.mapping as FieldMapping | null) ?? null,
     });
@@ -497,6 +523,7 @@ crmImportRoutes.post("/run", zValidator("json", runInput), async (c) => {
 
   const plan = await buildImportPlan(user.tenantId, {
     text: body.text,
+    format: body.format,
     delimiter: body.delimiter ?? null,
     mapping: (body.mapping as FieldMapping | null) ?? null,
   });
@@ -521,7 +548,8 @@ crmImportRoutes.post("/run", zValidator("json", runInput), async (c) => {
   // Firmele întâi: lead-ul are nevoie de `company_id`, deci fișa firmei trebuie
   // să existe înainte. Firmografia din fișier se așază aici, unde are coloane —
   // pe lead n-ar avea unde.
-  const companyIds = await upsertCompanies(user.tenantId, toInsert);
+  const companyKeyFor = companyKeyResolver(toInsert.map((r) => r.draft));
+  const companyIds = await upsertCompanies(user.tenantId, toInsert, companyKeyFor);
 
   let created = 0;
   /** Rândul din fișier → id-ul lead-ului scris, pentru etichete și câmpuri personalizate. */
@@ -545,7 +573,7 @@ crmImportRoutes.post("/run", zValidator("json", runInput), async (c) => {
       notes: row.draft.notes?.slice(0, 2000) ?? null,
       valueCents: row.draft.value_cents ?? 0,
       company: row.draft.company?.slice(0, 300) ?? null,
-      companyId: companyIds.get(companyKeyOf(row.draft) ?? "") ?? null,
+      companyId: companyIds.get(companyKeyFor(row.draft) ?? "") ?? null,
       dealName: row.draft.deal_name?.slice(0, 300) ?? null,
     }));
     const inserted = await db.insert(leads).values(values).returning({ id: leads.id });
@@ -661,11 +689,18 @@ async function writeLeadExtras(
  * să poată strica o fișă de firmă completată de om. Se completează doar
  * câmpurile goale.
  */
-async function upsertCompanies(tenantId: string, rows: PlannedRow[]): Promise<Map<string, string>> {
+async function upsertCompanies(
+  tenantId: string,
+  rows: PlannedRow[],
+  keyFor: (draft: ImportDraftLead) => string | null
+): Promise<Map<string, string>> {
   const byKey = new Map<string, PlannedRow>();
   for (const row of rows) {
-    const key = companyKeyOf(row.draft);
-    if (key && !byKey.has(key)) byKey.set(key, row);
+    const key = keyFor(row.draft);
+    // Primul rând care aduce cheia o reprezintă — dar dacă cheia e pe cod fiscal, fișa se scrie
+    // din rândul care CHIAR are codul, nu dintr-unul fără, legat doar prin nume.
+    const current = key ? byKey.get(key) : undefined;
+    if (key && (!current || (!normalizeIdno(current.draft.idno) && normalizeIdno(row.draft.idno)))) byKey.set(key, row);
   }
   const out = new Map<string, string>();
   if (byKey.size === 0) return out;

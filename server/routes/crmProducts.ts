@@ -55,7 +55,9 @@ const productFieldsSchema = z.object({
   unit: z.string().max(30).optional(),
   listPriceCents: z.number().int().min(0).optional(),
   currency: z.string().max(8).optional(),
-  vatPercent: z.number().min(0).optional(),
+  // Plafon 100, ca la rândurile manuale din oferte (`crmDocuments`): un TVA de 250% nu există, iar
+  // din catalog s-ar propaga în fiecare ofertă care folosește produsul.
+  vatPercent: z.number().min(0).max(100, "TVA-ul nu poate depăși 100%").optional(),
   orderIndex: z.number().int().optional(),
 });
 

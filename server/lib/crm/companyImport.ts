@@ -138,15 +138,25 @@ export function suggestCompanyMapping(headers: string[], sample: string[][] = []
  */
 export function rebaseHeader(table: ParsedTable, headerRow: number): ParsedTable {
   const all = [table.headers, ...table.rows];
+  // Rândul din fișier al fiecărei înregistrări: parserul îl dă (un registru sare rândurile goale);
+  // altfel înregistrarea `i` e rândul `i + 1`.
+  const allNumbers = [1, ...(table.rowNumbers ?? table.rows.map((_, i) => i + 2))];
   const at = Math.min(Math.max(1, Math.floor(headerRow)), Math.max(1, all.length)) - 1;
   const rawHeaders = all[at] ?? [];
   const body = all.slice(at + 1);
   const width = Math.max(rawHeaders.length, ...body.map((r) => r.length), 0);
   const headers = Array.from({ length: width }, (_, i) => (rawHeaders[i] ?? "").trim() || `Coloana ${i + 1}`);
-  const rows = body
-    .map((r) => Array.from({ length: width }, (_, i) => (r[i] ?? "").trim()))
-    .filter((r) => r.some((v) => v !== ""));
-  return { headers, rows };
+  const rows: string[][] = [];
+  const rowNumbers: number[] = [];
+  body.forEach((r, j) => {
+    const cells = Array.from({ length: width }, (_, i) => (r[i] ?? "").trim());
+    // Rândurile goale se sar, dar numărul fiecărui rând păstrat rămâne cel din fișier — altfel,
+    // după un rând gol, eroarea „pe rândul 3" ar fi de fapt pe rândul 4 din Excel.
+    if (!cells.some((v) => v !== "")) return;
+    rows.push(cells);
+    rowNumbers.push(allNumbers[at + 1 + j] ?? at + 2 + j);
+  });
+  return { headers, rows, rowNumbers };
 }
 
 export interface CompanyDraft {
@@ -208,7 +218,7 @@ export function applyCompanyMapping(
 
     const kwh = single(row, "annual_consumption_kwh");
     return {
-      rowNumber: headerRow + 1 + i,
+      rowNumber: table.rowNumbers?.[i] ?? headerRow + 1 + i,
       name: (single(row, "name") ?? "").replace(/\s+/g, " "),
       idno: single(row, "idno"),
       industry: single(row, "industry"),

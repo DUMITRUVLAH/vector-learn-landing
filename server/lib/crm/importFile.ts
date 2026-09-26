@@ -15,7 +15,15 @@
 //   · detectăm separatorul, fiindcă Excel-ul românesc scrie punct-și-virgulă;
 //   · un rând FĂRĂ nicio cale de contact e EROARE, nu inserare tăcută.
 
+import { z } from "zod";
 import { normalizeEmail, normalizePhone } from "./normalize";
+
+/** ACEEAȘI regulă ca `POST /api/crm/leads` (`z.string().email()`): o adresă pe care formularul de
+ *  lead o refuză nu are voie să intre pe ușa din spate a importului. */
+const emailRule = z.string().email();
+export function isValidEmail(raw: string): boolean {
+  return emailRule.safeParse(raw.trim()).success;
+}
 
 /** Numele normalizat pentru comparații: fără diacritice, fără spații duble, lowercase.
  *  Sursa îl avea în `normalize.ts`; aici e local, ca să nu atingem modulul comun. */
@@ -65,6 +73,12 @@ export interface ParsedTable {
   rows: string[][];
   /** Doar la registre: numele foilor, ca omul să poată alege alta decât prima. */
   sheetNames?: string[];
+  /**
+   * Pentru fiecare rând din `rows`, numărul lui în fișier, cum îl vede omul (antetul = 1).
+   * Registrul sare rândurile goale, iar importurile le filtrează și ele — fără numărul real, o
+   * eroare raportată „pe rândul 3" ar fi de fapt pe rândul 4 din Excel, și omul caută degeaba.
+   */
+  rowNumbers?: number[];
 }
 
 /** Câte rânduri acceptăm dintr-un registru — aceeași limită ca la DocMerge. */
@@ -112,6 +126,7 @@ export async function parseWorkbookTable(buffer: Buffer, opts: { sheet?: number 
   };
 
   const rows: string[][] = [];
+  const rowNumbers: number[] = [];
   let headers: string[] = [];
   sheet.eachRow((row, rowNumber) => {
     const values: string[] = [];
@@ -119,10 +134,13 @@ export async function parseWorkbookTable(buffer: Buffer, opts: { sheet?: number 
     const raw = row.values as unknown[];
     for (let i = 1; i < raw.length; i++) values.push(cellText(raw[i]).trim());
     if (rowNumber === 1) headers = values;
-    else if (values.some((v) => v !== "")) rows.push(values);
+    else if (values.some((v) => v !== "")) {
+      rows.push(values);
+      rowNumbers.push(rowNumber);
+    }
   });
 
-  return { headers, rows, sheetNames };
+  return { headers, rows, sheetNames, rowNumbers };
 }
 
 /** Scoate rândurile complet goale de la finalul unui tabel brut (linii goale
@@ -226,7 +244,8 @@ export function parseDelimited(text: string, delimiter?: Delimiter): ParsedTable
 
   const headers = trimmed[0].map((h) => h.trim());
   const rows = trimmed.slice(1).map((r) => padRow(r, headers.length));
-  return { headers, rows };
+  // Înregistrarea `i` (0 = antetul) e rândul `i + 1` din fișier.
+  return { headers, rows, rowNumbers: rows.map((_, i) => i + 2) };
 }
 
 // ─── Parsare Excel (.xlsx/.xls) ─────────────────────────────────────────────
@@ -587,6 +606,12 @@ export interface ImportDraftLead {
   deal_name: string | null;
   /** Cod fiscal al firmei (IDNO în RM, CUI/CIF în RO) — cheia cea mai tare la dedup. */
   idno: string | null;
+  /**
+   * Adresa din fișier care NU e un email valid („ion@@gmail"). Nu ajunge în `email` — lead-ul ar
+   * purta o adresă pe care `POST /leads` o refuză și pe care niciun mesaj n-o atinge —, dar o
+   * păstrăm ca previzualizarea s-o poată arăta omului, cu motivul.
+   */
+  invalid_email: string | null;
   /** Etichetele rezultate din coloanele mapate pe „Etichetă", deduplicate. */
   tags: string[];
   /** Valorile câmpurilor personalizate: cheia câmpului → text. */
@@ -626,7 +651,12 @@ export function splitTagCell(raw: string): string[] {
 /** Aplică maparea configurată peste rândurile brute → draft-uri tipizate,
  * gata de validat/dedup-at. Coloanele nemapate ("ignore") sunt pur și simplu
  * excluse — nu ajung în draft. */
-export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDraftLead[] {
+export function applyMapping(
+  rows: string[][],
+  mapping: FieldMapping,
+  /** Numărul fiecărui rând în fișier (vezi `ParsedTable.rowNumbers`). Lipsă → poziția în date. */
+  rowNumbers?: number[]
+): ImportDraftLead[] {
   const columnFor = new Map<ImportTargetField, number>();
   for (const field of IMPORT_TARGET_FIELDS) {
     const idx = findColumnFor(mapping, field);
@@ -652,9 +682,15 @@ export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDra
     return (row[idx] ?? "").trim();
   };
 
-  return rows.map((row, i) => {
+  const drafts: ImportDraftLead[] = [];
+  rows.forEach((row, i) => {
+    // Un rând complet gol din mijlocul fișierului (o linie liberă, sau doar separatori „;;")
+    // nu e un lead fără nume — e spațiu între grupuri. Numărat ca eroare, umfla „erori" din
+    // previzualizare și îl speria pe om degeaba. Importul de firme face la fel (`rebaseHeader`).
+    if (row.every((v) => (v ?? "").trim() === "")) return;
     const phone = cell(row, "phone") || null;
-    const email = cell(row, "email") || null;
+    const rawEmail = cell(row, "email") || null;
+    const email = rawEmail && isValidEmail(rawEmail) ? rawEmail : null;
     const company = cell(row, "company") || null;
     /**
      * În B2B, lista cumpărată are de multe ori DOAR firma: „SRL Alfa, IDNO, telefon recepție" —
@@ -666,8 +702,8 @@ export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDra
     const valueRaw = cell(row, "value_cents");
     const consumptionRaw = cell(row, "annual_consumption_kwh");
 
-    return {
-      rowNumber: i + 1,
+    drafts.push({
+      rowNumber: rowNumbers?.[i] ?? i + 1,
       full_name: fullName,
       phone,
       phone_normalized: normalizePhone(phone),
@@ -686,6 +722,7 @@ export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDra
       notes: cell(row, "notes") || null,
       deal_name: cell(row, "deal_name") || null,
       idno: cell(row, "idno") || null,
+      invalid_email: rawEmail && !email ? rawEmail : null,
       tags: [...new Set(tagColumns.flatMap((idx) => splitTagCell((row[idx] ?? "").trim())))],
       custom_values: Object.fromEntries(
         customColumns
@@ -694,8 +731,9 @@ export function applyMapping(rows: string[][], mapping: FieldMapping): ImportDra
           // și ar face filtrele „are valoare" să mintă.
           .filter(([, value]) => value.length > 0)
       ),
-    };
+    });
   });
+  return drafts;
 }
 
 export interface DraftValidation {
@@ -712,7 +750,15 @@ export function validateDraft(draft: ImportDraftLead): DraftValidation {
   if (!draft.full_name || draft.full_name.trim().length === 0) {
     errors.push("Lipsește numele.");
   }
-  if (!draft.phone && !draft.email) {
+  if (draft.invalid_email) {
+    // Cu telefon, lead-ul rămâne contactabil: se importă fără adresa greșită, dar omul află.
+    // Fără telefon, adresa stricată era singurul contact — rândul nu are cum fi lucrat.
+    if (draft.phone) {
+      warnings.push(`Emailul „${draft.invalid_email}” nu e o adresă validă — lead-ul se importă fără email.`);
+    } else if (!draft.email) {
+      errors.push(`Emailul „${draft.invalid_email}” nu e o adresă validă, iar telefonul lipsește — rândul nu are niciun contact.`);
+    }
+  } else if (!draft.phone && !draft.email) {
     errors.push("Lipsește atât telefonul cât și emailul — e nevoie de cel puțin unul.");
   }
   if (draft.value_cents != null && draft.value_cents < 0) {

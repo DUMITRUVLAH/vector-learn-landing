@@ -142,7 +142,8 @@ crmPermissionsRoutes.put("/team", zValidator("json", setPermissionSchema), async
     tenantId: user.tenantId,
     actorId: user.id,
     action: "permission.changed",
-    target: "crm_lead",
+    // Ținta e un OM al echipei, nu un lead — altfel filtrul jurnalului pe `crm_user` n-o găsește.
+    target: "crm_user",
     targetId: body.userId,
     after: { permission: body.permission, granted: body.granted },
   });

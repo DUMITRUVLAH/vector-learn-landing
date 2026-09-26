@@ -210,7 +210,9 @@ crmCompaniesRoutes.get("/:id/leads", async (c) => {
       createdAt: leads.createdAt,
     })
     .from(leads)
-    .where(and(eq(leads.tenantId, user.tenantId), eq(leads.companyId, id)))
+    // Un lead unificat într-altul nu mai e o persoană separată — fișa firmei îl exclude, exact ca
+    // numărătoarea din `/:id/overview` și din listă, altfel lista și cifra de pe fișă nu se potrivesc.
+    .where(and(eq(leads.tenantId, user.tenantId), eq(leads.companyId, id), isNull(leads.mergedIntoId)))
     .limit(200);
 
   return c.json({ items });
@@ -684,6 +686,9 @@ const mergeInput = z.object({
 crmCompaniesRoutes.post("/merge/preview", zValidator("json", mergeInput), async (c) => {
   const user = c.get("user");
   const { primaryId, duplicateIds } = c.req.valid("json");
+  // Aceeași regulă ca la unificarea reală: o previzualizare care „reușește" pentru o cerere pe care
+  // /merge o refuză i-ar arăta omului un plan pe care nu-l poate aplica niciodată.
+  if (duplicateIds.includes(primaryId)) return c.json({ error: "cannot_merge_into_itself" }, 400);
   const rows = await activeLeads(user.tenantId);
 
   const primary = rows.find((r) => r.id === primaryId);

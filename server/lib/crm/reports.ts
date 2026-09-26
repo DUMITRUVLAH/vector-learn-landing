@@ -680,10 +680,17 @@ export function funnelBreakdown(
   }
 
   for (const change of changes) {
-    if (!change.leadId || !change.to) continue;
-    const idx = indexOf.get(change.to);
-    if (idx === undefined) continue; // tranziție către o etapă pierdută sau dispărută
-    furthest.set(change.leadId, Math.max(furthest.get(change.leadId) ?? -1, idx));
+    if (!change.leadId) continue;
+    // Și etapa de PLECARE e o dovadă că lead-ul a stat acolo: un lead mutat direct din „Lead nou"
+    // în „Pierdut" are o singură tranziție, new→lost, iar `to` (pierdut) nu e în lanț. Fără `from`,
+    // lead-ul n-ar apărea nicăieri în pâlnie — exact contrar regulii de mai sus („se numără la
+    // etapa din care a plecat").
+    for (const key of [change.from, change.to]) {
+      if (!key) continue;
+      const idx = indexOf.get(key);
+      if (idx === undefined) continue; // etapă pierdută sau dispărută
+      furthest.set(change.leadId, Math.max(furthest.get(change.leadId) ?? -1, idx));
+    }
   }
 
   // Câte lead-uri au atins cel puțin indexul i.
