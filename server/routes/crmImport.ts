@@ -382,7 +382,7 @@ async function loadCustomFields(tenantId: string): Promise<{ id: string; key: st
 }
 
 /**
- * Codurile fiscale deja prezente în workspace, dintre cele din fișier.
+ * Codurile fiscale din fișier ale firmelor care au deja un lead în workspace.
  *
  * Comparația se face pe forma NORMALIZATĂ, calculată în bază: fișele vechi pot avea „MD 1003…"
  * sau „1003-600-012345", iar un `IN` pe textul brut le-ar rata și am crea a doua fișă pentru
@@ -396,9 +396,16 @@ async function loadExistingIdnos(tenantId: string, idnos: string[]): Promise<str
   try {
     const CHUNK = 500;
     for (let i = 0; i < idnos.length; i += CHUNK) {
+      // Doar firmele care au DEJA un lead activ: o firmă adusă din lista de clienți (fără
+      // oportunitate) nu face din primul ei lead un duplicat — altfel, după importul de firme,
+      // importul lead-urilor lor s-ar sări integral.
       const rows = await db
-        .select({ idno: normalizedColumn })
+        .selectDistinct({ idno: normalizedColumn })
         .from(crmCompanies)
+        .innerJoin(
+          leads,
+          and(eq(leads.companyId, crmCompanies.id), eq(leads.tenantId, tenantId), isNull(leads.mergedIntoId))
+        )
         .where(and(eq(crmCompanies.tenantId, tenantId), inArray(normalizedColumn, idnos.slice(i, i + CHUNK))));
       for (const r of rows) {
         const norm = normalizeIdno(r.idno);

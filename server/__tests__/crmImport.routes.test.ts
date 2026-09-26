@@ -469,6 +469,25 @@ describe("CC-1 — coloane arbitrare: cod fiscal, etichete, câmpuri personaliza
     expect(firma.idno).toBe("1003600012345");
   });
 
+  it("[blocant] o firmă adusă din lista de clienți (fără lead) nu face primul ei lead duplicat", async () => {
+    // Fluxul „întâi imporți clienții, apoi lead-urile lor": înainte, orice cod fiscal existent în
+    // firme făcea lead-ul „Există deja" și importul lead-urilor se sărea integral.
+    const [firma] = await testDb
+      .insert(crmCompanies)
+      .values({ tenantId: tenantA, name: "Alfa SRL", nameNormalized: "alfa srl", idno: "1003600012345" })
+      .returning();
+    const csv = ["Nume,Telefon,Companie,IDNO", "Ion Rusu,069555111,Alfa SRL,1003600012345"].join("\n");
+    const first = await post("/api/crm/import/run", { text: csv, mapping: { 0: "full_name", 1: "phone", 2: "company", 3: "idno" } });
+    expect(first.body.created).toBe(1);
+    const [lead] = await testDb.select().from(leads).where(eq(leads.tenantId, tenantA));
+    expect(lead.companyId).toBe(firma.id);
+
+    // Acum firma ARE un lead: alt rând cu același cod fiscal e un duplicat.
+    const again = ["Nume,Telefon,Companie,IDNO", "Ana Rusu,069555222,Alfa SRL,1003600012345"].join("\n");
+    const second = await post("/api/crm/import/run", { text: again, mapping: { 0: "full_name", 1: "phone", 2: "company", 3: "idno" } });
+    expect(second.body.created).toBe(0);
+  });
+
   it("[blocant] aceeași firmă cu ALT nume, dar același cod fiscal, nu se dublează", async () => {
     // Exact cazul care strică o bază de outreach: „SRL Alfa" azi, „Alfa S.R.L." în lista
     // cumpărată luna viitoare. Fără cod fiscal ar fi două firme și doi agenți care sună.
