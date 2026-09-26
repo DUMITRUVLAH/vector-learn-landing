@@ -11,6 +11,7 @@
  * POST /api/crm/products/:id/stock/enable  — pornește urmărirea stocului (migrarea 0177)
  * POST /api/crm/products/:id/stock/adjust  — corecție de cantitate (recepție / inventar)
  * POST /api/crm/products/:id/stock/disable — oprește urmărirea (articolul de inventar rămâne)
+ * POST /api/crm/products/:id/stock/threshold — schimbă pragul de alertă „stoc scăzut"
  *
  * STOCUL NU stă aici. Produsul se leagă de un articol de inventar FinDesk
  * (`fin_inventory_items`), unde există deja cantitate, cost mediu ponderat și jurnal de
@@ -338,6 +339,36 @@ crmProductsRoutes.post("/:id/stock/adjust", zValidator("json", adjustStockSchema
   }
 
   return c.json({ qtyOnHand: result.newQtyOnHand, avgCostCents: result.newAvgCostCents });
+});
+
+const thresholdSchema = z.object({
+  /** Sub cât (inclusiv) produsul apare cu roșu și pleacă alerta. 0 = fără alertă. */
+  minQtyAlert: z.number().int().min(0).max(1_000_000),
+});
+
+// ─── POST /:id/stock/threshold ────────────────────────────────────────────────
+
+// Pragul se alege la pornire, dar se află abia din vânzări: fără ruta asta, singurul mod de a-l
+// muta era să oprești urmărirea și s-o pornești iar — adică un articol de inventar nou, gol.
+crmProductsRoutes.post("/:id/stock/threshold", zValidator("json", thresholdSchema), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const body = c.req.valid("json");
+
+  const product = await productOfTenant(user.tenantId, id);
+  if (!product) return c.json({ error: "not_found" }, 404);
+  if (!product.inventoryItemId) return c.json({ error: "stock_not_tracked" }, 409);
+
+  const [item] = await db
+    .update(finInventoryItems)
+    .set({ minQtyAlert: body.minQtyAlert, updatedAt: new Date() })
+    .where(
+      and(eq(finInventoryItems.id, product.inventoryItemId), eq(finInventoryItems.tenantId, user.tenantId))
+    )
+    .returning({ qtyOnHand: finInventoryItems.qtyOnHand, minQtyAlert: finInventoryItems.minQtyAlert });
+  if (!item) return c.json({ error: "not_found" }, 404);
+
+  return c.json(item);
 });
 
 // ─── POST /:id/stock/disable ──────────────────────────────────────────────────

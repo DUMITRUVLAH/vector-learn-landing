@@ -282,6 +282,50 @@ describe("Stoc pe produsele din CRM", () => {
     expect((await stoc(itemId)).qtyOnHand).toBe(45);
   });
 
+  it("pragul de alertă se mută fără să oprești urmărirea, iar produsul devine roșu sub el", async () => {
+    const { productId, itemId } = await produsCuStoc("Baterie 12V", 6);
+
+    const lista = async () => {
+      const res = await app.request("/api/crm/products");
+      const body = (await res.json()) as { items: { id: string; lowStock: boolean; minQtyAlert: number }[] };
+      return body.items.find((p) => p.id === productId)!;
+    };
+    expect((await lista()).lowStock).toBe(false);
+
+    const res = await app.request(`/api/crm/products/${productId}/stock/threshold`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ minQtyAlert: 10 }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ qtyOnHand: 6, minQtyAlert: 10 });
+    // Același articol de inventar — pragul nu a creat unul nou, gol.
+    expect((await stoc(itemId)).minQtyAlert).toBe(10);
+    expect(await lista()).toMatchObject({ minQtyAlert: 10, lowStock: true });
+
+    const negativ = await app.request(`/api/crm/products/${productId}/stock/threshold`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ minQtyAlert: -1 }),
+    });
+    expect(negativ.status).toBe(400);
+  });
+
+  it("pragul unui serviciu fără stoc e refuzat explicit", async () => {
+    const created = await app.request("/api/crm/products", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Consultanță", listPriceCents: 100_00 }),
+    });
+    const product = (await created.json()) as { id: string };
+    const res = await app.request(`/api/crm/products/${product.id}/stock/threshold`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ minQtyAlert: 3 }),
+    });
+    expect(res.status).toBe(409);
+  });
+
   it("stocul altui workspace nu se vede și nu se atinge", async () => {
     const { productId } = await produsCuStoc("Produs al firmei A", 10);
 

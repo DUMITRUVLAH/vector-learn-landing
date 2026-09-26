@@ -601,6 +601,17 @@ export function adjustCrmProductStock(
   });
 }
 
+/** Pragul „stoc scăzut": la această cantitate sau sub ea produsul apare cu roșu. 0 = fără alertă. */
+export function setCrmProductStockThreshold(
+  id: string,
+  minQtyAlert: number
+): Promise<{ qtyOnHand: number; minQtyAlert: number }> {
+  return api(`/api/crm/products/${id}/stock/threshold`, {
+    method: "POST",
+    body: JSON.stringify({ minQtyAlert }),
+  });
+}
+
 export function disableCrmProductStock(id: string): Promise<CrmProduct> {
   return api<CrmProduct>(`/api/crm/products/${id}/stock/disable`, { method: "POST" });
 }

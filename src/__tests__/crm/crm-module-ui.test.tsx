@@ -65,6 +65,10 @@ const createCrmProduct = vi.fn();
 const updateCrmProduct = vi.fn();
 const archiveCrmProduct = vi.fn();
 const restoreCrmProduct = vi.fn();
+const adjustCrmProductStock = vi.fn();
+const setCrmProductStockThreshold = vi.fn();
+const enableCrmProductStock = vi.fn();
+const disableCrmProductStock = vi.fn();
 const listCrmLostReasons = vi.fn();
 const listCrmLeadTasks = vi.fn();
 const createCrmLeadTask = vi.fn();
@@ -131,6 +135,10 @@ vi.mock("@/lib/api/crm", () => ({
   updateCrmProduct: (...args: unknown[]) => updateCrmProduct(...args),
   archiveCrmProduct: (...args: unknown[]) => archiveCrmProduct(...args),
   restoreCrmProduct: (...args: unknown[]) => restoreCrmProduct(...args),
+  adjustCrmProductStock: (...args: unknown[]) => adjustCrmProductStock(...args),
+  setCrmProductStockThreshold: (...args: unknown[]) => setCrmProductStockThreshold(...args),
+  enableCrmProductStock: (...args: unknown[]) => enableCrmProductStock(...args),
+  disableCrmProductStock: (...args: unknown[]) => disableCrmProductStock(...args),
   listCrmLostReasons: (...args: unknown[]) => listCrmLostReasons(...args),
   listCrmLeadTasks: (...args: unknown[]) => listCrmLeadTasks(...args),
   createCrmLeadTask: (...args: unknown[]) => createCrmLeadTask(...args),
@@ -464,5 +472,75 @@ describe("CRM (Faza 1) — CrmProductsPage", () => {
     await screen.findByText("Curs Engleză");
     expect(screen.getByText("1.500,00 L")).toBeInTheDocument(); // MDL — simbolul nativ „L”
     expect(screen.getByText("99,00 EUR")).toBeInTheDocument();
+  });
+
+  it("stocul sub limită apare cu roșu și în bannerul de sus", async () => {
+    listCrmProducts.mockResolvedValue({
+      items: [
+        makeProduct({ id: "p1", name: "Ficat de cod", unit: "buc", tracksStock: true, qtyOnHand: 2, minQtyAlert: 5, lowStock: true }),
+        makeProduct({ id: "p2", name: "Ulei de pește", unit: "buc", tracksStock: true, qtyOnHand: 40, minQtyAlert: 5 }),
+      ],
+    });
+
+    render(<CrmProductsPage />);
+
+    expect(await screen.findByText("1 produs are stoc scăzut")).toBeInTheDocument();
+    const low = screen.getByRole("button", { name: /Stoc Ficat de cod: 2 buc, stoc scăzut/ });
+    expect(low.className).toContain("text-destructive");
+    const ok = screen.getByRole("button", { name: /Stoc Ulei de pește: 40 buc\. Modifică/ });
+    expect(ok.className).not.toContain("text-destructive");
+  });
+
+  it("„Scot din stoc” cu + / − trimite o mișcare negativă și arată cât rămâne", async () => {
+    listCrmProducts.mockResolvedValue({
+      items: [makeProduct({ id: "p1", name: "Ficat de cod", unit: "buc", tracksStock: true, qtyOnHand: 18, minQtyAlert: 5 })],
+    });
+    adjustCrmProductStock.mockResolvedValue({ qtyOnHand: 15, avgCostCents: 0 });
+
+    render(<CrmProductsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Stoc Ficat de cod: 18 buc/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Scot din stoc" }));
+    const plus = screen.getByRole("button", { name: "Cantitatea: crește cu 1" });
+    fireEvent.click(plus);
+    fireEvent.click(plus); // 1 → 3
+    expect(screen.getByLabelText("Câte scoți")).toHaveValue(3);
+    expect(screen.getByText("15")).toBeInTheDocument(); // „După”
+
+    fireEvent.click(screen.getByRole("button", { name: "Scoate 3 buc" }));
+    await waitFor(() =>
+      expect(adjustCrmProductStock).toHaveBeenCalledWith("p1", { delta: -3, unitCostCents: undefined, notes: undefined })
+    );
+    expect(setCrmProductStockThreshold).not.toHaveBeenCalled();
+  });
+
+  it("nu lasă să scoți mai mult decât e pe stoc", async () => {
+    listCrmProducts.mockResolvedValue({
+      items: [makeProduct({ id: "p1", name: "Ficat de cod", unit: "buc", tracksStock: true, qtyOnHand: 2 })],
+    });
+
+    render(<CrmProductsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Stoc Ficat de cod: 2 buc/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Scot din stoc" }));
+    fireEvent.click(screen.getByRole("button", { name: "5 buc" }));
+
+    expect(screen.getByText(/Ai doar 2 buc pe stoc/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Scoate 5 buc" })).toBeDisabled();
+  });
+
+  it("doar limita schimbată se salvează fără mișcare de stoc", async () => {
+    listCrmProducts.mockResolvedValue({
+      items: [makeProduct({ id: "p1", name: "Ficat de cod", unit: "buc", tracksStock: true, qtyOnHand: 18, minQtyAlert: 5 })],
+    });
+    setCrmProductStockThreshold.mockResolvedValue({ qtyOnHand: 18, minQtyAlert: 6 });
+
+    render(<CrmProductsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Stoc Ficat de cod: 18 buc/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Cantitatea: scade cu 1" })); // 1 → 0
+    fireEvent.click(screen.getByRole("button", { name: "Limita de alertă: crește cu 1" })); // 5 → 6
+
+    fireEvent.click(screen.getByRole("button", { name: "Salvează limita" }));
+    await waitFor(() => expect(setCrmProductStockThreshold).toHaveBeenCalledWith("p1", 6));
+    expect(adjustCrmProductStock).not.toHaveBeenCalled();
   });
 });

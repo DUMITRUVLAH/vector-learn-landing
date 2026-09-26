@@ -11,7 +11,8 @@
  * nu se scade nimic la vânzare.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Archive, ArchiveRestore, Boxes, Loader2, Package, Pencil, Plus } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRight, Boxes, Loader2, Minus, Package, Pencil, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import {
   Alert,
@@ -40,6 +41,7 @@ import {
   enableCrmProductStock,
   listCrmProducts,
   restoreCrmProduct,
+  setCrmProductStockThreshold,
   updateCrmProduct,
   type CrmProduct,
 } from "@/lib/api/crm";
@@ -130,6 +132,9 @@ export function CrmProductsPage() {
   }
 
   const activeCount = products.filter((p) => p.isActive).length;
+  const lowStockProducts = products.filter(
+    (p) => p.isActive && p.tracksStock && stockLevel(p.qtyOnHand ?? 0, p.minQtyAlert ?? 0) !== "ok"
+  );
 
   return (
     <BusinessShell
@@ -144,6 +149,21 @@ export function CrmProductsPage() {
     >
       <div className="flex flex-col gap-4">
         {error && <Alert variant="destructive">{error}</Alert>}
+
+        {!loading && lowStockProducts.length > 0 && (
+          <Alert
+            variant="destructive"
+            title={`${lowStockProducts.length} ${lowStockProducts.length === 1 ? "produs are" : "produse au"} stoc scăzut`}
+          >
+            <div className="mt-1 flex flex-wrap gap-2">
+              {lowStockProducts.map((p) => (
+                <Button key={p.id} variant="outline" size="sm" onClick={() => setStockFor(p)}>
+                  {p.name} · {p.qtyOnHand} {p.unit}
+                </Button>
+              ))}
+            </div>
+          </Alert>
+        )}
 
         <div className="flex items-center gap-2">
           <Switch checked={showArchived} onChange={setShowArchived} aria-label="Arată produsele arhivate" />
@@ -198,10 +218,7 @@ export function CrmProductsPage() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {product.tracksStock ? (
-                      <span className={product.lowStock ? "font-medium text-destructive" : "text-foreground"}>
-                        {product.qtyOnHand}
-                        {product.lowStock ? " ⚠" : ""}
-                      </span>
+                      <StockCell product={product} onOpen={() => setStockFor(product)} />
                     ) : (
                       // „—", nu „0": un serviciu n-are stoc zero, n-are stoc deloc.
                       <span className="text-muted-foreground">—</span>
@@ -449,6 +466,115 @@ function ProductFormDialog({
   );
 }
 
+// ─── Stocul: nivel, culoare, stepper ──────────────────────────────────────────
+
+type StockLevel = "out" | "low" | "ok";
+
+/**
+ * Roșu la prag SAU la zero. `lowStock` de la server e fals când pragul e 0 („fără alertă"),
+ * dar un produs epuizat nu e „în regulă" doar pentru că nimeni n-a ales un prag.
+ */
+function stockLevel(qty: number, minQtyAlert: number): StockLevel {
+  if (qty <= 0) return "out";
+  if (minQtyAlert > 0 && qty <= minQtyAlert) return "low";
+  return "ok";
+}
+
+const LEVEL_TONE: Record<StockLevel, string> = {
+  out: "bg-destructive/10 text-destructive",
+  low: "bg-destructive/10 text-destructive",
+  ok: "bg-muted text-foreground",
+};
+
+/** Cantitate întreagă ≥ 0 din ce a tastat omul; gol sau text → 0. */
+function parseQty(text: string): number {
+  const n = Math.trunc(Number((text || "").replace(",", ".")));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+interface QtyStepperProps {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  unit: string;
+  /** Numele câmpului, pentru butoanele −/+ citite de cititorul de ecran. */
+  label: string;
+}
+
+/** [−] 5 [+] buc — butoane de 44px, iar câmpul din mijloc rămâne tastabil pentru cantități mari. */
+function QtyStepper({ id, value, onChange, unit, label }: QtyStepperProps) {
+  const n = parseQty(value);
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="icon"
+        className="touch-target"
+        aria-label={`${label}: scade cu 1`}
+        onClick={() => onChange(String(Math.max(0, n - 1)))}
+        disabled={n <= 0}
+      >
+        <Minus className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      <Input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={0}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 w-24 text-center text-lg font-semibold tabular-nums"
+      />
+      <Button
+        variant="outline"
+        size="icon"
+        className="touch-target"
+        aria-label={`${label}: crește cu 1`}
+        onClick={() => onChange(String(n + 1))}
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      <span className="text-sm text-muted-foreground">{unit}</span>
+    </div>
+  );
+}
+
+const QUICK_QTY = [1, 5, 10, 25];
+
+const REASONS: Record<"in" | "out", string[]> = {
+  in: ["Recepție marfă", "Retur de la client", "Corecție inventar"],
+  out: ["Inventar în minus", "Marfă deteriorată", "Folosit intern"],
+};
+
+interface StockCellProps {
+  product: CrmProduct;
+  onOpen: () => void;
+}
+
+/** Cifra din tabel e și ușa spre dialog: pe ea se uită omul când vrea să schimbe stocul. */
+function StockCell({ product, onOpen }: StockCellProps) {
+  const qty = product.qtyOnHand ?? 0;
+  const min = product.minQtyAlert ?? 0;
+  const level = stockLevel(qty, min);
+  const state = level === "out" ? ", epuizat" : level === "low" ? ", stoc scăzut" : "";
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Stoc ${product.name}: ${qty} ${product.unit}${state}. Modifică`}
+      className={cn(
+        "inline-flex flex-col items-end rounded-md px-2 py-1 tabular-nums transition-colors hover:ring-1 hover:ring-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        LEVEL_TONE[level],
+        level !== "ok" && "font-semibold"
+      )}
+    >
+      <span>{qty}</span>
+      {min > 0 && <span className="text-xs font-normal opacity-80">min {min}</span>}
+    </button>
+  );
+}
+
 // ─── Dialog „Stoc" ─────────────────────────────────────────────────────────────
 
 /**
@@ -456,6 +582,10 @@ function ProductFormDialog({
  * urmărirea, cu cantitatea din depozit acum), fie are (și atunci se face o mișcare — recepție
  * sau inventar). Ambele scriu în jurnalul de inventar FinDesk, cu autor și dată; niciuna nu
  * suprascrie direct o cantitate, ca stocul să rămână explicabil în urmă.
+ *
+ * Mișcarea se alege ca pe telefon: „Adaug" sau „Scot", apoi câte — nu un număr cu semn pe care
+ * omul trebuie să-l scrie cu minus. Dialogul arată dinainte cât rămâne după, cu roșu dacă
+ * ajunge la prag, și nu lasă să scoți mai mult decât e pe stoc.
  */
 function ProductStockDialog({
   product,
@@ -466,6 +596,7 @@ function ProductStockDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [direction, setDirection] = useState<"in" | "out">("in");
   const [qty, setQty] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [minQty, setMinQty] = useState("");
@@ -474,36 +605,49 @@ function ProductStockDialog({
   const [formError, setFormError] = useState<string | null>(null);
 
   const tracks = !!product?.tracksStock;
+  const unit = product?.unit || "buc";
+  const onHand = product?.qtyOnHand ?? 0;
+  const savedMin = product?.minQtyAlert ?? 0;
 
   useEffect(() => {
     if (!product) return;
-    setQty("");
+    setDirection("in");
+    setQty(product.tracksStock ? "1" : "");
     setUnitCost("");
-    setMinQty(product.minQtyAlert != null ? String(product.minQtyAlert) : "");
+    setMinQty(String(product.minQtyAlert ?? 0));
     setNotes("");
     setFormError(null);
   }, [product]);
 
-  const qtyNumber = Number((qty || "").replace(",", "."));
-  const qtyValid = Number.isFinite(qtyNumber) && (tracks ? qtyNumber !== 0 : qtyNumber >= 0);
+  const qtyNumber = parseQty(qty);
+  const minNumber = parseQty(minQty);
+  const delta = direction === "in" ? qtyNumber : -qtyNumber;
+  const after = onHand + delta;
+  const tooMuchOut = tracks && direction === "out" && qtyNumber > onHand;
+  const minChanged = tracks && minNumber !== savedMin;
+
+  const canSave = tracks ? (qtyNumber > 0 && !tooMuchOut) || (qtyNumber === 0 && minChanged) : true;
 
   async function submit() {
-    if (!product || !qtyValid) return;
+    if (!product || !canSave) return;
     setSaving(true);
     setFormError(null);
     try {
       if (tracks) {
-        await adjustCrmProductStock(product.id, {
-          delta: Math.trunc(qtyNumber),
-          // Costul se trimite doar la intrări: la o ieșire, costul e cel mediu din inventar.
-          unitCostCents: qtyNumber > 0 && unitCost.trim() ? priceToCents(unitCost) : undefined,
-          notes: notes.trim() || undefined,
-        });
+        if (qtyNumber > 0) {
+          await adjustCrmProductStock(product.id, {
+            delta,
+            // Costul se trimite doar la intrări: la o ieșire, costul e cel mediu din inventar.
+            unitCostCents: direction === "in" && unitCost.trim() ? priceToCents(unitCost) : undefined,
+            notes: notes.trim() || undefined,
+          });
+        }
+        if (minChanged) await setCrmProductStockThreshold(product.id, minNumber);
       } else {
         await enableCrmProductStock(product.id, {
-          initialQty: Math.max(0, Math.trunc(qtyNumber)),
+          initialQty: qtyNumber,
           unitCostCents: priceToCents(unitCost),
-          minQtyAlert: Math.max(0, Math.trunc(Number(minQty) || 0)),
+          minQtyAlert: minNumber,
         });
       }
       onSaved();
@@ -533,6 +677,25 @@ function ProductStockDialog({
     }
   }
 
+  const saveLabel = !tracks
+    ? "Pornește urmărirea"
+    : qtyNumber > 0
+      ? `${direction === "in" ? "Adaugă" : "Scoate"} ${qtyNumber} ${unit}`
+      : minChanged
+        ? "Salvează limita"
+        : "Înregistrează";
+
+  const nowLevel = stockLevel(onHand, savedMin);
+  const afterLevel = stockLevel(after, minNumber);
+
+  const limitField = (
+    <div className="flex flex-col gap-1">
+      <Label htmlFor="crm-stock-min">Roșu când rămân cel mult</Label>
+      <QtyStepper id="crm-stock-min" value={minQty} onChange={setMinQty} unit={unit} label="Limita de alertă" />
+      <p className="text-xs text-muted-foreground">0 = fără alertă. Produsul apare cu roșu și primești notificare.</p>
+    </div>
+  );
+
   return (
     <Dialog
       open={!!product}
@@ -540,84 +703,184 @@ function ProductStockDialog({
       title={tracks ? `Stoc — „${product?.name}"` : `Pornește stocul — „${product?.name}"`}
       description={
         tracks
-          ? "Mișcare de stoc: pozitiv la recepție, negativ la inventar în minus. Vânzările câștigate scad singure."
+          ? "Alege dacă adaugi sau scoți, apoi câte. Vânzările câștigate scad singure din stoc."
           : "Produsul devine urmărit pe stoc. La fiecare oportunitate câștigată, cantitatea vândută se scade automat."
       }
       footer={
         <>
           {tracks && (
-            <Button variant="ghost" onClick={() => void stopTracking()} disabled={saving}>
+            <Button
+              variant="ghost"
+              className="mr-auto text-muted-foreground"
+              onClick={() => void stopTracking()}
+              disabled={saving}
+            >
               Oprește urmărirea
             </Button>
           )}
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             Renunță
           </Button>
-          <Button onClick={() => void submit()} disabled={!qtyValid || saving}>
+          <Button
+            variant={tracks && direction === "out" && qtyNumber > 0 ? "destructive" : "default"}
+            onClick={() => void submit()}
+            disabled={!canSave || saving}
+          >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            {tracks ? "Înregistrează" : "Pornește"}
+            {saveLabel}
           </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {formError && <Alert variant="destructive">{formError}</Alert>}
-        {tracks && (
-          <p className="text-sm text-muted-foreground">
-            Pe stoc acum: <span className="font-medium text-foreground">{product?.qtyOnHand}</span>{" "}
-            {product?.unit}
-          </p>
-        )}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="crm-stock-qty" required>
-              {tracks ? "Mișcare (+/−)" : "Cantitate în depozit"}
-            </Label>
-            <Input
-              id="crm-stock-qty"
-              type="number"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              placeholder={tracks ? "ex. 10 sau -3" : "0"}
-              autoFocus
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="crm-stock-cost">Cost unitar ({product?.currency})</Label>
-            <Input
-              id="crm-stock-cost"
-              value={unitCost}
-              onChange={(e) => setUnitCost(e.target.value)}
-              placeholder="ex. 120,50"
-            />
-            <p className="text-xs text-muted-foreground">
-              Doar la intrări. Intră în costul mediu ponderat al articolului.
-            </p>
-          </div>
-          {!tracks && (
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="crm-stock-min">Alertă sub</Label>
-              <Input
-                id="crm-stock-min"
-                type="number"
-                value={minQty}
-                onChange={(e) => setMinQty(e.target.value)}
-                placeholder="0 = fără alertă"
-              />
+
+        {tracks ? (
+          <>
+            {/* Acum → după: omul vede rezultatul înainte să apese, nu după. Grila `1fr auto 1fr`
+                ține cele două casete egale cu săgeata îngustă între ele — scara Tailwind n-o are. */}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" aria-live="polite">
+              <div className={cn("rounded-lg p-3 text-center", LEVEL_TONE[nowLevel])}>
+                <p className="text-xs font-medium opacity-80">Pe stoc acum</p>
+                <p className="text-3xl font-semibold tabular-nums">{onHand}</p>
+                <p className="text-xs opacity-80">
+                  {nowLevel === "out" ? "epuizat" : nowLevel === "low" ? "stoc scăzut" : unit}
+                </p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+              <div
+                className={cn(
+                  "rounded-lg p-3 text-center",
+                  tooMuchOut ? "bg-destructive/10 text-destructive" : LEVEL_TONE[afterLevel]
+                )}
+              >
+                <p className="text-xs font-medium opacity-80">După</p>
+                <p className="text-3xl font-semibold tabular-nums">{tooMuchOut ? "—" : after}</p>
+                <p className="text-xs opacity-80">
+                  {tooMuchOut
+                    ? "nu ajunge"
+                    : afterLevel === "out"
+                      ? "epuizat"
+                      : afterLevel === "low"
+                        ? "stoc scăzut"
+                        : unit}
+                </p>
+              </div>
             </div>
-          )}
-          {tracks && (
-            <div className="flex flex-col gap-1 sm:col-span-2">
+
+            <div role="group" aria-label="Tipul mișcării" className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                aria-pressed={direction === "in"}
+                onClick={() => setDirection("in")}
+                className={cn(
+                  "touch-target flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  direction === "in"
+                    ? "border-success bg-success/10 text-success"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <Plus className="h-5 w-5" aria-hidden="true" />
+                Adaug pe stoc
+              </button>
+              <button
+                type="button"
+                aria-pressed={direction === "out"}
+                onClick={() => setDirection("out")}
+                className={cn(
+                  "touch-target flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  direction === "out"
+                    ? "border-destructive bg-destructive/10 text-destructive"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <Minus className="h-5 w-5" aria-hidden="true" />
+                Scot din stoc
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="crm-stock-qty">Câte {direction === "in" ? "adaugi" : "scoți"}</Label>
+              <div className="flex flex-wrap items-center gap-3">
+                <QtyStepper id="crm-stock-qty" value={qty} onChange={setQty} unit={unit} label="Cantitatea" />
+                <div className="flex gap-1">
+                  {QUICK_QTY.map((n) => (
+                    <Button
+                      key={n}
+                      variant={qtyNumber === n ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setQty(String(n))}
+                      aria-label={`${n} ${unit}`}
+                    >
+                      {n}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              {tooMuchOut && (
+                <p className="text-sm text-destructive">
+                  Ai doar {onHand} {unit} pe stoc — nu poți scoate {qtyNumber}.
+                </p>
+              )}
+            </div>
+
+            {direction === "in" && (
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="crm-stock-cost">Cost unitar ({product?.currency}) — opțional</Label>
+                <Input
+                  id="crm-stock-cost"
+                  inputMode="decimal"
+                  value={unitCost}
+                  onChange={(e) => setUnitCost(e.target.value)}
+                  placeholder="ex. 120,50"
+                />
+                <p className="text-xs text-muted-foreground">Intră în costul mediu ponderat al articolului.</p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
               <Label htmlFor="crm-stock-notes">Motiv</Label>
+              <div className="flex flex-wrap gap-1">
+                {REASONS[direction].map((r) => (
+                  <Button
+                    key={r}
+                    variant={notes === r ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setNotes(r)}
+                  >
+                    {r}
+                  </Button>
+                ))}
+              </div>
               <Input
                 id="crm-stock-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="ex. recepție factură 1234 / inventar anual"
+                placeholder="sau scrie tu, ex. factura 1234"
               />
             </div>
-          )}
-        </div>
+
+            {limitField}
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="crm-stock-qty">Câte ai în depozit acum</Label>
+              <QtyStepper id="crm-stock-qty" value={qty} onChange={setQty} unit={unit} label="Cantitatea" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="crm-stock-cost">Cost unitar ({product?.currency})</Label>
+              <Input
+                id="crm-stock-cost"
+                inputMode="decimal"
+                value={unitCost}
+                onChange={(e) => setUnitCost(e.target.value)}
+                placeholder="ex. 120,50"
+              />
+            </div>
+            {limitField}
+          </>
+        )}
       </div>
     </Dialog>
   );
