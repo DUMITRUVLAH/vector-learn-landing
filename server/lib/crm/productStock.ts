@@ -33,7 +33,7 @@ import { db } from "../../db/client";
 import { leads, leadInteractions, type Lead } from "../../db/schema/leads";
 import { crmProducts } from "../../db/schema/crmProducts";
 import { crmPipelineStages } from "../../db/schema/crmPipelineStages";
-import { finInventoryItems } from "../../db/schema";
+import { finInventoryItems, finStockMovements } from "../../db/schema";
 import { recordStockMovement } from "../finInventoryMovements";
 import { createNotification, notifyManagersAndOwners } from "../createNotification";
 import { logCrmAudit } from "./audit";
@@ -215,14 +215,31 @@ async function restore(params: { tenantId: string; userId: string; lead: Lead })
     return { status: "noop" };
   }
 
-  const qty = Math.max(1, lead.productQty ?? 1);
+  // Se întoarce EXACT ce a scos mișcarea de vânzare, nu `productQty` de acum: cantitatea de pe
+  // lead se poate edita după câștig (2 → 4), iar returul celor 4 ar fi creat 2 bucăți fantomă în
+  // depozit. Ancora `stock_movement_id` ține deja mișcarea, deci cantitatea reală e acolo — fără
+  // o coloană nouă. Tot de acolo vine și articolul: dacă produsul a fost legat între timp de alt
+  // articol, bucățile se întorc în cel din care au plecat.
+  const [sale] = await db
+    .select({ qty: finStockMovements.qty, itemId: finStockMovements.itemId })
+    .from(finStockMovements)
+    .where(and(eq(finStockMovements.id, lead.stockMovementId), eq(finStockMovements.tenantId, tenantId)));
+  const qty = sale ? Math.max(1, Math.abs(sale.qty)) : Math.max(1, lead.productQty ?? 1);
+  const itemId = sale?.itemId ?? product.itemId;
+  const [saleItem] =
+    itemId === product.itemId
+      ? [{ avgCostCents: product.avgCostCents }]
+      : await db
+          .select({ avgCostCents: finInventoryItems.avgCostCents })
+          .from(finInventoryItems)
+          .where(and(eq(finInventoryItems.id, itemId), eq(finInventoryItems.tenantId, tenantId)));
   // Ajustare la costul mediu curent: cantitatea se întoarce, CMP-ul rămâne exact cât era.
   const result = await recordStockMovement({
     tenantId,
-    itemId: product.itemId,
+    itemId,
     movementType: "adjustment",
     qty,
-    unitCostCents: product.avgCostCents,
+    unitCostCents: saleItem?.avgCostCents ?? product.avgCostCents,
     reference: `CRM-${lead.id.slice(0, 8)}`,
     notes: `Vânzare retrasă în CRM: ${lead.fullName}`,
     movedBy: userId,

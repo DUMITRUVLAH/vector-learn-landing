@@ -12,7 +12,9 @@ import { leads, leadInteractions, type NewLead, type NewLeadInteraction } from "
 import { crmPipelineStages } from "../../db/schema/crmPipelineStages";
 import { crmPipelines } from "../../db/schema/crmPipelines";
 import { runAutomations } from "../../routes/crmAutomations";
+import { assignLeadAutomatically } from "../../routes/crmAssignment";
 import { ensureTenantPipeline } from "./pipelines";
+import { ensureTenantStages } from "./stages";
 import { enrollByStage } from "./cadences";
 import { syncLeadStockForStage } from "./productStock";
 import { logCrmAudit } from "./audit";
@@ -26,20 +28,33 @@ export interface PipelineStageRow {
   orderIndex: number;
 }
 
-/** Pâlnia leadului: cea a lui (dacă e a tenantului) sau implicita. */
+/**
+ * Pâlnia leadului: cea a lui (dacă e a tenantului) sau implicita — CU etapele ei semănate.
+ *
+ * De ce seamănă aici și nu doar la `GET /stages` / `GET /leads/pipeline`: într-un workspace nou
+ * etapele implicite nu existau până nu deschidea cineva tabla. Primul lead (creat din formular,
+ * din aplicație sau venit de pe site) purta `stage = "new"`, dar orice mutare răspundea
+ * `unknown_stage`, fișa arăta etapa `null`, iar mutarea în masă sărea leadul. Orice cale care
+ * validează o etapă trece prin funcția asta, deci semănatul pe loc închide gaura pentru toate.
+ * `ensureTenantStages` e idempotentă (gardă de numărare) și nu aruncă.
+ */
 export async function resolveLeadPipeline(
   tenantId: string,
   pipelineId: string | null
 ): Promise<{ id: string; isDefault: boolean } | null> {
+  let resolved: { id: string; isDefault: boolean } | null = null;
   if (pipelineId) {
     const [row] = await db
       .select({ id: crmPipelines.id, isDefault: crmPipelines.isDefault })
       .from(crmPipelines)
       .where(and(eq(crmPipelines.id, pipelineId), eq(crmPipelines.tenantId, tenantId)));
-    return row ?? null;
+    resolved = row ?? null;
+  } else {
+    const def = await ensureTenantPipeline(tenantId);
+    resolved = def ? { id: def.id, isDefault: def.isDefault } : null;
   }
-  const def = await ensureTenantPipeline(tenantId);
-  return def ? { id: def.id, isDefault: def.isDefault } : null;
+  if (resolved) await ensureTenantStages(tenantId, resolved.id);
+  return resolved;
 }
 
 /** Etapele unei pâlnii, în ordine. Pentru `null` (degradat) — etapele fără pâlnie ale tenantului. */
@@ -111,7 +126,17 @@ export async function applyLeadStageChange(opts: {
     after: { stage: toStage, lostReason: lostReason ?? null, ...(cause ? { cause } : {}) },
   });
 
-  await runAutomations({ tenantId, userId, lead: row, kind: "lead.stage_changed", toStage });
+  // `assignFn` e aceeași pe care o primește crearea leadului: fără ea, o automatizare „atribuie
+  // după regulă" declanșată de o schimbare de etapă nu avea cu ce atribui și scria în jurnal
+  // „atribuirea n-a putut fi făcută", deși regulile de repartizare existau.
+  await runAutomations({
+    tenantId,
+    userId,
+    lead: row,
+    kind: "lead.stage_changed",
+    toStage,
+    assignFn: async (l) => (await assignLeadAutomatically(tenantId, l))?.userId ?? null,
+  });
 
   // Cadențele cu etapă declanșatoare: intrarea în etapă înscrie leadul în secvența de urmărire.
   await enrollByStage(tenantId, leadId, toStage);

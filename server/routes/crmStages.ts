@@ -66,7 +66,8 @@ function slugifyLabel(label: string): string {
 const createStageSchema = z.object({
   /** Pâlnia în care intră etapa; absentă = implicita workspace-ului. */
   pipelineId: z.string().uuid().optional(),
-  label: z.string().min(1, "Eticheta este obligatorie"),
+  // Coloana e varchar(100): peste, Postgres aruncă și clientul primea 500 în loc de un mesaj.
+  label: z.string().min(1, "Eticheta este obligatorie").max(100, "Eticheta are cel mult 100 de caractere"),
   key: z.string().max(64).optional(),
   color: z.string().max(40).optional(),
   probabilityPct: z.number().int().min(0).max(100).optional(),
@@ -78,7 +79,7 @@ const updateStageSchema = z.object({
   // `key` e acceptată aici DOAR ca s-o putem respinge explicit (400 stage_key_immutable) — vezi
   // handler-ul PATCH de mai jos. Nu e niciodată scrisă în bază.
   key: z.string().max(64).optional(),
-  label: z.string().min(1).optional(),
+  label: z.string().min(1).max(100, "Eticheta are cel mult 100 de caractere").optional(),
   color: z.string().max(40).optional(),
   probabilityPct: z.number().int().min(0).max(100).optional(),
   isWon: z.boolean().optional(),
@@ -142,6 +143,12 @@ crmStagesRoutes.post("/", zValidator("json", createStageSchema), async (c) => {
 
   const pipeline = await resolvePipeline(user.tenantId, body.pipelineId);
   if (!pipeline) return c.json({ error: "not_found" }, 404);
+
+  // Întâi etapele implicite, apoi cea nouă. Garda din `ensureTenantStages` numără etapele pâlniei:
+  // dacă prima acțiune a unui workspace nou e „adaugă etapă", etapa custom făcea pâlnia ne-goală
+  // și cele 5 implicite nu mai apăreau niciodată — fără „Client", fără „Pierdut", iar leadurile
+  // noi intrau direct pe etapa adăugată.
+  await ensureTenantStages(user.tenantId, pipeline.id);
 
   // Etapa nouă intră la finalul ordinii curente A PÂLNIEI (nu a workspace-ului).
   const [{ maxOrder }] = await db

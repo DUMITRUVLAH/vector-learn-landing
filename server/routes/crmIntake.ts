@@ -19,12 +19,13 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmCaptureSources } from "../db/schema/crmCaptureSources";
 import { leads, leadInteractions, type NewLead } from "../db/schema/leads";
 import { normalizeEmail, normalizePhone } from "../lib/crm/normalize";
-import { ensureTenantPipeline } from "../lib/crm/pipelines";
+import { resolveLeadPipeline, stagesOfPipeline } from "../lib/crm/changeStage";
+import { stopCadencesOnReply } from "../lib/crm/cadences";
 import { assignLeadAutomatically } from "./crmAssignment";
 import { runAutomations } from "./crmAutomations";
 import { logCrmAudit } from "../lib/crm/audit";
@@ -104,7 +105,9 @@ crmIntakeRoutes.post("/webform", zValidator("json", intakeSchema), async (c) => 
     [existing] = await db
       .select({ id: leads.id })
       .from(leads)
-      .where(and(eq(leads.tenantId, tenantId), match))
+      // Un duplicat deja unificat în alt lead nu mai e „clientul": cererea nouă trebuie să ajungă
+      // pe leadul în care a fost unificat, nu pe o fișă scoasă din listă și de pe tablă.
+      .where(and(eq(leads.tenantId, tenantId), isNull(leads.mergedIntoId), match))
       .limit(1);
   }
 
@@ -125,12 +128,23 @@ crmIntakeRoutes.post("/webform", zValidator("json", intakeSchema), async (c) => 
         utmCampaign: body.utmCampaign ?? null,
       },
     });
+    // Omul a revenit singur, prin formular: e un răspuns, exact ca o interacțiune primită
+    // (`POST /leads/:id/interactions` cu direction inbound). Cadența de urmărire se oprește, altfel
+    // peste două zile agentul primește „sună, nu răspunde" despre cineva care tocmai a scris.
+    await stopCadencesOnReply(tenantId, existing.id, null);
     await bumpCounter(source.id);
     // Nu spunem câmpuri ale leadului existent: răspunsul ajunge într-o pagină publică.
     return c.json({ ok: true, isDuplicate: true }, 200);
   }
 
-  const pipeline = source.pipelineId ? { id: source.pipelineId } : await ensureTenantPipeline(tenantId);
+  // Pâlnia formularului (verificată că e a workspace-ului, altfel implicita), cu etapele semănate:
+  // într-un workspace nou, leadul venit de pe site trebuie să se poată muta imediat pe tablă.
+  const pipeline =
+    (source.pipelineId ? await resolveLeadPipeline(tenantId, source.pipelineId) : null) ??
+    (await resolveLeadPipeline(tenantId, null));
+  // Leadul intră pe PRIMA etapă a pâlniei lui, nu pe literalul „new" din default-ul coloanei:
+  // un formular legat de SPANCO ar fi pus leadul pe o etapă care acolo nu există — invizibil pe tablă.
+  const [firstStage] = pipeline ? await stagesOfPipeline(tenantId, pipeline.id) : [];
 
   const values: NewLead = {
     tenantId,
@@ -145,6 +159,7 @@ crmIntakeRoutes.post("/webform", zValidator("json", intakeSchema), async (c) => 
       ? source.defaultSource
       : "webform") as NewLead["source"],
     pipelineId: pipeline?.id ?? null,
+    ...(firstStage ? { stage: firstStage.key } : {}),
     utmSource: body.utmSource ?? null,
     utmMedium: body.utmMedium ?? null,
     utmCampaign: body.utmCampaign ?? null,
