@@ -20,6 +20,8 @@
  *
  * Montat la /api/crm/comms.
  */
+import { loadOrg } from "../lib/docs/orgInfo";
+import { crmSender } from "../lib/docs/documentEmail";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
@@ -98,12 +100,22 @@ crmCommsRoutes.post("/email", zValidator("json", emailInput), async (c) => {
       status = "failed";
       detail = "Serviciul de e-mail nu e configurat.";
     } else {
-      const from = process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "Vector Finance <onboarding@resend.dev>";
+      // CRM-U03: clientul vede numele firmei, nu adresa generică a serverului, iar răspunsul lui
+      // ajunge la vânzătorul care a scris — nu în noreply.
+      const org = await loadOrg(user.tenantId);
+      const from = crmSender(org.name);
+      const replyTo = (user as { email?: string }).email ?? null;
       try {
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ from, to: [to], subject: body.subject, text: body.body }),
+          body: JSON.stringify({
+            from,
+            to: [to],
+            subject: body.subject,
+            text: body.body,
+            ...(replyTo ? { reply_to: replyTo } : {}),
+          }),
         });
         if (!res.ok) {
           status = "failed";

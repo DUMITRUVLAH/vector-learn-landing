@@ -42,7 +42,6 @@ import { renderPrintablePdf, pdfFileName, buildPrintableHtml } from "../lib/docs
 import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
 import { recordLeadDocumentEvent } from "../lib/crm/documentEvents";
 import { ensureShareLink } from "./docShare";
-import { finOrgProfile } from "../db/schema/finCore";
 import { tenants } from "../db/schema/tenants";
 import { documentEmailHtml, documentSender } from "../lib/docs/documentEmail";
 import { blankUnresolved, unresolvedFields } from "../lib/docs/blanks";
@@ -92,30 +91,7 @@ function docStyleFor(doc: { counterpartyKind: string | null }): "classic" | "mod
   return doc.counterpartyKind === "crm_lead" ? "modern" : "classic";
 }
 
-/** Antetul actului (denumirea și logoul organizației) — aceleași date în PDF, ZIP și e-mail. */
-async function loadOrg(tenantId: string): Promise<{ name: string | null; logoUrl: string | null }> {
-  const [settings] = await db
-    .select()
-    .from(parSettings)
-    .where(eq(parSettings.tenantId, tenantId))
-    .limit(1);
-  if (settings?.orgLegalName) return { name: settings.orgLegalName, logoUrl: settings.orgLogoUrl ?? null };
-  // CRM-U03: un workspace doar-CRM n-are setări PAR — numele vine din „Datele firmei" (CRM-D04),
-  // apoi din numele workspace-ului. Altfel antetul PDF-ului și expeditorul e-mailului ieșeau fără firmă.
-  const [profile] = await db
-    .select({ legalName: finOrgProfile.legalName, logoUrl: finOrgProfile.logoUrl })
-    .from(finOrgProfile)
-    .where(eq(finOrgProfile.tenantId, tenantId))
-    .limit(1)
-    .catch(() => [] as { legalName: string; logoUrl: string | null }[]);
-  const [tenant] = profile?.legalName
-    ? []
-    : await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-  return {
-    name: profile?.legalName || tenant?.name || null,
-    logoUrl: settings?.orgLogoUrl ?? profile?.logoUrl ?? null,
-  };
-}
+import { loadOrg } from "../lib/docs/orgInfo";
 
 const lineSchema = z.object({
   description: z.string().min(1, "Denumirea poziției e obligatorie"),

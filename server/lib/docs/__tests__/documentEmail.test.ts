@@ -4,7 +4,7 @@
  * CRM-U03 — e-mailul actului „din partea FinFlow Documente".
  */
 import { describe, it, expect } from "vitest";
-import { documentEmailHtml, documentSender, senderAddress } from "../documentEmail";
+import { crmSender, documentEmailHtml, documentSender, senderAddress } from "../documentEmail";
 
 describe("expeditorul", () => {
   it("[blocant] numele afișat e al firmei + FinFlow Documente, adresa rămâne cea verificată", () => {
@@ -14,6 +14,11 @@ describe("expeditorul", () => {
   it("[blocant] un nume de firmă cu ghilimele sau < > nu rupe antetul", () => {
     expect(documentSender('SRL "Alfa" <x>', "noreply@finflow.best")).toBe('"SRL Alfa x · FinFlow Documente" <noreply@finflow.best>');
   });
+  it("[blocant] e-mailul scris din fișa leadului semnează cu firma: „<Firma> · FinFlow”", () => {
+    expect(crmSender("ATIC", "noreply@finflow.best")).toBe('"ATIC · FinFlow" <noreply@finflow.best>');
+    expect(crmSender(null, "noreply@finflow.best")).toBe('"FinFlow" <noreply@finflow.best>');
+  });
+
   it("fără EMAIL_FROM valid, cade pe domeniul FinFlow", () => {
     expect(senderAddress("")).toBe("noreply@finflow.best");
     expect(senderAddress("gunoi")).toBe("noreply@finflow.best");

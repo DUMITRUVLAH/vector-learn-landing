@@ -31,6 +31,12 @@ export function documentSender(orgName: string | null | undefined, env?: string)
   return `"${name}" <${senderAddress(env)}>`;
 }
 
+/** Expeditorul e-mailurilor scrise din fișa leadului: „<Firma> · FinFlow <adresa verificată>". */
+export function crmSender(orgName: string | null | undefined, env?: string): string {
+  const org = (orgName ?? "").replace(/[<>"\r\n,;]/g, " ").replace(/\s+/g, " ").trim();
+  return `"${org ? `${org} · FinFlow` : "FinFlow"}" <${senderAddress(env)}>`;
+}
+
 export function documentEmailHtml(opts: {
   message: string;
   orgName: string | null;
