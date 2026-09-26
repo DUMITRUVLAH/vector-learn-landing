@@ -20,7 +20,15 @@ export function sendRestrictions(
   lastInboundMeta: Record<string, unknown> | null
 ): { canSendFreeform: boolean; needsTemplate: boolean; blocked: boolean; reason: string | null } {
   if (channel.status !== "active") {
-    return { canSendFreeform: false, needsTemplate: false, blocked: true, reason: "Canalul nu e activ." };
+    return {
+      canSendFreeform: false,
+      needsTemplate: false,
+      blocked: true,
+      reason:
+        channel.status === "error"
+          ? "Canalul are o eroare de conectare — verifică-l în Canale de mesaje."
+          : "Canalul a fost deconectat. Istoricul rămâne; ca să răspunzi, reconectează-l din Canale de mesaje.",
+    };
   }
   if (contact.blockedAt) {
     return {
