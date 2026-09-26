@@ -131,6 +131,7 @@ export function TaskDependencies({ task, candidates, canEdit, onOpenTask, inDial
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("board.deps.search")}
+                aria-label={t("board.deps.search")}
                 className="h-8 text-sm"
               />
             </div>

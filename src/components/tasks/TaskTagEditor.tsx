@@ -46,11 +46,12 @@ export function TaskTagEditor({ value, onChange, className }: TaskTagEditorProps
             style={{ backgroundColor: palette.bg, color: palette.text }}
           >
             {tag.label}
+            {/* Ținta reală e mai mare decât X-ul (pseudo-element), ca eticheta să nu crească în înălțime. */}
             <button
               type="button"
               onClick={() => onChange(value.filter((x) => x !== raw))}
-              className="opacity-60 transition-opacity hover:opacity-100"
-              aria-label={t("board.actions.delete")}
+              className="relative opacity-60 transition-opacity after:absolute after:-inset-3 after:content-[''] hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-full"
+              aria-label={`${t("board.actions.delete")}: ${tag.label}`}
             >
               <X className="h-3 w-3" />
             </button>
@@ -89,9 +90,10 @@ export function TaskTagEditor({ value, onChange, className }: TaskTagEditorProps
                 key={key}
                 type="button"
                 onClick={() => setColor(key)}
-                aria-label={key}
+                aria-label={t(`board.tag.color.${key}`, { defaultValue: key })}
+                aria-pressed={color === key}
                 className={cn(
-                  "h-6 w-6 rounded-full border-2 transition-transform",
+                  "h-6 w-6 rounded-full border-2 transition-transform max-sm:h-9 max-sm:w-9",
                   color === key ? "scale-110 border-foreground" : "border-transparent",
                 )}
                 style={{ backgroundColor: palette.swatch }}

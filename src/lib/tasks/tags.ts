@@ -1,19 +1,22 @@
 // Etichetele task-urilor.
 //
-// Formatul stocat în `hr_tasks.tags` (text[]) e „label" sau „label|culoare" —
-// convenția introdusă de pagina veche `/tasks`. O păstrăm ca cele două UI-uri
-// să vadă aceleași etichete cât timp coexistă; funcțiile trăiesc aici, nu
-// duplicate în fiecare pagină.
+// Formatul stocat în `board_tasks.tags` e „label" sau „label|culoare" (convenția din
+// HR365). Funcțiile trăiesc aici, nu duplicate în fiecare pagină.
 
+/**
+ * Culorile etichetelor. Cheile (`blue`, `green`…) sunt cele stocate în task („label|blue"), deci nu se
+ * schimbă; valorile sunt tokenii de „chip" din `index.css` (au variantă light ȘI dark), nu hex-uri —
+ * sursa din HR365 avea hex fix, care în tema întunecată rămânea o pastilă deschisă pe fundal închis.
+ */
 export const TAG_COLORS: Record<string, { bg: string; text: string; swatch: string }> = {
-  gray: { bg: '#f3f4f6', text: '#4b5563', swatch: '#9ca3af' },
-  blue: { bg: '#dbeafe', text: '#1d4ed8', swatch: '#3b82f6' },
-  green: { bg: '#d1fae5', text: '#065f46', swatch: '#10b981' },
-  yellow: { bg: '#fef3c7', text: '#92400e', swatch: '#f59e0b' },
-  orange: { bg: '#ffedd5', text: '#9a3412', swatch: '#f97316' },
-  red: { bg: '#fee2e2', text: '#b91c1c', swatch: '#ef4444' },
-  purple: { bg: '#ede9fe', text: '#5b21b6', swatch: '#8b5cf6' },
-  rose: { bg: '#fce7f3', text: '#9d174d', swatch: '#f43f5e' },
+  gray: { bg: "hsl(var(--muted))", text: "hsl(var(--muted-foreground))", swatch: "hsl(var(--muted-foreground))" },
+  blue: { bg: "var(--chip-blue-bg)", text: "var(--chip-blue-fg)", swatch: "var(--chip-blue-fg)" },
+  green: { bg: "var(--chip-emerald-bg)", text: "var(--chip-emerald-fg)", swatch: "var(--chip-emerald-fg)" },
+  yellow: { bg: "var(--chip-amber-bg)", text: "var(--chip-amber-fg)", swatch: "var(--chip-amber-fg)" },
+  orange: { bg: "var(--chip-orange-bg)", text: "var(--chip-orange-fg)", swatch: "var(--chip-orange-fg)" },
+  red: { bg: "hsl(var(--destructive) / 0.12)", text: "hsl(var(--destructive))", swatch: "hsl(var(--destructive))" },
+  purple: { bg: "var(--chip-violet-bg)", text: "var(--chip-violet-fg)", swatch: "var(--chip-violet-fg)" },
+  rose: { bg: "var(--chip-rose-bg)", text: "var(--chip-rose-fg)", swatch: "var(--chip-rose-fg)" },
 };
 
 export interface ParsedTag {

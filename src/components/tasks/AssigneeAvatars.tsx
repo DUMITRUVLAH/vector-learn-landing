@@ -43,6 +43,8 @@ export function AssigneeAvatars({ userIds, index, size = "sm", max = 3, classNam
             <Tooltip key={id}>
               <TooltipTrigger asChild>
                 <span
+                  role="img"
+                  aria-label={name ?? t("board.detail.unknownUser")}
                   className={cn(
                     "inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-background",
                     SIZE_CLASSES[size],
@@ -61,6 +63,8 @@ export function AssigneeAvatars({ userIds, index, size = "sm", max = 3, classNam
         })}
         {overflow > 0 && (
           <span
+            role="img"
+            aria-label={t("board.overview.andMore", { count: overflow })}
             className={cn(
               "inline-flex items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground ring-2 ring-background",
               SIZE_CLASSES[size],

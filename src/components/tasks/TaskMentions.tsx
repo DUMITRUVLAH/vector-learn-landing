@@ -7,7 +7,7 @@
 // Toată logica de text e în `src/lib/tasks/mentions.ts`, pură și testată; aici
 // rămâne doar tastatura și randarea.
 
-import { forwardRef, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { forwardRef, useId, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { AtSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/tasks/ui";
@@ -96,6 +96,10 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaPr
 
   const candidates = useMemo(() => (query ? filterMentionCandidates(people, query.query) : []), [people, query]);
   const open = query !== null && candidates.length > 0;
+  // Autocompletarea e un combobox: textarea anunță lista, iar opțiunea activă e citită fără ca
+  // focusul să plece din câmp (`aria-activedescendant`).
+  const listId = useId();
+  const optionId = (index: number) => `${listId}-option-${index}`;
 
   /** Recalculează starea selectorului din textul și cursorul CURENTE. */
   const syncQuery = (text: string, caret: number) => {
@@ -159,11 +163,20 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaPr
             de jos a panoului, deci în jos n-ar avea unde să încapă.
             z-80 = treapta popup-urilor din produs (suprafețe 50, panouri 70).
           */
-        <div className="absolute bottom-full left-0 z-[80] mb-1 w-[min(280px,100%)] overflow-hidden rounded-xl border bg-popover p-1 shadow-lg">
+        <div
+          id={listId}
+          role="listbox"
+          aria-label={t("mention.hint")}
+          className="absolute bottom-full left-0 z-[80] mb-1 w-[min(280px,100%)] overflow-hidden rounded-xl border bg-popover p-1 shadow-lg"
+        >
           {candidates.map((person, index) => (
             <button
               key={person.user_id}
+              id={optionId(index)}
               type="button"
+              role="option"
+              aria-selected={index === active}
+              tabIndex={-1}
               // `onMouseDown` cu preventDefault, nu `onClick`: un click ar lua
               // întâi focusul din textarea, iar `setSelectionRange` de mai sus
               // ar scrie într-un câmp nefocalizat.
@@ -207,6 +220,12 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaPr
         onBlur={() => setQuery(null)}
         onKeyDown={handleKeyDown}
         onPaste={onPaste}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open ? optionId(active) : undefined}
+        aria-label={placeholder ?? t("mention.hint")}
         placeholder={placeholder ?? t("mention.hint")}
         className={cn("min-h-9 resize-none text-sm", className)}
       />

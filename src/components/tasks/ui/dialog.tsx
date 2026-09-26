@@ -12,7 +12,9 @@ import {
   forwardRef,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type ReactNode,
@@ -40,6 +42,9 @@ interface ModalContextValue {
   setOpen: (open: boolean) => void;
   titleId: string;
   descriptionId: string;
+  /** Referim descrierea doar cât timp e randată — un `aria-describedby` spre un id inexistent e o legătură ruptă. */
+  hasDescription: boolean;
+  setHasDescription: (present: boolean) => void;
   triggerRef: RefObject<HTMLElement | null>;
 }
 
@@ -63,9 +68,12 @@ function ModalRoot({ open, defaultOpen, onOpenChange, children }: ModalRootProps
   const [isOpen, setOpen] = useControllableOpen(open, defaultOpen, onOpenChange);
   const titleId = useStableId("dialog-title");
   const descriptionId = useStableId("dialog-desc");
+  const [hasDescription, setHasDescription] = useState(false);
   const triggerRef = useRef<HTMLElement | null>(null);
   return (
-    <ModalContext.Provider value={{ open: isOpen, setOpen, titleId, descriptionId, triggerRef }}>
+    <ModalContext.Provider
+      value={{ open: isOpen, setOpen, titleId, descriptionId, hasDescription, setHasDescription, triggerRef }}
+    >
       {children}
     </ModalContext.Provider>
   );
@@ -154,7 +162,7 @@ const Surface = forwardRef<HTMLDivElement, SurfaceProps>(function Surface(
         role={role}
         aria-modal="true"
         aria-labelledby={ctx.titleId}
-        aria-describedby={ctx.descriptionId}
+        aria-describedby={ctx.hasDescription ? ctx.descriptionId : undefined}
         tabIndex={-1}
         data-state="open"
         className={className}
@@ -280,6 +288,11 @@ function Title({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
 
 function Description({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
   const ctx = useModal("Description");
+  const { setHasDescription } = ctx;
+  useLayoutEffect(() => {
+    setHasDescription(true);
+    return () => setHasDescription(false);
+  }, [setHasDescription]);
   return <p id={ctx.descriptionId} className={cn("text-sm text-muted-foreground", className)} {...props} />;
 }
 

@@ -199,6 +199,7 @@ export function StatusKanban({
                       if (!newTitle.trim()) setAddingIn(null);
                     }}
                     placeholder={t("board.card.newPlaceholder")}
+                    aria-label={t("board.card.newPlaceholder")}
                     className="h-8 border-0 px-1 text-sm shadow-none focus-visible:ring-0"
                   />
                 </div>
@@ -254,7 +255,7 @@ function StatusColumn({ status, label, count, canAdd, onStartAdd, children }: St
             type="button"
             onClick={onStartAdd}
             className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus:opacity-100 group-hover/col:opacity-100"
-            aria-label="+"
+            aria-label={t("board.card.add")}
           >
             <Plus className="h-3.5 w-3.5" />
           </button>

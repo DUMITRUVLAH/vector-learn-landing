@@ -320,6 +320,7 @@ export function BoardKanbanView({
             {renaming === key ? (
               <Input
                 autoFocus
+                aria-label={t("board.list.rename")}
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -512,6 +513,7 @@ export function BoardKanbanView({
                       if (!newTitle.trim()) setAddingIn(null);
                     }}
                     placeholder={t("board.card.newPlaceholder")}
+                    aria-label={t("board.card.newPlaceholder")}
                     className="h-8 border-0 px-1 text-sm shadow-none focus-visible:ring-0"
                   />
                 </div>
@@ -701,6 +703,7 @@ export function BoardKanbanView({
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
               placeholder={t("board.list.bulkPlaceholder")}
+              aria-label={t("board.list.bulkPlaceholder")}
               className="text-sm"
             />
           </div>

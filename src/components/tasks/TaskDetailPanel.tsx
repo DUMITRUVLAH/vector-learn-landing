@@ -5,7 +5,7 @@
 // Titlul și descrierea salvează doar dacă s-au schimbat efectiv, ca să nu umple
 // istoricul cu intrări goale.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { format, parseISO } from "date-fns";
 import type { Locale } from "date-fns";
 import {
@@ -845,6 +845,7 @@ export function TaskDetailPanel({
                   {editingSub === sub.id ? (
                     <Input
                       autoFocus
+                      aria-label={t("board.detail.renameSubtask")}
                       value={editingSubTitle}
                       onChange={(event) => setEditingSubTitle(event.target.value)}
                       onKeyDown={(event) => {
@@ -1219,10 +1220,18 @@ interface FieldProps {
 }
 
 function Field({ label, children }: FieldProps) {
+  // Controalele din câmp sunt de tot felul (selectoare, popover-e, butoane de dată), deci eticheta nu
+  // se poate lega cu `htmlFor` de un singur `id`. Un grup etichetat face ca cititorul de ecran să
+  // anunțe „Status, grup — În lucru" în loc de doar valoarea, fără nume.
+  const labelId = useId();
   return (
     <div className="grid gap-1 sm:grid-cols-[120px_minmax(0,1fr)] sm:items-start sm:gap-3">
-      <Label className="block pt-2 text-xs font-medium text-muted-foreground">{label}</Label>
-      <div className="min-w-0">{children}</div>
+      <Label id={labelId} className="block pt-2 text-xs font-medium text-muted-foreground">
+        {label}
+      </Label>
+      <div role="group" aria-labelledby={labelId} className="min-w-0">
+        {children}
+      </div>
     </div>
   );
 }
@@ -1271,6 +1280,7 @@ function InlineAdd({ value, onValueChange, placeholder, onSubmit }: InlineAddPro
           }
         }}
         placeholder={placeholder}
+        aria-label={placeholder}
         className="h-7 border-0 px-0 text-sm shadow-none focus-visible:ring-0"
       />
       {value.trim() && (
