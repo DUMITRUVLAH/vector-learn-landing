@@ -356,6 +356,11 @@ function Routes() {
   // CRM-D01: fișa unui act al unui lead rămâne în CRM (același editor ca în registru).
   if (/^\/business\/crm\/documente\/[0-9a-f-]{8,}/i.test(path)) return <BusinessGuardPage><DocEditorPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/documente")) return <BusinessGuardPage><CrmDocumentsPage /></BusinessGuardPage>;
+  // NAV-04: contractele și facturile FinDesk, montate și în CRM — aceleași pagini, meniul CRM în jur.
+  if (path.startsWith("/business/crm/contracte")) return <BusinessGuardPage><Suspense fallback={null}><AgreementsPage /></Suspense></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/facturi/cont-de-plata")) return <BusinessGuardPage><FinInvoiceDocPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/facturi/efactura")) return <BusinessGuardPage><FinEinvoicesPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/facturi")) return <BusinessGuardPage><FinInvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/automatizari")) return <BusinessGuardPage><CrmAutomationsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/comunicare")) return <BusinessGuardPage><CrmCommsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/crm/mesaje")) return <BusinessGuardPage><CrmInboxPage /></BusinessGuardPage>;
