@@ -231,7 +231,7 @@ export function FinInsightsPage() {
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <AppShell
-      pageTitle="FinDesk Insights"
+      pageTitle="Analiză financiară"
       pageDescription="Analiză financiară avansată — metrici, forecast, narativă AI"
       actions={
         <div className="flex items-center gap-2">

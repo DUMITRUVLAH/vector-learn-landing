@@ -859,7 +859,7 @@ export function InventoryPage() {
 
   if (status === "loading") {
     return (
-      <AppShell pageTitle="Inventar">
+      <AppShell pageTitle="Stocuri">
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -874,29 +874,21 @@ export function InventoryPage() {
   ];
 
   return (
-    <AppShell pageTitle="Inventar">
-      <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <Package className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Inventar</h1>
-              <p className="text-sm text-muted-foreground">
-                Gestiunea stocurilor de materiale didactice și consumabile
-              </p>
-            </div>
-          </div>
-          <a
-            href="#/app/fin/inventory/report"
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-          >
-            Raport stoc
-          </a>
-        </div>
-
+    <AppShell
+      pageTitle="Stocuri"
+      pageDescription="Articolele din stoc, mișcările lor și soldul curent."
+      actions={
+        <a
+          href="#/business/fin/inventory/report"
+          className="inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+        >
+          Raport stoc
+        </a>
+      }
+    >
+      {/* NAV-07: un titlu, cu numele din meniu. „Raport stoc" ducea la #/app/fin/… (aplicația
+          „learn"), iar descrierea vorbea de „materiale didactice" — text rămas din CRM-ul școlar. */}
+      <div className="space-y-6">
         {/* Banner sumar */}
         <StockBanner />
 

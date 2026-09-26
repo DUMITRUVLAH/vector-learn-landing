@@ -17,7 +17,6 @@
 import { useEffect, useState } from "react";
 import {
   Loader2,
-  Shield,
   Eye,
   EyeOff,
   Clock,
@@ -206,7 +205,7 @@ export function FinSecuritySettingsPage() {
 
   if (sessionStatus === "loading" || loading) {
     return (
-      <AppShell pageTitle="Securitate — FinDesk">
+      <AppShell pageTitle="Securitate">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se încarcă" />
         </div>
@@ -215,23 +214,12 @@ export function FinSecuritySettingsPage() {
   }
 
   return (
-    <AppShell pageTitle="Securitate & Confidențialitate — FinDesk">
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Shield className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">
-              Securitate & Confidențialitate
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Setări GDPR FinDesk — pseudonimizare, retenție date, export și anonimizare
-            </p>
-          </div>
-        </div>
-
+    <AppShell
+      pageTitle="Securitate"
+      pageDescription="GDPR în FinDesk: pseudonimizare, retenția datelor, export și anonimizare."
+    >
+      {/* NAV-07: un singur titlu — cel din antet, cu numele din meniu. */}
+      <div className="max-w-3xl space-y-6">
         {/* Error banner */}
         {error && (
           <div

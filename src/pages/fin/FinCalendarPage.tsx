@@ -357,10 +357,10 @@ export function FinCalendarPage() {
 
   return (
     <AppShell
-      pageTitle="Calendar Fiscal"
-      pageDescription={`${MONTH_NAMES[month - 1]} ${year} — Obligații fiscale`}
+      pageTitle="Calendar fiscal"
+      pageDescription="Obligațiile fiscale ale lunii, termenele lor și închiderea perioadei."
     >
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <div className="space-y-6">
 
         {/* Header navigare */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -372,9 +372,11 @@ export function FinCalendarPage() {
             >
               <ChevronLeft className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
             </button>
-            <h1 className="text-xl font-semibold text-foreground min-w-[160px] text-center">
+            {/* NAV-07: luna e subtitlul navigatorului, nu al doilea titlu al paginii. aria-live: la
+                „luna următoare" cititorul de ecran anunță unde a ajuns. */}
+            <h2 className="text-xl font-semibold text-foreground min-w-[160px] text-center" aria-live="polite">
               {MONTH_NAMES[month - 1]} {year}
-            </h1>
+            </h2>
             <button
               onClick={nextMonth}
               aria-label="Luna următoare"

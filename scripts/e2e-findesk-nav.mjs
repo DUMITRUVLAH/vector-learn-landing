@@ -11,7 +11,7 @@
  * nouă" de pe ecranul de start chiar deschide formularul (§3.5.1quater).
  */
 import { chromium } from "playwright-core";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const BASE = (process.env.BASE_URL ?? `http://localhost:${process.env.E2E_PORT ?? "3131"}`).replace(/\/$/, "");
@@ -85,6 +85,22 @@ async function main() {
         .join(" · "),
     );
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${r.path.replace(/\W+/g, "_")}.png`), fullPage: true });
+  }
+
+  // NAV-07: fiecare rând din harta FinDesk deschide o pagină cu UN titlu, identic cu eticheta din
+  // meniu. 11 pagini aveau două <h1> (shell + propriul antet) sau un nume diferit de meniu.
+  const mapSrc = readFileSync(new URL("../src/lib/fin/finNav.ts", import.meta.url), "utf-8");
+  const mapRows = [...mapSrc.matchAll(/label: "([^"]+)",\s*href: "(\/business\/fin\/[^"]+)"/g)]
+    .map((m) => ({ label: m[1], href: m[2] }))
+    // Ecranul de start poartă numele firmei, nu „Acasă FinDesk".
+    .filter((r) => r.href !== "/business/fin/");
+  for (const row of mapRows) {
+    errors.length = 0;
+    await page.goto(`${BASE}/#${row.href}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2000);
+    const h1 = (await page.locator("main h1").allInnerTexts()).map((t) => t.trim());
+    const ok = h1.length === 1 && h1[0] === row.label && errors.length === 0;
+    check(`titlu = meniu: ${row.label}`, ok, ok ? "" : `h1=${JSON.stringify(h1)}${errors.length ? ` JS: ${errors[0]}` : ""}`);
   }
 
   // Acțiunea, nu doar butonul: „Factură nouă" de pe ecranul de start deschide formularul.

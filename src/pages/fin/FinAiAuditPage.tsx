@@ -15,7 +15,6 @@ import {
   Loader2,
   Trash2,
   RefreshCw,
-  Shield,
   Filter,
   ChevronLeft,
   ChevronRight,
@@ -140,34 +139,22 @@ export function FinAiAuditPage() {
   }
 
   return (
-    <AppShell pageTitle="Audit AI — FinDesk">
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Shield className="h-5 w-5 text-primary" aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">
-                Jurnal Audit AI
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Toate apelurile AI ale tenantului — GDPR Art. 30 trasabilitate
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowPurgeDialog(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
-            aria-label="Șterge log vechi conform politicii de retenție"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            Purge log vechi
-          </button>
-        </div>
-
+    <AppShell
+      pageTitle="Audit AI"
+      pageDescription="Fiecare apel AI al firmei, pentru trasabilitate (GDPR art. 30)."
+      actions={
+        <button
+          onClick={() => setShowPurgeDialog(true)}
+          className="inline-flex min-h-[44px] items-center gap-2 px-3 py-2 text-sm rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+          aria-label="Șterge log vechi conform politicii de retenție"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          Purge log vechi
+        </button>
+      }
+    >
+      {/* NAV-07: un singur titlu — cel din antet, cu numele din meniu. */}
+      <div className="space-y-6">
         {/* Purge result toast */}
         {purgeResult !== null && (
           <div

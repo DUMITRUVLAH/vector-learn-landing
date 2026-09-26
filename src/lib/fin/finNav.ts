@@ -146,7 +146,9 @@ export const FIN_NAV_GROUPS: FinNavGroup[] = [
   {
     section: "Contabilitate & rapoarte",
     items: [
-      { label: "Registru general", href: "/business/fin/ledger", icon: Landmark, tone: "indigo", description: "Venituri, cheltuieli, profit și cashflow." },
+      // NAV-07: pagina e un tablou de analiză (venituri, profit, cashflow), nu registrul contabil —
+      // „Registru general" promitea altceva decât deschidea.
+      { label: "Analiză financiară", href: "/business/fin/ledger", icon: Landmark, tone: "indigo", description: "Venituri, cheltuieli, profit și cashflow." },
       { label: "Buget", href: "/business/fin/budget", icon: BarChart3, tone: "violet", description: "Planificat față de realizat." },
       { label: "Export & rapoarte", href: "/business/fin/export", icon: BarChart3, tone: "sky", description: "Exporturi pentru contabil și rapoarte." },
       { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks, tone: "rose", description: "Facturi recurente în bloc, import CSV." },

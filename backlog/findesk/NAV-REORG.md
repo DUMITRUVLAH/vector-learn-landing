@@ -45,12 +45,14 @@ e-Factura, mutarea în CRM a ce ține de vânzări și un prim ecran mai bun.
 
 | ID | Titlu | Stare |
 |----|-------|-------|
-| NAV-01 | Meniu FinDesk dedicat, grupat (sursă unică `finNav.ts`) | în lucru |
-| NAV-02 | Facturare unificată: Facturi · Cont de plată · e-Factura ca file, un singur titlu | în lucru |
-| NAV-03 | Extrase bancare: import + istoric într-un rând | în lucru |
-| NAV-04 | CRM: Contracte + Facturi în meniul CRM | în lucru |
-| NAV-05 | Primul ecran FinDesk: tablou de lucru + module pe grupe | în lucru |
-| NAV-06 | Tabloul de bord general: fără dale-placeholder („Disponibil în FinDesk →”) | în lucru |
+| NAV-01 | Meniu FinDesk dedicat, grupat (sursă unică `finNav.ts`) | livrat |
+| NAV-02 | Facturare unificată: Facturi · Cont de plată · e-Factura ca file, un singur titlu | livrat |
+| NAV-03 | Extrase bancare: import + istoric într-un rând | livrat |
+| NAV-04 | CRM: Contracte + Facturi în meniul CRM | livrat |
+| NAV-05 | Primul ecran FinDesk: tablou de lucru + module pe grupe | livrat |
+| NAV-06 | Tabloul de bord general: fără dale-placeholder („Disponibil în FinDesk →”) | livrat |
+| NAV-07 | Un titlu per pagină, cu numele din meniu (11 pagini aveau două `<h1>`) | livrat |
+| NAV-08 | IT Park: modulul întreg rutat în `/business/fin/itpark/*` (azi doar detaliul, rupt) | în lucru |
 
 ## Backlog descoperit (nu intră în faza asta)
 
@@ -61,3 +63,16 @@ e-Factura, mutarea în CRM a ce ține de vânzări și un prim ecran mai bun.
   semnat din CRM devine automat contract recurent cu facturare?
 - „Salarizare” și „Pontaj” sunt module separate care ar trebui să comunice (orele din pontaj → statul
   de plată).
+
+## Faza 2 — ce a mai găsit măturarea (2026-09-26)
+
+- 11 pagini FinDesk aveau **două titluri** (antetul shellului + propriul `<h1>`) sau un nume diferit
+  de meniu („Active Fixe” / „Mijloace fixe”, „Operații Bulk” / „Operațiuni în masă”). Acum titlul e
+  unul, cel din meniu, iar `scripts/e2e-findesk-nav.mjs` verifică asta pentru fiecare rând al hărții.
+- „Registru general” deschidea un tablou de analiză (venituri, profit, cashflow), nu registrul
+  contabil → redenumit „Analiză financiară”.
+- „Import extras” din Încasări și „Raport stoc” din Stocuri trimiteau la `#/app/fin/…` (aplicația
+  „learn”). Stocuri vorbea de „materiale didactice” — text rămas din CRM-ul școlar.
+- **IT Park e rupt pe `/business`**: din 10 pagini e rutată doar fișa unui dosar, care caută id-ul
+  după prefixul vechi `/app/fin/itpark/<id>` → pe `/business/fin/itpark` rămâne pe spinner, fără
+  meniu. Lista, asistentul, anexele și scrisorile nu sunt accesibile deloc → NAV-08.

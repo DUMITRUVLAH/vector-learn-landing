@@ -448,7 +448,7 @@ export function PartiesPage() {
 
   return (
     <AppShell
-      pageTitle="Parteneri comerciali"
+      pageTitle="Parteneri"
       pageDescription="Clienți, furnizori și parteneri FinDesk"
       actions={
         <button

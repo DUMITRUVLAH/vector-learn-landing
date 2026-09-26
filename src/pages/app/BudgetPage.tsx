@@ -15,7 +15,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  PieChart,
   Plus,
   Loader2,
   CheckCircle,
@@ -513,7 +512,7 @@ export function BudgetPage(): JSX.Element {
 
   if (status === "loading") {
     return (
-      <AppShell pageTitle="Bugete">
+      <AppShell pageTitle="Buget">
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -536,29 +535,22 @@ export function BudgetPage(): JSX.Element {
   }
 
   return (
-    <AppShell pageTitle="Bugete">
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <PieChart className="h-6 w-6 text-primary" aria-hidden="true" />
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">Bugete</h1>
-              <p className="text-sm text-muted-foreground">
-                Gestionează bugetele anuale și urmărește execuția față de cheltuielile reale.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="h-9 inline-flex items-center gap-2 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Creează buget nou"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Buget nou
-          </button>
-        </div>
-
+    <AppShell
+      pageTitle="Buget"
+      pageDescription="Bugetele anuale și execuția lor față de cheltuielile reale."
+      actions={
+        <button
+          onClick={() => setShowCreate(true)}
+          className="inline-flex min-h-[44px] items-center gap-2 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Creează buget nou"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Buget nou
+        </button>
+      }
+    >
+      {/* NAV-07: un singur titlu — cel din antet, cu numele din meniu. */}
+      <div className="space-y-6">
         {/* Dacă avem un buget selectat → detaliu */}
         {selectedId ? (
           <BudgetDetail budgetId={selectedId} onBack={() => setSelectedId(null)} />

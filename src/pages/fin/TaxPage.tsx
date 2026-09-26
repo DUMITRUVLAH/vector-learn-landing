@@ -547,7 +547,7 @@ export function TaxPage() {
 
   return (
     <AppShell
-      pageTitle="FinDesk — Declarații fiscale"
+      pageTitle="TVA & declarații"
       pageDescription="Perioade fiscale, calcul TVA + impozit venit, export PDF/CSV"
       actions={
         <button

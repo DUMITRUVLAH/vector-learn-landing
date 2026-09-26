@@ -531,7 +531,7 @@ export function FinMassPage() {
 
   return (
     <AppShell
-      pageTitle="Operații Bulk"
+      pageTitle="Operațiuni în masă"
       pageDescription="Generare facturi în masă + import CSV — FinDesk"
     >
       <div className="max-w-5xl mx-auto space-y-8 p-4 sm:p-6">

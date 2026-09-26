@@ -667,16 +667,10 @@ export function FinExpensesPage() {
       : 0;
 
   return (
-    <AppShell pageTitle="Cheltuieli" pageDescription="Gestionare cheltuieli FinDesk">
-      <div className="max-w-7xl mx-auto space-y-6 p-4">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">Cheltuieli</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Gestionați cheltuielile organizației cu TVA deductibil și flux de aprobare.
-            </p>
-          </div>
+    <AppShell
+      pageTitle="Cheltuieli"
+      pageDescription="Cheltuielile firmei, cu TVA deductibil și flux de aprobare."
+      actions={
           <div className="flex gap-2">
             <button
               onClick={handleExport}
@@ -698,8 +692,10 @@ export function FinExpensesPage() {
               Cheltuială nouă
             </button>
           </div>
-        </div>
-
+      }
+    >
+      {/* NAV-07: un singur titlu — cel din antet, cu numele din meniu. */}
+      <div className="space-y-6">
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard

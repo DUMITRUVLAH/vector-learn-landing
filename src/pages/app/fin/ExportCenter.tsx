@@ -207,7 +207,7 @@ export function ExportCenter() {
 
   return (
     <AppShell
-      pageTitle="Export Contabil"
+      pageTitle="Export & rapoarte"
       pageDescription="Descarcă date contabile în format compatibil 1C, SAGA C, SAF-T RO, SFS Moldova"
     >
       <div className="space-y-8 max-w-3xl">

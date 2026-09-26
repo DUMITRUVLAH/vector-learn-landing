@@ -111,16 +111,10 @@ export default function ReconcilePage() {
   };
 
   return (
-    <AppShell pageTitle="Reconciliere & TVA import">
-      <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-        {/* Header + Synchronize */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Reconciliere & TVA la import</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Potrivește tranzacțiile bancare cu documentele încărcate de echipe și vezi ce lipsește.
-            </p>
-          </div>
+    <AppShell
+      pageTitle="Reconciliere & TVA import"
+      pageDescription="Potrivește tranzacțiile bancare cu documentele echipelor și vezi ce lipsește."
+      actions={
           <div className="flex flex-wrap items-center gap-2">
             <label className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
               {importing ? (
@@ -150,8 +144,10 @@ export default function ReconcilePage() {
               {syncing ? "Se sincronizează…" : "Sincronizează"}
             </button>
           </div>
-        </div>
-
+      }
+    >
+      {/* NAV-07: un singur titlu — cel din antet, cu numele din meniu. */}
+      <div className="space-y-6">
         {importMsg && (
           <div className="flex items-center gap-2 rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800 dark:bg-green-900/40 dark:text-green-300" role="status">
             <CheckCircle2 className="h-4 w-4 shrink-0" />

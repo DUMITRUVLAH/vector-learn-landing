@@ -613,7 +613,7 @@ export function AssetsPage() {
 
   return (
     <AppShell
-      pageTitle="Active Fixe"
+      pageTitle="Mijloace fixe"
       pageDescription="Registrul activelor fixe — amortizare și casare"
       actions={
         <div className="flex items-center gap-2">

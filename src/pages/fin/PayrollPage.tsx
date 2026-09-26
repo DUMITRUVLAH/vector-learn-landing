@@ -184,16 +184,11 @@ export function PayrollFINPage() {
   }
 
   return (
-    <AppShell pageTitle="Salarizare (Payroll)">
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Salarizare</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Rulaje lunare de calcul salarii — calcul DETERMINIST brut↔net
-            </p>
-          </div>
+    <AppShell
+      pageTitle="Salarizare"
+      pageDescription="Rulaje lunare de salarii — calcul brut↔net determinist, cu contribuțiile la zi."
+      actions={
+        <>
           {/* MOB-001: rândul ăsta de acțiuni depășea ecranul cu 31 px pe iPhone SE și făcea toată
               pagina să deruleze pe orizontală. Acum derulează el, nu pagina. */}
           <div className="action-row-scroll">
@@ -235,8 +230,11 @@ export function PayrollFINPage() {
               Rulaj nou
             </button>
           </div>
-        </div>
-
+        </>
+      }
+    >
+      {/* NAV-07: un singur titlu — cel din antet, cu numele din meniu. */}
+      <div className="space-y-6">
         {/* Create run modal */}
         {showCreate && (
           <div
