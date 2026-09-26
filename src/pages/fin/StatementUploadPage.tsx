@@ -11,6 +11,7 @@
  */
 import { useState, useRef, useCallback } from "react";
 import { FinLayout } from "./FinLayout";
+import { StatementTabs } from "@/components/fin/ModuleTabs";
 import { useRouter } from "@/router/HashRouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -124,7 +125,9 @@ export default function StatementUploadPage() {
   const handleDragLeave = () => setIsDragOver(false);
 
   return (
-    <FinLayout pageTitle="Import extras de cont">
+    <FinLayout pageTitle="Extrase bancare" pageDescription="Încarcă extrasul de cont (PDF, CSV sau Excel) — liniile se citesc automat.">
+      {/* NAV-03: importul și istoricul sunt file ale aceluiași modul, nu două rânduri de meniu. */}
+      <StatementTabs />
       <div className="max-w-2xl mx-auto space-y-6">
         {/* ── Drag-drop zone ─────────────────────────────────────────────── */}
         <div

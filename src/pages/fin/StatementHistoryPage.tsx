@@ -12,6 +12,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { FinLayout } from "./FinLayout";
+import { StatementTabs } from "@/components/fin/ModuleTabs";
 import { useRouter } from "@/router/HashRouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -137,7 +138,9 @@ export default function StatementHistoryPage() {
   };
 
   return (
-    <FinLayout pageTitle="Extrase de cont">
+    <FinLayout pageTitle="Extrase bancare" pageDescription="Extrasele importate, pe luni, și starea fiecăruia.">
+      {/* NAV-03: importul și istoricul sunt file ale aceluiași modul, nu două rânduri de meniu. */}
+      <StatementTabs />
       {/* ── Toast ────────────────────────────────────────────────────────────── */}
       {toast && (
         <div
