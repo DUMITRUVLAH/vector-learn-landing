@@ -97,3 +97,5 @@ export * from "./crmAutomations";
 export * from "./pontaj";
 // Comunicare omnicanal — WhatsApp, Telegram, Viber, Gmail (COMMS-301)
 export * from "./comms";
+// Managerul de task-uri — boarduri, coloane, task-uri, echipe (TASKS-001)
+export * from "./tasks";

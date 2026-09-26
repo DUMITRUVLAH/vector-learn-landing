@@ -1373,6 +1373,13 @@
       "when": 1789000000019,
       "tag": "0196_cont_plata_personalizabil",
       "breakpoints": true
+    },
+    {
+      "idx": 197,
+      "version": "7",
+      "when": 1790426957023,
+      "tag": "0197_tasks_module",
+      "breakpoints": true
     }
   ]
 }

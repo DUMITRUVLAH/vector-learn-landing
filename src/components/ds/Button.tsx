@@ -5,7 +5,7 @@
  * `rounded-md` (12px), medium weight, 8px gap to a leading icon.
  * Renders a router `<Link>` when given `href` so nav buttons stay real links.
  */
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Link } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 
@@ -64,14 +64,19 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
 }
 
-export function Button({
+/**
+ * `forwardRef`, ca butonul să poată fi ancora unui popover sau a unui meniu (`asChild`): acolo
+ * poziționarea citește dreptunghiul NODULUI DOM, iar un component care înghite ref-ul lasă
+ * meniul lipit în colțul ecranului.
+ */
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
   variant = "default",
   size = "default",
   href,
   className,
   children,
   ...rest
-}: ButtonProps) {
+}, ref) {
   const classes = cn(
     BASE,
     VARIANTS[variant],
@@ -89,8 +94,8 @@ export function Button({
   }
 
   return (
-    <button type="button" data-slot="button" data-variant={variant} className={classes} {...rest}>
+    <button ref={ref} type="button" data-slot="button" data-variant={variant} className={classes} {...rest}>
       {children}
     </button>
   );
-}
+});

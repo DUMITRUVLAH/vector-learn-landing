@@ -19,13 +19,14 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { parTeamMembers, parTeams } from "../db/schema/par";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { teammateUserIds } from "../lib/par/teamScope";
+import { addTeamMembers, teamsWithMembers } from "../lib/teams";
 import { writeAuditLog } from "../lib/auditLogger";
 import { clientIp } from "../lib/clientIp";
 
@@ -33,38 +34,6 @@ export const parTeamsRoutes = new Hono<{ Variables: AuthVariables }>();
 parTeamsRoutes.use("*", requireAuth);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-interface TeamMemberDto {
-  userId: string;
-  name: string | null;
-  email: string | null;
-}
-
-/** Echipele cerute, fiecare cu oamenii ei — o singură interogare pentru membri, nu una per echipă. */
-async function withMembers(
-  tenantId: string,
-  teams: { id: string; name: string; active: boolean; createdAt: Date }[],
-): Promise<Array<{ id: string; name: string; active: boolean; createdAt: Date; members: TeamMemberDto[] }>> {
-  if (teams.length === 0) return [];
-  const rows = await db
-    .select({
-      teamId: parTeamMembers.teamId,
-      userId: parTeamMembers.userId,
-      name: users.name,
-      email: users.email,
-    })
-    .from(parTeamMembers)
-    .leftJoin(users, eq(users.id, parTeamMembers.userId))
-    .where(and(eq(parTeamMembers.tenantId, tenantId), inArray(parTeamMembers.teamId, teams.map((t) => t.id))))
-    .orderBy(asc(users.name));
-  const byTeam = new Map<string, TeamMemberDto[]>();
-  for (const row of rows) {
-    const list = byTeam.get(row.teamId) ?? [];
-    list.push({ userId: row.userId, name: row.name ?? null, email: row.email ?? null });
-    byTeam.set(row.teamId, list);
-  }
-  return teams.map((t) => ({ ...t, members: byTeam.get(t.id) ?? [] }));
-}
 
 /**
  * GET /my — ce vede un om obișnuit: echipele lui și coechipierii.
@@ -81,7 +50,7 @@ parTeamsRoutes.get("/my", async (c) => {
     .innerJoin(parTeamMembers, eq(parTeamMembers.teamId, parTeams.id))
     .where(and(eq(parTeams.tenantId, tenantId), eq(parTeams.active, true), eq(parTeamMembers.userId, user.id)))
     .orderBy(asc(parTeams.name));
-  const teams = await withMembers(tenantId, myTeams);
+  const teams = await teamsWithMembers(tenantId, myTeams);
   return c.json({ teams, teammateIds: await teammateUserIds(user.id, tenantId) });
 });
 
@@ -92,7 +61,7 @@ parTeamsRoutes.get("/", requirePARRole("par_admin"), async (c) => {
     .from(parTeams)
     .where(eq(parTeams.tenantId, tenantId))
     .orderBy(asc(parTeams.name));
-  return c.json({ teams: await withMembers(tenantId, rows) });
+  return c.json({ teams: await teamsWithMembers(tenantId, rows) });
 });
 
 const createSchema = z.object({
@@ -116,7 +85,7 @@ parTeamsRoutes.post("/", requirePARRole("par_admin"), zValidator("json", createS
   }
 
   const [team] = await db.insert(parTeams).values({ tenantId, name }).returning();
-  const memberIds = await addMembers(tenantId, team.id, user_ids ?? []);
+  const memberIds = await addTeamMembers(tenantId, team.id, user_ids ?? []);
   await writeAuditLog({
     tenantId,
     actorId: user.id,
@@ -126,7 +95,7 @@ parTeamsRoutes.post("/", requirePARRole("par_admin"), zValidator("json", createS
     newValue: { name: team.name, members: memberIds },
     ipAddress: clientIp(c),
   });
-  return c.json({ team: { ...team, members: (await withMembers(tenantId, [team]))[0].members } }, 201);
+  return c.json({ team: { ...team, members: (await teamsWithMembers(tenantId, [team]))[0].members } }, 201);
 });
 
 const updateSchema = z.object({
@@ -208,7 +177,7 @@ parTeamsRoutes.post("/:id/members", requirePARRole("par_admin"), zValidator("jso
     .limit(1);
   if (!target) return c.json({ error: "not_a_member", detail: "Utilizatorul nu face parte din organizație." }, 400);
 
-  const added = await addMembers(tenantId, id, [user_id]);
+  const added = await addTeamMembers(tenantId, id, [user_id]);
   if (added.length > 0) {
     await writeAuditLog({
       tenantId,
@@ -244,19 +213,3 @@ parTeamsRoutes.delete("/:id/members/:userId", requirePARRole("par_admin"), async
   });
   return c.json({ ok: true });
 });
-
-/** Inserție idempotentă: re-adăugarea cuiva deja în echipă nu e o eroare. Întoarce cine a intrat. */
-async function addMembers(tenantId: string, teamId: string, userIds: string[]): Promise<string[]> {
-  if (userIds.length === 0) return [];
-  const valid = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.tenantId, tenantId), inArray(users.id, [...new Set(userIds)])));
-  if (valid.length === 0) return [];
-  const inserted = await db
-    .insert(parTeamMembers)
-    .values(valid.map((u) => ({ tenantId, teamId, userId: u.id })))
-    .onConflictDoNothing()
-    .returning({ userId: parTeamMembers.userId });
-  return inserted.map((r) => r.userId);
-}

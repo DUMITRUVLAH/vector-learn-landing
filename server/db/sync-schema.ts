@@ -11,6 +11,7 @@ import { CRM_PARITY_ENSURE_STATEMENTS } from "./ensure/crmParity";
 import { PONTAJ_ENSURE_STATEMENTS } from "./ensure/pontaj";
 import { COMMS_ENSURE_STATEMENTS } from "./ensure/comms";
 import { CONT_PLATA_ENSURE_STATEMENTS } from "./ensure/contPlata";
+import { TASKS_ENSURE_STATEMENTS } from "./ensure/tasks";
 
 /**
  * Self-healing schema sync — runs at deploy AFTER migrations (see scripts/vercel-migrate.mjs).
@@ -830,6 +831,9 @@ async function main() {
     ...COMMS_ENSURE_STATEMENTS,
     // CONTPLATA-faza-1 (migrarea 0196): șabloanele contului de plată.
     ...CONT_PLATA_ENSURE_STATEMENTS,
+    // TASKS-001 (migrarea 0197): managerul de task-uri. DUPĂ `par_teams` (mai sus), fiindcă
+    // `task_boards.team_id` o referă.
+    ...TASKS_ENSURE_STATEMENTS,
     // Migrarea 0154 (audit perf): indexuri compuse/parțiale pe interogările hot-path ale PAR —
     // fără migrări fiabile pe prod, indexurile trebuie create explicit aici, nu doar în migrare.
     `CREATE INDEX IF NOT EXISTS "par_payer_modules_tenant_module_idx" ON "par_payer_modules" ("tenant_id","module_key")`,
@@ -908,9 +912,15 @@ async function ensureIndexes(sql: ReturnType<typeof postgres>): Promise<number> 
     }
 
     for (const builder of Object.values(config ?? {})) {
-      const cfg = (builder as { config?: { name?: string; columns?: unknown[]; unique?: boolean } })?.config;
+      const cfg = (builder as { config?: { name?: string; columns?: unknown[]; unique?: boolean; where?: unknown } })
+        ?.config;
       if (!cfg?.name || !Array.isArray(cfg.columns) || cfg.columns.length === 0) continue;
       if (existing.has(cfg.name)) continue;
+      // Un index PARȚIAL (`.where(...)`) nu se poate reconstrui de aici: instrucțiunea de mai jos
+      // n-are clauza WHERE, deci ar crea varianta COMPLETĂ. Pentru un index unic asta schimbă
+      // regula de business — „un singur board implicit per workspace" devenea „un singur board
+      // per workspace". Indecșii parțiali vin doar din migrare și din ENSURE_STATEMENTS.
+      if (cfg.where) continue;
 
       const cols = cfg.columns
         .map((col) => (col as { name?: string })?.name)
