@@ -28,6 +28,7 @@ vi.mock("@/router/HashRouter", () => ({
 }));
 
 const sendCrmEmail = vi.fn();
+const createCrmLeadTask = vi.fn();
 vi.mock("@/lib/api/crmComms", () => ({
   whatsappLink: () => null,
   logCrmTouch: vi.fn(),
@@ -81,7 +82,7 @@ vi.mock("@/lib/api/crm", () => ({
   moveCrmLeadStage: vi.fn(),
   createCrmLeadInteraction: vi.fn(),
   listCrmLeadTasks: vi.fn().mockResolvedValue({ items: [] }),
-  createCrmLeadTask: vi.fn(),
+  createCrmLeadTask: (...a: unknown[]) => createCrmLeadTask(...a),
   completeCrmLeadTask: vi.fn(),
   reopenCrmLeadTask: vi.fn(),
   snoozeCrmLeadTask: vi.fn(),
@@ -191,5 +192,24 @@ describe("CRM-U02 — Activitate", () => {
     render(<LeadDetailSheet leadId="lead-1" stages={STAGES} onClose={vi.fn()} onChanged={vi.fn()} onToast={vi.fn()} onOpenLead={vi.fn()} />);
     expect(await screen.findByRole("tab", { name: "Modificări" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Istoric" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CRM-U04 — taskul cu oră, din fișă", () => {
+  it("[blocant] data + ora pleacă la server ca „cu oră”", async () => {
+    getCrmLeadDetail.mockResolvedValue(makeDetail());
+    createCrmLeadTask.mockImplementation((body: Record<string, unknown>) =>
+      Promise.resolve({ id: "t1", tenantId: "t", leadId: "lead-1", status: "open", assignedTo: null, createdBy: null, completedAt: null, createdAt: "", updatedAt: "", ...body })
+    );
+    render(<LeadDetailSheet leadId="lead-1" stages={STAGES} onClose={vi.fn()} onChanged={vi.fn()} onToast={vi.fn()} onOpenLead={vi.fn()} />);
+    fireEvent.change(await screen.findByLabelText("Task nou"), { target: { value: "Sună clientul" } });
+    fireEvent.change(screen.getByLabelText("Scadență"), { target: { value: "2026-09-27" } });
+    fireEvent.change(screen.getByLabelText("Ora (opțional)"), { target: { value: "14:30" } });
+    fireEvent.click(screen.getByRole("button", { name: /Adaugă$/ }));
+    await waitFor(() => expect(createCrmLeadTask).toHaveBeenCalled());
+    const body = createCrmLeadTask.mock.calls[0][0] as { dueAt: string; dueHasTime: boolean };
+    expect(body.dueHasTime).toBe(true);
+    expect(new Date(body.dueAt).getHours()).toBe(14);
+    expect(await screen.findByText(/Scadent .*14:30/)).toBeInTheDocument();
   });
 });

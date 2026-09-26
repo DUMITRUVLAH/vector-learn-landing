@@ -11,7 +11,7 @@
  *
  * Migrare: drizzle/0163_crm_tasks.sql
  */
-import { pgTable, uuid, varchar, integer, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, integer, timestamp, index, boolean } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { leads } from "./leads";
 import { users } from "./users";
@@ -28,6 +28,8 @@ export const crmLeadTasks = pgTable(
       .references(() => leads.id, { onDelete: "cascade" }),
     title: varchar("title", { length: 300 }).notNull(),
     dueAt: timestamp("due_at", { withTimezone: true }),
+    /** CRM-U04: scadența are oră aleasă de om. false = „toată ziua" (se afișează doar data). */
+    dueHasTime: boolean("due_has_time").notNull().default(false),
     /** open | done | snoozed — varchar, nu enum: stările pot crește fără migrare. */
     status: varchar("status", { length: 20 }).notNull().default("open"),
     assignedTo: uuid("assigned_to").references(() => users.id, { onDelete: "set null" }),

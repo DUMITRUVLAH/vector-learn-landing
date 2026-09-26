@@ -14,6 +14,7 @@
  * Click pe orice rând deschide fișa leadului (`LeadDetailSheet`), la fel ca din Pipeline —
  * inclusiv secțiunea „Taskuri" de-acolo, ca restanța să poată fi rezolvată fără să părăsești ecranul.
  */
+import { formatDue } from "@/lib/crm/taskDue";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, AlarmClock, CalendarX, Clock, Loader2, UserPlus } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
@@ -172,7 +173,7 @@ export function CrmTodayPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-foreground">{task.title}</p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {leadTitle(lead)} · scadent {formatDate(task.dueAt!)}
+                          {leadTitle(lead)} · scadent {formatDue(task.dueAt!, task.dueHasTime)}
                         </p>
                       </div>
                     </button>

@@ -39,12 +39,14 @@ const createTaskSchema = z.object({
   leadId: z.string().uuid("Lead invalid"),
   title: z.string().min(1, "Titlul este obligatoriu").max(300),
   dueAt: z.string().datetime().optional().nullable(),
+  dueHasTime: z.boolean().optional(),
   assignedTo: z.string().uuid().optional().nullable(),
 });
 
 const updateTaskSchema = z.object({
   title: z.string().min(1, "Titlul este obligatoriu").max(300).optional(),
   dueAt: z.string().datetime().optional().nullable(),
+  dueHasTime: z.boolean().optional(),
   assignedTo: z.string().uuid().optional().nullable(),
 });
 
@@ -87,6 +89,7 @@ crmTasksRoutes.get("/", async (c) => {
         leadId: crmLeadTasks.leadId,
         title: crmLeadTasks.title,
         dueAt: crmLeadTasks.dueAt,
+        dueHasTime: crmLeadTasks.dueHasTime,
         status: crmLeadTasks.status,
         assignedTo: crmLeadTasks.assignedTo,
         createdBy: crmLeadTasks.createdBy,
@@ -154,6 +157,8 @@ crmTasksRoutes.post("/", zValidator("json", createTaskSchema), async (c) => {
     createdBy: user.id,
   };
   if (body.dueAt !== undefined) values.dueAt = body.dueAt ? new Date(body.dueAt) : null;
+  // CRM-U04: ora contează doar când există scadență.
+  values.dueHasTime = !!body.dueAt && body.dueHasTime === true;
   if (body.assignedTo !== undefined) values.assignedTo = body.assignedTo;
 
   const [row] = await db.insert(crmLeadTasks).values(values).returning();
@@ -176,6 +181,8 @@ crmTasksRoutes.patch("/:id", zValidator("json", updateTaskSchema), async (c) => 
   const updates: Partial<NewCrmLeadTask> = { updatedAt: new Date() };
   if (body.title !== undefined) updates.title = body.title.trim();
   if (body.dueAt !== undefined) updates.dueAt = body.dueAt ? new Date(body.dueAt) : null;
+  if (body.dueHasTime !== undefined) updates.dueHasTime = !!body.dueAt && body.dueHasTime;
+  else if (body.dueAt === null) updates.dueHasTime = false;
   if (body.assignedTo !== undefined) updates.assignedTo = body.assignedTo;
 
   const [row] = await db

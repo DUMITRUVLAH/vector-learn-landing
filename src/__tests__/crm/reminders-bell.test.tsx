@@ -56,6 +56,13 @@ describe("Gruparea pe scadență", () => {
     expect(bucketOf(new Date("2026-03-10T15:00:00.000Z"), now)).toBe("azi");
     expect(bucketOf(new Date("2026-03-11T09:00:00.000Z"), now)).toBe("maine");
     expect(bucketOf(new Date("2026-03-20T09:00:00.000Z"), now)).toBe("mai_tarziu");
+    // CRM-U04: un task „toată ziua" de azi rămâne „azi" și după prânz, nu devine restant.
+    const todayNoon = new Date(now);
+    todayNoon.setHours(12, 0, 0, 0);
+    const afternoon = new Date(now);
+    afternoon.setHours(17, 0, 0, 0);
+    expect(bucketOf(todayNoon, afternoon, false)).toBe("azi");
+    expect(bucketOf(todayNoon, afternoon, true)).toBe("restante");
   });
 });
 

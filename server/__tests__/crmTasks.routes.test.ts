@@ -744,3 +744,29 @@ describe("DELETE /api/crm/tags/:id", () => {
     expect(items).toHaveLength(1);
   });
 });
+
+describe("CRM-U04 — taskul cu oră", () => {
+  it("[blocant] ora aleasă se păstrează; fără oră taskul rămâne „toată ziua”", async () => {
+    const lead = await createLead();
+    const timed = await createTask(lead.id, { title: "Sună la 14:30", dueAt: "2026-09-27T11:30:00.000Z", dueHasTime: true });
+    const allDay = await createTask(lead.id, { title: "Trimite oferta", dueAt: "2026-09-27T09:00:00.000Z" });
+    expect(timed.dueHasTime).toBe(true);
+    expect(allDay.dueHasTime).toBe(false);
+  });
+
+  it("[blocant] fără scadență, „cu oră” nu are sens — se salvează fals; ștergerea datei șterge și ora", async () => {
+    const lead = await createLead();
+    const noDate = await createTask(lead.id, { title: "Fără dată", dueHasTime: true });
+    expect(noDate.dueHasTime).toBe(false);
+
+    const timed = await createTask(lead.id, { title: "Cu oră", dueAt: "2026-09-27T11:30:00.000Z", dueHasTime: true });
+    const res = await app.request(`/api/crm/tasks/${timed.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dueAt: null }),
+    });
+    const updated = (await res.json()) as { dueHasTime: boolean; dueAt: string | null };
+    expect(updated.dueAt).toBeNull();
+    expect(updated.dueHasTime).toBe(false);
+  });
+});

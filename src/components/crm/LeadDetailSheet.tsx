@@ -11,6 +11,7 @@
  * fiecare deschidere — nu depinde de cardul din board, ca să poată fi refolosită și dintr-o
  * listă/căutare viitoare.
  */
+import { combineDue, formatDue, isDueOverdue } from "@/lib/crm/taskDue";
 import {
   useCallback,
   useEffect,
@@ -228,17 +229,10 @@ function formatInteractionDate(iso: string): string {
   });
 }
 
-function formatTaskDue(iso: string): string {
-  return new Date(iso).toLocaleDateString("ro-MD", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 function isTaskOverdue(task: CrmLeadTask): boolean {
   return (
-    task.status === "open" && !!task.dueAt && new Date(task.dueAt) < new Date()
+    task.status === "open" && isDueOverdue(task.dueAt, task.dueHasTime)
   );
 }
 
@@ -336,6 +330,8 @@ export function LeadDetailSheet({
   const [tasks, setTasks] = useState<CrmLeadTask[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  /** CRM-U04: ora e opțională — goală = taskul e „toată ziua". */
+  const [newTaskDueTime, setNewTaskDueTime] = useState("");
   const [addingTask, setAddingTask] = useState(false);
   /** id-ul taskului pe care rulează chiar acum o acțiune (bifare/amânare/ștergere) — dezactivează
    *  DOAR rândul lui, nu toată lista. */
@@ -370,6 +366,7 @@ export function LeadDetailSheet({
       setTasks([]);
       setNewTaskTitle("");
       setNewTaskDueDate("");
+      setNewTaskDueTime("");
       setTags([]);
       setNewTagText("");
       return;
@@ -733,19 +730,20 @@ export function LeadDetailSheet({
     if (!leadId || !newTaskTitle.trim()) return;
     setAddingTask(true);
     try {
+      // Fără oră, taskul se păstrează la prânz (data nu „alunecă" la conversia în UTC) și se
+      // afișează ca „toată ziua"; cu oră, exact la ora aleasă.
+      const due = combineDue(newTaskDueDate, newTaskDueTime);
       const created = await createCrmLeadTask({
         leadId,
         title: newTaskTitle.trim(),
-        // Ora fixă (prânz) evită ca o dată aleasă să „alunece" cu o zi din cauza fusului orar la
-        // conversia în UTC — un task „scadent azi" nu trebuie să pară scadent ieri sau mâine.
-        dueAt: newTaskDueDate
-          ? new Date(`${newTaskDueDate}T12:00:00`).toISOString()
-          : null,
+        dueAt: due.dueAt,
+        dueHasTime: due.dueHasTime,
       });
       setTasks((prev) => sortTasksForDisplay([...prev, created]));
       setAskNextAction(false);
       setNewTaskTitle("");
       setNewTaskDueDate("");
+      setNewTaskDueTime("");
       // Un task nou poate scoate lead-ul din „fără pas următor" pe orice ecran care arată „Azi".
       onChanged();
     } catch (err) {
@@ -1448,6 +1446,20 @@ export function LeadDetailSheet({
                               className="w-[150px]"
                             />
                           </div>
+                          <div className="flex flex-col gap-1">
+                            <Label htmlFor="lead-sheet-new-task-time" className="sr-only">
+                              Ora (opțional)
+                            </Label>
+                            <Input
+                              id="lead-sheet-new-task-time"
+                              type="time"
+                              value={newTaskDueTime}
+                              onChange={(e) => setNewTaskDueTime(e.target.value)}
+                              disabled={!newTaskDueDate}
+                              title={newTaskDueDate ? "Ora (opțional)" : "Alege întâi data"}
+                              className="w-28"
+                            />
+                          </div>
                           <Button
                             onClick={() => void addTask()}
                             disabled={!newTaskTitle.trim() || addingTask}
@@ -1531,7 +1543,7 @@ export function LeadDetailSheet({
                                           : "text-muted-foreground",
                                       )}
                                     >
-                                      Scadent {formatTaskDue(task.dueAt)}
+                                      Scadent {formatDue(task.dueAt, task.dueHasTime)}
                                       {task.status === "snoozed" && " · amânat"}
                                     </p>
                                   )}

@@ -329,11 +329,11 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
     // Fără el, tabla nu spune ce ai de făcut — omul vede 40 de cartonașe identice și deschide
     // fiecare fișă ca să afle care e restant. Cardul îl arată ca semnal roșu când a trecut
     // scadența (același reflex ca la clopoțel).
-    const nextTaskByLead = new Map<string, { title: string; dueAt: string | null }>();
+    const nextTaskByLead = new Map<string, { title: string; dueAt: string | null; dueHasTime: boolean }>();
     if (recent.length > 0) {
       try {
         const taskRows = await db
-          .select({ leadId: crmLeadTasks.leadId, title: crmLeadTasks.title, dueAt: crmLeadTasks.dueAt })
+          .select({ leadId: crmLeadTasks.leadId, title: crmLeadTasks.title, dueAt: crmLeadTasks.dueAt, dueHasTime: crmLeadTasks.dueHasTime })
           .from(crmLeadTasks)
           .where(
             and(
@@ -349,7 +349,7 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
         // Primul rând per lead e cel mai apropiat de scadență (interogarea vine sortată).
         for (const t of taskRows) {
           if (!nextTaskByLead.has(t.leadId)) {
-            nextTaskByLead.set(t.leadId, { title: t.title, dueAt: t.dueAt ? t.dueAt.toISOString() : null });
+            nextTaskByLead.set(t.leadId, { title: t.title, dueAt: t.dueAt ? t.dueAt.toISOString() : null, dueHasTime: !!t.dueHasTime });
           }
         }
       } catch (e) {
@@ -360,7 +360,7 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
     }
 
     /** Cardul = leadul + semnalul lui de lucru. Tipul e explicit ca `nextTask` să nu se piardă. */
-    type BoardCard = (typeof recent)[number] & { nextTask: { title: string; dueAt: string | null } | null };
+    type BoardCard = (typeof recent)[number] & { nextTask: { title: string; dueAt: string | null; dueHasTime: boolean } | null };
     const grouped: Record<string, BoardCard[]> = {};
     const counts: Record<string, number> = {};
     const valueSums: Record<string, number> = {};

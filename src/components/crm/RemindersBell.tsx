@@ -12,6 +12,7 @@
  * Numărul de pe insignă numără doar restantele și pe cele de azi: dacă ar număra tot, ar arăta
  * mereu un număr mare și n-ar mai însemna „uită-te acum".
  */
+import { formatDue } from "@/lib/crm/taskDue";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, Check, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ds";
@@ -38,7 +39,7 @@ const BUCKET_LABELS: Record<Bucket, string> = {
 };
 
 /** Pură, deci testabilă fără ceas fals: în ce găleată cade o scadență față de `now`. */
-export function bucketOf(due: Date, now: Date): Bucket {
+export function bucketOf(due: Date, now: Date, hasTime = true): Bucket {
   const startToday = new Date(now);
   startToday.setHours(0, 0, 0, 0);
   const startTomorrow = new Date(startToday);
@@ -46,7 +47,8 @@ export function bucketOf(due: Date, now: Date): Bucket {
   const startAfter = new Date(startTomorrow);
   startAfter.setDate(startAfter.getDate() + 1);
 
-  if (due.getTime() < now.getTime()) return "restante";
+  // CRM-U04: un task „toată ziua" nu e restant la prânz, în chiar ziua lui — abia de mâine.
+  if (hasTime ? due.getTime() < now.getTime() : due < startToday) return "restante";
   if (due < startTomorrow) return "azi";
   if (due < startAfter) return "maine";
   return "mai_tarziu";
@@ -99,7 +101,7 @@ export function RemindersBell({ ownerId = null, onOpenLead, onToast, refreshToke
     const out: Record<Bucket, CrmUpcomingTask[]> = { restante: [], azi: [], maine: [], mai_tarziu: [] };
     for (const t of tasks) {
       if (!t.dueAt) continue;
-      out[bucketOf(new Date(t.dueAt), now)].push(t);
+      out[bucketOf(new Date(t.dueAt), now, !!t.dueHasTime)].push(t);
     }
     return out;
   }, [tasks]);
@@ -193,12 +195,7 @@ export function RemindersBell({ ownerId = null, onOpenLead, onToast, refreshToke
                             )}
                           >
                             <Clock className="h-2.5 w-2.5" aria-hidden="true" />
-                            {due.toLocaleString("ro-MD", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {formatDue(task.dueAt as string, task.dueHasTime, "short")}
                           </p>
                         </button>
                         <button

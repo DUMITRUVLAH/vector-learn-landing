@@ -63,7 +63,7 @@ export interface CrmLead {
   lostReason: string | null;
   /** Taskul deschis cel mai apropiat de scadență, atașat de `/pipeline` la fiecare card.
    *  Lipsește pe celelalte rute (lista îl ia din altă parte) — de-aia e opțional. */
-  nextTask?: { title: string; dueAt: string | null } | null;
+  nextTask?: { title: string; dueAt: string | null; dueHasTime?: boolean } | null;
   /** Câte apeluri s-au dat pe lead (CC-6). Rezultatele terminale nu-l cresc. */
   callAttempts?: number | null;
   lastCallAt?: string | null;
@@ -627,6 +627,8 @@ export interface CrmLeadTask {
   leadId: string;
   title: string;
   dueAt: string | null;
+  /** CRM-U04: scadența are oră aleasă; false = „toată ziua". */
+  dueHasTime?: boolean;
   status: CrmTaskStatus;
   assignedTo: string | null;
   createdBy: string | null;
@@ -664,6 +666,7 @@ export interface CreateCrmLeadTaskBody {
   leadId: string;
   title: string;
   dueAt?: string | null;
+  dueHasTime?: boolean;
   assignedTo?: string | null;
 }
 
@@ -671,7 +674,7 @@ export function createCrmLeadTask(body: CreateCrmLeadTaskBody): Promise<CrmLeadT
   return api<CrmLeadTask>("/api/crm/tasks", { method: "POST", body: JSON.stringify(body) });
 }
 
-export type UpdateCrmLeadTaskBody = Partial<Pick<CreateCrmLeadTaskBody, "title" | "dueAt" | "assignedTo">>;
+export type UpdateCrmLeadTaskBody = Partial<Pick<CreateCrmLeadTaskBody, "title" | "dueAt" | "dueHasTime" | "assignedTo">>;
 
 export function updateCrmLeadTask(id: string, body: UpdateCrmLeadTaskBody): Promise<CrmLeadTask> {
   return api<CrmLeadTask>(`/api/crm/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) });
