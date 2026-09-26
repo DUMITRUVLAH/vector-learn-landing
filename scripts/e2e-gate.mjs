@@ -230,6 +230,22 @@ const AREAS = {
     // Parcursul UX complet (act nou → furnizor → poziții → finalizare → acțiuni), cu capturi.
     deep: ["e2e-docgen-ux.mjs"],
   },
+  contplata: {
+    label: "Conturi de plată",
+    // CONTPLATA-faza-1: modulul din CRM (rute, numerotare, PDF, catalog, șabloane) + paginile lui.
+    match: /(server\/routes\/paymentAccounts|server\/lib\/paymentAccounts|server\/db\/(schema\/(paymentAccount|sellerProfiles)|ensure\/contPlata)|src\/pages\/business\/crm\/CrmPaymentAccount|src\/components\/payment-accounts|src\/lib\/(api\/paymentAccounts|paymentAccounts))/,
+    // FORMA, nu doar 200: numărul următor trebuie să fie un text nevid (altfel editorul arată „—"),
+    // iar catalogul trebuie să aducă ambele liste pe care le citește autocompletarea.
+    api: [
+      ["GET", "/api/payment-accounts", (j) => Array.isArray(j?.data)],
+      ["GET", "/api/payment-accounts/settings", (j) => typeof j?.data?.settings?.series === "string" && typeof j?.data?.nextNumber === "string" && j.data.nextNumber.length > 0 && Array.isArray(j?.data?.missing)],
+      ["GET", "/api/payment-accounts/next-number", (j) => typeof j?.data?.documentNumber === "string" && j.data.documentNumber.length > 0],
+      ["GET", "/api/payment-accounts/catalog?q=a", (j) => Array.isArray(j?.data?.products) && Array.isArray(j?.data?.recent)],
+      ["GET", "/api/payment-accounts/templates", (j) => Array.isArray(j?.data)],
+    ],
+    routes: ["/business/crm/conturi-plata", "/business/crm/conturi-plata/nou", "/business/crm/conturi-plata/setari"],
+    deep: [],
+  },
   docmerge: {
     label: "DocMerge",
     match: /(docmerge|DocMerge)/,

@@ -274,6 +274,7 @@ const CRM_NAV_GROUPS: NavGroup[] = [
     prefix: "/business/crm",
     items: [
       { label: "Documente", href: "/business/crm/documente", icon: FileText, tone: "orange" },
+      { label: "Conturi de plată", href: "/business/crm/conturi-plata", icon: ReceiptText, tone: "sky" },
       { label: "Comunicare", href: "/business/crm/comunicare", icon: MessageCircle, tone: "blue" },
       { label: "Cadențe", href: "/business/crm/cadente", icon: RefreshCw, tone: "amber" },
       { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
