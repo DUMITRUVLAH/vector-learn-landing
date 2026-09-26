@@ -151,7 +151,10 @@ const LEAD_TABS: readonly TabItem<LeadTab>[] = [
   { value: "fisiere", label: "Fișiere" },
   { value: "contacte", label: "Contacte" },
   { value: "acte", label: "Acte" },
-  { value: "istoric", label: "Istoric" },
+  // CRM-U02: „Istoric" lângă „Activitate" părea aceeași listă de două ori. Activitatea e ce s-a
+  // VORBIT (apeluri, emailuri, note, acte); fila asta e ce s-a SCHIMBAT în fișă (cine, ce câmp) și
+  // alte afaceri ale aceleiași persoane — deci „Modificări".
+  { value: "istoric", label: "Modificări" },
 ];
 
 const INTERACTION_LABEL: Record<CrmInteractionType, string> = {
@@ -162,8 +165,38 @@ const INTERACTION_LABEL: Record<CrmInteractionType, string> = {
   sms: "SMS",
   meeting: "Întâlnire",
   stage_change: "Schimbare etapă",
-  system: "Sistem",
+  system: "Act",
 };
+
+/**
+ * CRM-U02 — un rând din Activitate, spus pe înțeles. Mutarea de etapă avea în corp cheile interne
+ * („contacted → paid"); emailul arăta corpul, dar nu subiectul, destinatarul sau dacă chiar a plecat.
+ */
+function interactionText(item: CrmLeadInteraction, stages: readonly CrmStage[]): { title?: string; body: string | null; note?: string } {
+  const meta = (item.metadata ?? {}) as Record<string, unknown>;
+  if (item.type === "stage_change") {
+    const from = typeof meta.from === "string" ? crmStageLabel(stages, meta.from) : null;
+    const to = typeof meta.to === "string" ? crmStageLabel(stages, meta.to) : null;
+    const cause = typeof meta.cause === "string" ? meta.cause : null;
+    const lost = typeof meta.lostReason === "string" && meta.lostReason ? `Motiv: ${meta.lostReason}` : null;
+    return { body: from && to ? `${from} → ${to}` : item.body, note: cause ?? lost ?? undefined };
+  }
+  if (item.type === "email") {
+    const subject = typeof meta.subject === "string" && meta.subject ? meta.subject : null;
+    const to = typeof meta.to === "string" ? meta.to : null;
+    const status = meta.status;
+    const note =
+      status === "blocked"
+        ? "Nu a plecat: trimiterea e oprită în acest mediu."
+        : status === "failed"
+          ? `Nu a plecat${typeof meta.detail === "string" ? `: ${meta.detail}` : "."}`
+          : to
+            ? `Trimis către ${to}`
+            : undefined;
+    return { title: subject ?? undefined, body: item.body, note };
+  }
+  return { body: item.body };
+}
 
 const INTERACTION_ICON: Record<CrmInteractionType, ReactNode> = {
   note: (
@@ -182,9 +215,7 @@ const INTERACTION_ICON: Record<CrmInteractionType, ReactNode> = {
       aria-hidden="true"
     />
   ),
-  system: (
-    <Info className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-  ),
+  system: <FileText className="h-3.5 w-3.5 text-primary" aria-hidden="true" />,
 };
 
 function formatInteractionDate(iso: string): string {
@@ -1594,11 +1625,18 @@ export function LeadDetailSheet({
                                     {formatInteractionDate(item.occurredAt)}
                                   </time>
                                 </div>
-                                {item.body && (
-                                  <p className="whitespace-pre-wrap text-sm text-foreground/80">
-                                    {item.body}
-                                  </p>
-                                )}
+                                {(() => {
+                                  const t = interactionText(item, stages);
+                                  return (
+                                    <>
+                                      {t.title && <p className="text-sm font-medium text-foreground">{t.title}</p>}
+                                      {t.body && (
+                                        <p className="whitespace-pre-wrap text-sm text-foreground/80">{t.body}</p>
+                                      )}
+                                      {t.note && <p className="mt-1 text-xs text-muted-foreground">{t.note}</p>}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </li>
                           ))
@@ -1763,7 +1801,12 @@ export function LeadDetailSheet({
           leadName={lead.company || lead.fullName}
           defaultTo={lead.email}
           onClose={() => setEmailOpen(false)}
-          onSent={onChanged}
+          onSent={async () => {
+            // CRM-U02: emailul trimis apare pe loc în Activitate — înainte doar tabla din spate se
+            // reîncărca, iar fișa arăta emailul abia după ce o închideai și o redeschideai.
+            await refetchDetail().catch(() => {});
+            onChanged();
+          }}
         />
       )}
       {newDocOpen && lead && (

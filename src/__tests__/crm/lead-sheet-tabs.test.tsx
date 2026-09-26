@@ -188,8 +188,8 @@ describe("Fișa leadului pe file", () => {
     });
 
     const { onOpenLead } = renderSheet();
-    await screen.findByRole("tab", { name: "Istoric" });
-    fireEvent.click(screen.getByRole("tab", { name: "Istoric" }));
+    await screen.findByRole("tab", { name: "Modificări" });
+    fireEvent.click(screen.getByRole("tab", { name: "Modificări" }));
 
     expect(await screen.findByText("Acme SRL (2025)")).toBeInTheDocument();
     // Comentariul vechi e chiar motivul pentru care ecranul există.
@@ -304,7 +304,7 @@ describe("Modificările din fișă", () => {
     });
 
     renderSheet();
-    fireEvent.click(await screen.findByRole("tab", { name: "Istoric" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Modificări" }));
 
     expect(await screen.findByText("Mutat între etape")).toBeInTheDocument();
     expect(screen.getByText(/Boris Agent/)).toBeInTheDocument();
@@ -318,7 +318,7 @@ describe("Modificările din fișă", () => {
     listCrmAudit.mockRejectedValue(new Error("forbidden"));
 
     renderSheet();
-    fireEvent.click(await screen.findByRole("tab", { name: "Istoric" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Modificări" }));
 
     await screen.findByText(/Nicio altă cerere/);
     expect(screen.queryByText("Modificări în fișă")).not.toBeInTheDocument();
@@ -382,7 +382,7 @@ describe("Fișa pe două coloane, pe ecran întreg", () => {
     await screen.findByRole("tab", { name: "Activitate" });
 
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Activitate", "Fișiere", "Contacte", "Acte", "Istoric"]);
+    expect(tabs).toEqual(["Activitate", "Fișiere", "Contacte", "Acte", "Modificări"]);
   });
 
   it("starea afacerii (etapă, valoare, responsabil) stă în bara de sus, nu îngropată în formular", async () => {
