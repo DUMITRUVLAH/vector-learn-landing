@@ -5248,6 +5248,78 @@
       "status": "pending",
       "title": "Export .docx real",
       "depends_on": []
+    },
+    "CRM-U01": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "feedback owner 2026-09-26 (chat)",
+      "milestone": "CRM-U",
+      "phase": "CRM-U-faza-1",
+      "priority": "high",
+      "title": "Pagina actului se derulează după „Act nou” din fișă",
+      "depends_on": [],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-U02": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "feedback owner 2026-09-26 (chat)",
+      "milestone": "CRM-U",
+      "phase": "CRM-U-faza-1",
+      "priority": "high",
+      "title": "Emailul trimis apare în Activitate; Activitate ≠ Modificări",
+      "depends_on": [],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-U03": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "feedback owner 2026-09-26 (chat)",
+      "milestone": "CRM-U",
+      "phase": "CRM-U-faza-1",
+      "priority": "high",
+      "title": "Actele și emailurile pleacă din partea „<Firma> · FinFlow (Documente)”, Reply-To vânzător",
+      "depends_on": [],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-U04": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "feedback owner 2026-09-26 (chat)",
+      "milestone": "CRM-U",
+      "phase": "CRM-U-faza-1",
+      "priority": "high",
+      "title": "Taskuri cu oră; „toată ziua” nu mai devine restant la prânz",
+      "depends_on": [],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-U05": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "feedback owner 2026-09-26 (chat)",
+      "milestone": "CRM-U",
+      "phase": "CRM-U-faza-1",
+      "priority": "high",
+      "title": "Fișierele și actele se văd în aplicație (vizualizatorul PAR)",
+      "depends_on": [],
+      "branch": "feat/CRM-google-redesign"
+    },
+    "CRM-U06": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "feedback owner 2026-09-26 (chat)",
+      "milestone": "CRM-U",
+      "phase": "CRM-U-faza-1",
+      "priority": "high",
+      "title": "Pipeline curat + cartonaș personalizabil",
+      "depends_on": [],
+      "branch": "feat/CRM-google-redesign"
     }
   }
 }

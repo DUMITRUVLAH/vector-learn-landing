@@ -631,3 +631,14 @@ Comparația și planul: [crm/DOCUMENTE-VS-VECTORB2B.md](crm/DOCUMENTE-VS-VECTORB
 | 2 | `CRM-D06` | Clientul acceptă oferta online | done ✅ |
 | 3 | `CRM-D07` | Șablon din Word-ul tău, cu AI care propune câmpurile | pending |
 | 3 | `CRM-D08` | Export .docx real | pending |
+
+## Milestone CRM-U — Observațiile ownerului pe CRM (2026-09-26)
+
+| ID | Titlu | Status |
+|---|---|---|
+| `CRM-U01` | Pagina actului se derulează după „Act nou” din fișă | done ✅ |
+| `CRM-U02` | Emailul trimis apare în Activitate; Activitate ≠ Modificări | done ✅ |
+| `CRM-U03` | Actele și emailurile pleacă din partea „<Firma> · FinFlow (Documente)”, Reply-To vânzător | done ✅ |
+| `CRM-U04` | Taskuri cu oră; „toată ziua” nu mai devine restant la prânz | done ✅ |
+| `CRM-U05` | Fișierele și actele se văd în aplicație (vizualizatorul PAR) | done ✅ |
+| `CRM-U06` | Pipeline curat + cartonaș personalizabil | done ✅ |
