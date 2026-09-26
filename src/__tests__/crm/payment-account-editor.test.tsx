@@ -143,6 +143,28 @@ describe("CONTPLATA — editorul", () => {
     expect(window.location.hash).toBe("#/business/crm/conturi-plata/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
   });
 
+  it("[blocant] o creare lentă + tastare în continuare = O SINGURĂ ciornă, apoi actualizări", async () => {
+    let release: () => void = () => {};
+    api.createPaymentAccount.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ data: { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", updatedAt: "2026-09-26T12:00:00.000Z" } });
+        })
+    );
+    api.updatePaymentAccount.mockResolvedValue({ data: { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", updatedAt: "2026-09-26T12:00:05.000Z" } });
+    render(<Editor />);
+    await userEvent.type(await screen.findByLabelText(/Denumirea clientului/), "Client SRL");
+    await userEvent.type(screen.getByLabelText(/Poziția 1/), "Curs");
+    await waitFor(() => expect(api.createPaymentAccount).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    // Crearea încă atârnă; omul scrie mai departe și pauza de salvare expiră din nou.
+    await userEvent.type(screen.getByLabelText(/Preț/), "100");
+    await new Promise((r) => setTimeout(r, 1200));
+    release();
+    await waitFor(() => expect(api.updatePaymentAccount).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.createPaymentAccount).toHaveBeenCalledTimes(1);
+    expect(api.updatePaymentAccount.mock.calls[0][0]).toBe("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+  });
+
   it("[normal] „folosite anterior” completează serviciul dintr-un cont vechi", async () => {
     render(<Editor />);
     fireEvent.focus(await screen.findByLabelText(/Poziția 1/));

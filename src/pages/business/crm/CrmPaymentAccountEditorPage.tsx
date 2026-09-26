@@ -257,29 +257,44 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
 
   const inputKey = input ? JSON.stringify(input) : "";
 
-  const save = useCallback(async (): Promise<string | null> => {
-    if (!input) return id;
-    if (inputKey === lastSavedKey.current && id) return id;
-    setSaving(true);
-    try {
-      const res = id ? await updatePaymentAccount(id, input) : await createPaymentAccount(input);
-      lastSavedKey.current = inputKey;
-      if (!id) {
-        setId(res.data.id);
-        // Adresa devine cea a contului, fără a remonta pagina (și fără a pierde ce scrii acum).
-        window.history.replaceState(null, "", `#${PAYMENT_ACCOUNTS_PATH}/${res.data.id}`);
+  // Salvările merg UNA după alta: dacă prima creare durează mai mult decât pauza de tastare, a doua
+  // ar fi pornit cu id-ul încă necunoscut și ar fi creat o a doua ciornă. Lanțul + ref-urile fac
+  // ca fiecare salvare să vadă id-ul și datele de la momentul în care chiar rulează.
+  const idRef = useRef<string | null>(accountId ?? null);
+  const latest = useRef({ input, inputKey });
+  latest.current = { input, inputKey };
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+
+  const save = useCallback((): Promise<string | null> => {
+    const run = chain.current.then(async (): Promise<string | null> => {
+      const { input: cur, inputKey: key } = latest.current;
+      const currentId = idRef.current;
+      if (!cur) return currentId;
+      if (key === lastSavedKey.current && currentId) return currentId;
+      setSaving(true);
+      try {
+        const res = currentId ? await updatePaymentAccount(currentId, cur) : await createPaymentAccount(cur);
+        lastSavedKey.current = key;
+        if (!currentId) {
+          idRef.current = res.data.id;
+          setId(res.data.id);
+          // Adresa devine cea a contului, fără a remonta pagina (și fără a pierde ce scrii acum).
+          window.history.replaceState(null, "", `#${PAYMENT_ACCOUNTS_PATH}/${res.data.id}`);
+        }
+        setSavedAt(res.data.updatedAt);
+        setPreviewVersion(res.data.updatedAt);
+        setError(null);
+        return res.data.id;
+      } catch (e) {
+        setError(paymentAccountErrorMessage(e, "Ciorna nu s-a putut salva."));
+        return null;
+      } finally {
+        setSaving(false);
       }
-      setSavedAt(res.data.updatedAt);
-      setPreviewVersion(res.data.updatedAt);
-      setError(null);
-      return res.data.id;
-    } catch (e) {
-      setError(paymentAccountErrorMessage(e, "Ciorna nu s-a putut salva."));
-      return null;
-    } finally {
-      setSaving(false);
-    }
-  }, [id, input, inputKey]);
+    });
+    chain.current = run.catch(() => null);
+    return run;
+  }, []);
 
   // Salvare automată: după o pauză de tastare, doar pe ciornă și doar dacă e ceva de salvat.
   useEffect(() => {
@@ -372,6 +387,7 @@ export function CrmPaymentAccountEditorPage({ accountId }: CrmPaymentAccountEdit
       // Clientul (din formular sau din șablon) există → ciorna se face pe server, cu numărul ei.
       const res = await run("template", () => startFromPaymentAccountTemplate(tpl.id, current ?? undefined));
       if (res) {
+        idRef.current = res.data.id;
         setId(res.data.id);
         window.history.replaceState(null, "", `#${PAYMENT_ACCOUNTS_PATH}/${res.data.id}`);
         await reload(res.data.id);
