@@ -44,6 +44,21 @@ function fullName(u: Record<string, unknown>): string | null {
   return n || str(u.username);
 }
 
+/**
+ * `message_id` e unic doar ÎN chat (fiecare chat privat numără de la 1), deci cheia de idempotență
+ * e chat + mesaj — altfel mesajul #5 al Mariei ar fi „dublura" mesajului #5 al lui Ion.
+ * Chaturile Telegram Business au propria numerotare, deci primesc și conexiunea în cheie.
+ */
+export function telegramMessageKey(chatId: string, messageId: string, businessConnectionId?: string | null): string {
+  return businessConnectionId ? `b:${businessConnectionId}:${chatId}:${messageId}` : `${chatId}:${messageId}`;
+}
+
+/** Id-ul numeric al mesajului din cheie (pentru `reply_parameters`). */
+function messageIdOfKey(key: string): number | null {
+  const last = key.split(":").pop() ?? "";
+  return /^\d+$/.test(last) ? Number(last) : null;
+}
+
 function messageToEvent(m: Record<string, unknown>, businessConnectionId: string | null): NormalizedEvent | null {
   const chat = obj(m.chat);
   // Doar chaturi private: grupurile nu sunt „un client care ne scrie".
@@ -106,7 +121,7 @@ function messageToEvent(m: Record<string, unknown>, businessConnectionId: string
     displayName: fullName(from) ?? fullName(chat),
     username: str(from.username),
     phone,
-    externalId: messageId,
+    externalId: telegramMessageKey(chatId, messageId, businessConnectionId),
     kind,
     body,
     media,
@@ -115,6 +130,7 @@ function messageToEvent(m: Record<string, unknown>, businessConnectionId: string
     meta: {
       ...(businessConnectionId ? { businessConnectionId } : {}),
       languageCode: str(from.language_code),
+      fromId: str(from.id),
     },
   };
 }
@@ -128,7 +144,7 @@ export const telegramAdapter: ChannelAdapter = {
     return str(obj(me.data.result).id) ?? "";
   },
 
-  async connect({ creds, fetch, webhookUrl }) {
+  async connect({ creds, fetch, webhookUrl, firstConnect }) {
     if (!creds.botToken || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(creds.botToken)) {
       throw new CommsError("missing_credentials", "Tokenul botului lipsește sau nu are formatul de la @BotFather (123456:ABC…).", 422);
     }
@@ -137,14 +153,14 @@ export const telegramAdapter: ChannelAdapter = {
       throw new CommsError("provider_rejected", `Telegram a refuzat tokenul: ${str(me.data.description) ?? me.status}.`, 422);
     }
     const bot = obj(me.data.result);
-    if (!creds.headerSecret) throw new CommsError("missing_header_secret", "Lipsește secretul antetului webhook-ului.", 500);
+    if (!creds.headerSecret) throw new CommsError("missing_header_secret", "Lipsește secretul antetului webhook-ului — reconectează canalul.", 422);
     const hook = await call({ creds, fetch }, "setWebhook", {
       url: webhookUrl,
       // Secretul din ANTET e altul decât cel din URL: URL-ul ajunge în loguri și e afișat în
       // aplicație; antetul stă doar criptat la noi și la Telegram.
       secret_token: creds.headerSecret,
       allowed_updates: TELEGRAM_ALLOWED_UPDATES,
-      drop_pending_updates: true,
+      drop_pending_updates: firstConnect === true,
       max_connections: 40,
     });
     if (!hook.ok) {
@@ -208,6 +224,7 @@ export const telegramAdapter: ChannelAdapter = {
         patch: {
           businessConnection: {
             id: str(bc.id),
+            userId: str(obj(bc.user).id),
             enabled: bc.is_enabled === true,
             canReply: obj(bc.rights).can_reply === true || bc.can_reply === true,
             userName: fullName(obj(bc.user)),
@@ -224,8 +241,8 @@ export const telegramAdapter: ChannelAdapter = {
     const common: Record<string, unknown> = {
       chat_id: msg.to,
       ...(businessConnectionId ? { business_connection_id: businessConnectionId } : {}),
-      ...(msg.replyToExternalId && /^\d+$/.test(msg.replyToExternalId)
-        ? { reply_parameters: { message_id: Number(msg.replyToExternalId), allow_sending_without_reply: true } }
+      ...(msg.replyToExternalId && messageIdOfKey(msg.replyToExternalId) !== null
+        ? { reply_parameters: { message_id: messageIdOfKey(msg.replyToExternalId), allow_sending_without_reply: true } }
         : {}),
     };
     let method = "sendMessage";
@@ -245,7 +262,8 @@ export const telegramAdapter: ChannelAdapter = {
         errorMessage: str(r.data.description) ?? `HTTP ${r.status}`,
       };
     }
-    return { ok: true, externalId: str(obj(r.data.result).message_id) };
+    const sentId = str(obj(r.data.result).message_id);
+    return { ok: true, externalId: sentId ? telegramMessageKey(msg.to, sentId, businessConnectionId) : null };
   },
 
   async fetchMedia(ctx, fileId) {

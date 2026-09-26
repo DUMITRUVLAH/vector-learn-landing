@@ -12,9 +12,13 @@ interface TemplateDialogProps {
   defaultParam: string;
   onClose: () => void;
   onSend: (tpl: { name: string; language: string; params: string[] }) => void;
+  /** Trimiterea e în curs — butonul se blochează (un template plătit trimis de două ori costă de două ori). */
+  busy?: boolean;
+  /** Motivul pentru care trimiterea n-a reușit, afișat în dialog. */
+  sendError?: string | null;
 }
 
-export function TemplateDialog({ channelId, defaultParam, onClose, onSend }: TemplateDialogProps) {
+export function TemplateDialog({ channelId, defaultParam, onClose, onSend, busy = false, sendError = null }: TemplateDialogProps) {
   const [templates, setTemplates] = useState<WhatsappTemplate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<WhatsappTemplate | null>(null);
@@ -50,7 +54,7 @@ export function TemplateDialog({ channelId, defaultParam, onClose, onSend }: Tem
             Renunță
           </Button>
           <Button
-            disabled={!chosen || params.some((p) => !p.trim())}
+            disabled={busy || !chosen || params.some((p) => !p.trim())}
             onClick={() => chosen && onSend({ name: chosen.name, language: chosen.language, params })}
           >
             Trimite template
@@ -59,6 +63,7 @@ export function TemplateDialog({ channelId, defaultParam, onClose, onSend }: Tem
       }
     >
       {error && <Alert variant="destructive">{error}</Alert>}
+      {sendError && <Alert variant="destructive">{sendError}</Alert>}
       {!templates && !error && <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" aria-label="Se încarcă" />}
       {templates && templates.length === 0 && (
         <p className="text-sm text-muted-foreground">Contul nu are template-uri aprobate. Creează unul în WhatsApp Manager (docs/comms/whatsapp.md).</p>

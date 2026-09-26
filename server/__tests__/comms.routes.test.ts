@@ -122,7 +122,7 @@ async function connectTelegram(botId = 7000000001): Promise<{ id: string; webhoo
   return { id: ch.id, webhookUrl: ch.webhookUrl, secret, header };
 }
 
-function tgUpdate(updateId: number, text: string, from = { id: 123456789, first_name: "Maria", last_name: "Pop" }) {
+function tgUpdate(updateId: number, text: string, from: { id: number; first_name: string; last_name?: string } = { id: 123456789, first_name: "Maria", last_name: "Pop" }) {
   return { update_id: updateId, message: { message_id: updateId, date: Math.floor(Date.now() / 1000), from, chat: { id: from.id, type: "private" }, text } };
 }
 
@@ -222,7 +222,7 @@ describe("Telegram: conectare → mesaj primit → răspuns", () => {
     responder = () => ({ body: { ok: true, result: { message_id: 21 } } });
     const r = await req("POST", `/api/comms/inbox/conversations/${convId}/messages`, { text: "Da, avem locuri!" });
     expect(r.status).toBe(201);
-    expect(r.body.message).toMatchObject({ status: "sent", externalId: "21", direction: "outbound" });
+    expect(r.body.message).toMatchObject({ status: "sent", externalId: "123456789:21", direction: "outbound" });
     expect(calls[0].url).toBe(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`);
     expect(calls[0].json).toMatchObject({ chat_id: "123456789", text: "Da, avem locuri!" });
     const detail = await req("GET", `/api/comms/inbox/conversations/${convId}`);
@@ -567,5 +567,74 @@ describe("revizia de securitate", () => {
     const list = await req("GET", "/api/comms/channels");
     expect(list.status).toBe(200);
     expect((list.body.channels as Array<{ webhookUrl: string | null }>)[0].webhookUrl).toBeNull();
+  });
+});
+
+// ─── regresiile din revizia de corectitudine (2026-09-26) ────────────────────
+
+describe("revizia de corectitudine", () => {
+  const h = (ch: { header: string }) => ({ "x-telegram-bot-api-secret-token": ch.header });
+
+  it("[blocant] P0: un mesaj de peste 2000 de caractere ajunge ȘI în cronologia leadului", async () => {
+    const ch = await connectTelegram();
+    const long = "Bună ziua. ".repeat(400); // ~4400 caractere (limita Telegram e 4096 după entități)
+    const r = await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, tgUpdate(90, long), h(ch));
+    expect(r.status).toBe(200);
+    const inter = await testDb.select().from(leadInteractions);
+    expect(inter).toHaveLength(1);
+    expect(inter[0].body!.length).toBeLessThanOrEqual(2000);
+  });
+
+  it("[blocant] P0: același message_id în două chaturi = două mesaje, nu o „dublură”", async () => {
+    const ch = await connectTelegram();
+    const u1 = tgUpdate(5, "de la Maria", { id: 111, first_name: "Maria", last_name: "A" });
+    const u2 = { ...tgUpdate(5, "de la Ion", { id: 222, first_name: "Ion", last_name: "B" }), update_id: 6 };
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, u1, h(ch));
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, u2, h(ch));
+    expect(await testDb.select().from(commMessages)).toHaveLength(2);
+  });
+
+  it("[blocant] P1: webhook-uri PARALELE de la un om nou → un singur lead", async () => {
+    const ch = await connectTelegram();
+    const from = { id: 333, first_name: "Paralel", last_name: "X" };
+    await Promise.all(
+      [1, 2, 3].map((i) => req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, { ...tgUpdate(100 + i, `mesaj ${i}`, from), update_id: 100 + i }, h(ch)))
+    );
+    expect(await testDb.select().from(leads).where(eq(leads.tenantId, tenantA))).toHaveLength(1);
+    expect(await testDb.select().from(commMessages)).toHaveLength(3);
+  });
+
+  it("P2: un mesaj mai vechi, re-livrat târziu, NU dă înapoi fereastra de 24h și previzualizarea", async () => {
+    const ch = await connectTelegram();
+    const from = { id: 444, first_name: "Ordine", last_name: "Y" };
+    const now = Math.floor(Date.now() / 1000);
+    const newer = { update_id: 201, message: { message_id: 201, date: now, from, chat: { id: 444, type: "private" }, text: "al doilea" } };
+    const older = { update_id: 200, message: { message_id: 200, date: now - 3600, from, chat: { id: 444, type: "private" }, text: "primul" } };
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, newer, h(ch));
+    await req("POST", `/api/comms/webhooks/telegram/${ch.secret}`, older, h(ch));
+    const [conv] = await testDb.select().from(commConversations);
+    expect(conv.lastMessagePreview).toBe("al doilea");
+    expect(new Date(conv.lastInboundAt!).getTime()).toBe(now * 1000);
+  });
+
+  it("P2: potrivirea după telefon ocolește leadurile comasate (ajunge la cel păstrat)", async () => {
+    const [kept] = await testDb.insert(leads).values({ tenantId: tenantA, fullName: "Păstrat", stage: "new", phoneNormalized: "69111222" }).returning();
+    await testDb.insert(leads).values({ tenantId: tenantA, fullName: "Comasat", stage: "new", phoneNormalized: "69111222", mergedIntoId: kept.id });
+    responder = (url) => (url.includes("?fields=") ? { body: { display_phone_number: "x" } } : { body: {} });
+    const c = await req("POST", "/api/comms/channels", { kind: "whatsapp", name: "WA", credentials: { accessToken: "t", phoneNumberId: "PN1", appSecret: "s" } });
+    const path = (c.body.channel as { webhookUrl: string }).webhookUrl.split("/").pop()!;
+    const raw = JSON.stringify({ entry: [{ changes: [{ value: { metadata: { phone_number_id: "PN1" }, contacts: [{ wa_id: "37369111222" }], messages: [{ from: "37369111222", id: "wamid.M", timestamp: String(Math.floor(Date.now() / 1000)), type: "text", text: { body: "salut" } }] } }] }] });
+    await req("POST", `/api/comms/webhooks/whatsapp/${path}`, raw, { "x-hub-signature-256": `sha256=${createHmac("sha256", "s").update(raw).digest("hex")}` });
+    const [conv] = await testDb.select().from(commConversations);
+    expect(conv.leadId).toBe(kept.id);
+  });
+
+  it("P3: o pornire refuzată din fișă nu lasă conversații goale", async () => {
+    const [lead] = await testDb.insert(leads).values({ tenantId: tenantA, fullName: "Retras", stage: "new", phone: "+37369000111", consentRevokedAt: new Date() }).returning();
+    responder = (url) => (url.includes("?fields=") ? { body: { display_phone_number: "x" } } : { body: {} });
+    const c = await req("POST", "/api/comms/channels", { kind: "whatsapp", name: "WA", credentials: { accessToken: "t", phoneNumberId: "PN2", appSecret: "s" } });
+    const r = await req("POST", "/api/comms/inbox/start", { leadId: lead.id, channelId: (c.body.channel as { id: string }).id, template: { name: "t", language: "ro", params: [] } });
+    expect(r.status).toBe(403);
+    expect(await testDb.select().from(commConversations)).toHaveLength(0);
   });
 });

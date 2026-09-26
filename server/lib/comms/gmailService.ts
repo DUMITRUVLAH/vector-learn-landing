@@ -9,7 +9,7 @@
  *   GMAIL_PUSH_TOKEN (alternativ)                         — secret în query string, dacă nu se folosește OIDC
  */
 import { createHmac, createPublicKey, createVerify, randomBytes, createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "../../db/client";
 import { commChannels, type CommChannel } from "../../db/schema/comms";
 import {
@@ -163,7 +163,7 @@ export async function freshGmailCreds(channel: CommChannel): Promise<Credentials
     await db
       .update(commChannels)
       .set({ status: "error", lastError: "Accesul la Gmail a expirat sau a fost revocat — reconectează cutia.", updatedAt: new Date() })
-      .where(eq(commChannels.id, channel.id));
+      .where(and(eq(commChannels.id, channel.id), ne(commChannels.status, "disabled")));
     throw new CommsError("reauth_required", "Accesul la Gmail a expirat — reconectează cutia.", 409);
   }
   const next: Credentials = {
@@ -171,7 +171,11 @@ export async function freshGmailCreds(channel: CommChannel): Promise<Credentials
     accessToken: str(data.access_token) ?? "",
     accessTokenExpiresAt: String(Date.now() + (Number(data.expires_in) || 3600) * 1000),
   };
-  await db.update(commChannels).set({ credentialsEnc: encryptCredentials(next), updatedAt: new Date() }).where(eq(commChannels.id, channel.id));
+  // `ne disabled`: o sincronizare în curs nu are voie să readucă secretele unui canal deconectat între timp.
+  await db
+    .update(commChannels)
+    .set({ credentialsEnc: encryptCredentials(next), updatedAt: new Date() })
+    .where(and(eq(commChannels.id, channel.id), ne(commChannels.status, "disabled")));
   return next;
 }
 
@@ -260,14 +264,18 @@ export async function syncGmailChannel(channelId: string, initialLimit = 20): Pr
         break;
       }
       if (!res.ok) throw new CommsError("provider_error", `Gmail history.list: ${str(obj(data.error).message) ?? res.status}`, 502);
+      let lastRecordId: string | null = null;
       for (const h of arr(data.history)) {
+        lastRecordId = str(obj(h).id) ?? lastRecordId;
         for (const added of arr(obj(h).messagesAdded)) {
           const id = str(obj(obj(added).message).id);
           if (id) ids.add(id);
         }
       }
-      newHistoryId = str(data.historyId) ?? newHistoryId;
       pageToken = str(data.nextPageToken);
+      // `data.historyId` e cursorul CURENT al cutiei. Îl salvăm doar dacă am citit tot; dacă ne
+      // oprim la plafonul de pagini, salvăm ultima înregistrare procesată — altfel restul s-ar pierde.
+      newHistoryId = pageToken ? lastRecordId ?? newHistoryId : str(data.historyId) ?? newHistoryId;
       if (!pageToken) break;
     }
     if (expired) historyId = null;
@@ -306,7 +314,7 @@ export async function syncGmailChannel(channelId: string, initialLimit = 20): Pr
         lastError: channel.status === "error" ? null : channel.lastError,
         updatedAt: new Date(),
       })
-      .where(eq(commChannels.id, channel.id));
+      .where(and(eq(commChannels.id, channel.id), ne(commChannels.status, "disabled")));
   }
   return result;
 }

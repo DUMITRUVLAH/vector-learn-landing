@@ -105,6 +105,11 @@ export interface ConnectInput extends AdapterContext {
   /** URL-ul public unde furnizorul trebuie să trimită webhook-urile acestui canal. */
   webhookUrl: string;
   webhookSecret: string;
+  /**
+   * Prima conectare a canalului. Doar atunci se aruncă update-urile vechi ținute de furnizor; la
+   * „Testează" sau la rotirea tokenului ele sunt exact mesajele clienților care n-au ajuns încă.
+   */
+  firstConnect?: boolean;
 }
 
 export interface ConnectResult {

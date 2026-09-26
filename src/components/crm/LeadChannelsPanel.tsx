@@ -151,6 +151,8 @@ function StartDialog({ leadId, channel, onClose, onDone }: StartDialogProps) {
       <TemplateDialog
         channelId={channel.id}
         defaultParam=""
+        busy={busy}
+        sendError={error}
         onClose={onClose}
         onSend={(tpl) => void start({ leadId, channelId: channel.id, template: tpl })}
       />

@@ -193,7 +193,7 @@ describe("Telegram Bot API", () => {
       { body: { ok: true, result: { id: 7000000001, is_bot: true, first_name: "Acme", username: "acme_bot", can_connect_to_business: true } } },
       { body: { ok: true, result: true } },
     ]);
-    const r = await telegramAdapter.connect({ creds: { ...creds, headerSecret: "s3cr3t" }, config: {}, fetch: f, webhookUrl: "https://app/x", webhookSecret: "url" });
+    const r = await telegramAdapter.connect({ creds: { ...creds, headerSecret: "s3cr3t" }, config: {}, fetch: f, webhookUrl: "https://app/x", webhookSecret: "url", firstConnect: true });
     expect(r.externalId).toBe("7000000001");
     expect(r.config).toMatchObject({ botUsername: "acme_bot", canConnectToBusiness: true });
     expect(calls[0].url).toBe(`https://api.telegram.org/bot${creds.botToken}/getMe`);
@@ -219,7 +219,7 @@ describe("Telegram Bot API", () => {
         text: "/start labc",
       },
     });
-    expect(start).toMatchObject({ externalUserId: "123456789", displayName: "Maria Pop", username: "mariap", externalId: "15", startPayload: "labc" });
+    expect(start).toMatchObject({ externalUserId: "123456789", displayName: "Maria Pop", username: "mariap", externalId: "123456789:15", startPayload: "labc" });
 
     const [photo] = telegramAdapter.parseWebhook({
       message: {
@@ -248,6 +248,21 @@ describe("Telegram Bot API", () => {
     expect(blocked).toEqual({ type: "blocked", externalUserId: "5", blocked: true });
   });
 
+  it("[blocant] message_id e unic doar în chat → cheia include chatul (altfel #5 al Mariei = „dublura” lui #5 al lui Ion)", () => {
+    const a = telegramAdapter.parseWebhook({ message: { message_id: 5, date: 1, from: { id: 1 }, chat: { id: 1, type: "private" }, text: "a" } })[0];
+    const b = telegramAdapter.parseWebhook({ message: { message_id: 5, date: 1, from: { id: 2 }, chat: { id: 2, type: "private" }, text: "b" } })[0];
+    expect((a as { externalId: string }).externalId).not.toBe((b as { externalId: string }).externalId);
+  });
+
+  it("reply_parameters folosește id-ul numeric din cheie; tokenul vechi rămâne la reconectare (drop_pending_updates doar prima dată)", async () => {
+    const { f, calls } = fakeFetch([{ body: { ok: true, result: { message_id: 9 } } }]);
+    await telegramAdapter.send({ creds, config: {}, fetch: f }, { to: "77", text: "x", replyToExternalId: "77:8" });
+    expect(calls[0].json).toMatchObject({ reply_parameters: { message_id: 8 } });
+    const c2 = fakeFetch([{ body: { ok: true, result: { id: 1, username: "b" } } }, { body: { ok: true, result: true } }]);
+    await telegramAdapter.connect({ creds: { ...creds, headerSecret: "h" }, config: {}, fetch: c2.f, webhookUrl: "u", webhookSecret: "s" });
+    expect(c2.calls[1].json?.drop_pending_updates).toBe(false);
+  });
+
   it("grupurile sunt ignorate — nu sunt un client care ne scrie", () => {
     expect(
       telegramAdapter.parseWebhook({ message: { message_id: 1, date: 1, from: { id: 1 }, chat: { id: -100, type: "group" }, text: "salut" } })
@@ -261,7 +276,7 @@ describe("Telegram Bot API", () => {
     expect(ev).toMatchObject({ meta: { businessConnectionId: "BCx9f" } });
     const { f, calls } = fakeFetch([{ body: { ok: true, result: { message_id: 3302 } } }]);
     const r = await telegramAdapter.send({ creds, config: {}, fetch: f }, { to: "1", text: "Da!", lastInboundMeta: { businessConnectionId: "BCx9f" } });
-    expect(r).toMatchObject({ ok: true, externalId: "3302" });
+    expect(r).toMatchObject({ ok: true, externalId: "b:BCx9f:1:3302" });
     expect(calls[0].json).toMatchObject({ chat_id: "1", text: "Da!", business_connection_id: "BCx9f" });
   });
 
@@ -416,7 +431,8 @@ describe("legarea de lead și regulile de trimitere", () => {
   const lead = "22222222-2222-4222-8222-222222222222";
 
   it("[blocant] payload-ul de deep link e semnat pe workspace și încape în limita Telegram (64, [A-Za-z0-9_-])", () => {
-    const p = leadLinkPayload(tenant, lead);
+    const p = leadLinkPayload(tenant, lead)!;
+    expect(p).not.toBeNull();
     expect(p.length).toBeLessThanOrEqual(64);
     expect(p).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(parseLeadLinkPayload(tenant, p)).toBe(lead);

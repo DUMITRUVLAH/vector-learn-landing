@@ -12,7 +12,7 @@
  *  5. Un răspuns de la client oprește cadențele (ca apelul primit din crmComms).
  *  6. Responsabilul primește notificare la PRIMUL mesaj necitit, nu la fiecare.
  */
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { commChannels, commContacts, commConversations, commMessages, type CommChannel, type CommContact } from "../../db/schema/comms";
 import { leads, leadInteractions, type NewLead } from "../../db/schema/leads";
@@ -37,8 +37,6 @@ export interface IngestResult {
   /** Mesaje Gmail care nu țin de niciun lead — nestocate intenționat. */
   skipped: number;
 }
-
-const STATUS_RANK: Record<string, number> = { queued: 0, sent: 1, delivered: 2, read: 3, received: 3, failed: 1 };
 
 const KIND_FALLBACK: Record<string, string> = {
   image: "📷 Imagine",
@@ -88,12 +86,38 @@ async function upsertContact(
   return row;
 }
 
+/**
+ * Leadul, urmând comasările: un duplicat comasat (`merged_into_id`) e ascuns din liste, deci o
+ * conversație legată de el ar ajunge într-o fișă pe care n-o mai deschide nimeni.
+ */
 async function leadInTenant(tenantId: string, leadId: string) {
-  const [lead] = await db
-    .select({ id: leads.id, assignedTo: leads.assignedTo, fullName: leads.fullName })
-    .from(leads)
-    .where(and(eq(leads.id, leadId), eq(leads.tenantId, tenantId)));
-  return lead ?? null;
+  let id: string | null = leadId;
+  for (let hop = 0; id && hop < 5; hop++) {
+    const [lead] = await db
+      .select({ id: leads.id, assignedTo: leads.assignedTo, fullName: leads.fullName, mergedIntoId: leads.mergedIntoId })
+      .from(leads)
+      .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
+    if (!lead) return null;
+    if (!lead.mergedIntoId) return lead;
+    id = lead.mergedIntoId;
+  }
+  return null;
+}
+
+/**
+ * Leagă contactul de lead DOAR dacă nu e deja legat — atomic. Două webhook-uri paralele de la
+ * un om nou (Meta le livrează în paralel, pe instanțe Vercel diferite) ar crea altfel două leaduri.
+ * Întoarce leadul câștigător.
+ */
+async function claimContactLead(contactId: string, leadId: string): Promise<string | null> {
+  const won = await db
+    .update(commContacts)
+    .set({ leadId, updatedAt: new Date() })
+    .where(and(eq(commContacts.id, contactId), isNull(commContacts.leadId)))
+    .returning({ id: commContacts.id });
+  if (won.length) return leadId;
+  const [row] = await db.select({ leadId: commContacts.leadId }).from(commContacts).where(eq(commContacts.id, contactId));
+  return row?.leadId ?? null;
 }
 
 /** Găsește sau creează leadul contactului. Întoarce și dacă l-a creat acum. */
@@ -133,11 +157,13 @@ async function resolveLead(
     const [match] = await db
       .select({ id: leads.id, assignedTo: leads.assignedTo })
       .from(leads)
-      .where(and(eq(leads.tenantId, tenantId), ids.length === 1 ? ids[0] : or(...ids)))
+      .where(and(eq(leads.tenantId, tenantId), isNull(leads.mergedIntoId), ids.length === 1 ? ids[0] : or(...ids)))
+      .orderBy(leads.createdAt)
       .limit(1);
     if (match) {
-      await db.update(commContacts).set({ leadId: match.id, updatedAt: new Date() }).where(eq(commContacts.id, contact.id));
-      return { leadId: match.id, assignedTo: match.assignedTo, created: false };
+      const winner = await claimContactLead(contact.id, match.id);
+      const lead = winner && winner !== match.id ? await leadInTenant(tenantId, winner) : match;
+      return { leadId: lead?.id ?? match.id, assignedTo: lead?.assignedTo ?? match.assignedTo, created: false };
     }
   }
 
@@ -161,7 +187,14 @@ async function resolveLead(
     notes: `Primul contact pe ${label}${firstText ? `: ${firstText.slice(0, 500)}` : "."}`,
   };
   const [lead] = await db.insert(leads).values(values).returning();
-  await db.update(commContacts).set({ leadId: lead.id, updatedAt: new Date() }).where(eq(commContacts.id, contact.id));
+  const winner = await claimContactLead(contact.id, lead.id);
+  if (winner !== lead.id) {
+    // Alt webhook paralel a legat deja omul de un lead: al nostru e un duplicat — îl ștergem ÎNAINTE
+    // de distribuire/automatizări, ca nimeni să nu fie notificat de el.
+    await db.delete(leads).where(eq(leads.id, lead.id));
+    const other = winner ? await leadInTenant(tenantId, winner) : null;
+    return { leadId: other?.id ?? null, assignedTo: other?.assignedTo ?? null, created: false };
+  }
 
   // Ca la captarea din formular: distribuirea, apoi automatizările. Niciuna nu are voie să piardă mesajul.
   let assignedTo: string | null = lead.assignedTo ?? null;
@@ -258,12 +291,21 @@ async function gmailShouldIngest(channel: CommChannel, ev: InboundMessageEvent):
   const [lead] = await db
     .select({ id: leads.id })
     .from(leads)
-    .where(and(eq(leads.tenantId, channel.tenantId), eq(leads.emailNormalized, emailN)))
+    .where(and(eq(leads.tenantId, channel.tenantId), isNull(leads.mergedIntoId), eq(leads.emailNormalized, emailN)))
     .limit(1);
   return Boolean(lead);
 }
 
 async function ingestMessage(channel: CommChannel, ev: InboundMessageEvent, result: IngestResult): Promise<void> {
+  // Telegram Business trimite ca `business_message` și ce scrie PROPRIETARUL din telefonul lui.
+  // Acela nu e un mesaj de la client — altfel i-ar suprascrie numele contactului cu al firmei.
+  if (channel.kind === "telegram" && ev.meta?.businessConnectionId) {
+    const owner = (channel.config as Record<string, unknown>)?.businessConnection as Record<string, unknown> | undefined;
+    if (owner?.userId && ev.meta.fromId === owner.userId) {
+      result.skipped++;
+      return;
+    }
+  }
   if (channel.kind === "gmail" && !(await gmailShouldIngest(channel, ev))) {
     result.skipped++;
     return;
@@ -273,65 +315,92 @@ async function ingestMessage(channel: CommChannel, ev: InboundMessageEvent, resu
     // Omul ne scrie din nou → evident nu ne mai blochează.
     await db.update(commContacts).set({ blockedAt: null }).where(eq(commContacts.id, contact.id));
   }
-  const { leadId, assignedTo, created } = await resolveLead(channel, contact, ev.startPayload, ev.body);
+  const resolved = await resolveLead(channel, contact, ev.startPayload, ev.body);
+  let { leadId } = resolved;
+  const { assignedTo, created } = resolved;
   if (created) result.leadsCreated++;
+  // Gmail: un răspuns dintr-un fir pornit din CRM, dar de pe altă adresă (colegul clientului),
+  // ține de același lead ca firul.
+  if (!leadId && ev.threadId) {
+    const [threadConv] = await db
+      .select({ leadId: commConversations.leadId })
+      .from(commConversations)
+      .where(and(eq(commConversations.channelId, channel.id), eq(commConversations.externalThreadId, ev.threadId)))
+      .limit(1);
+    leadId = threadConv?.leadId ?? null;
+  }
   const conv = await upsertConversation(channel, contact, ev.threadId ?? "", ev.subject ?? null, leadId);
 
-  const inserted = await db
-    .insert(commMessages)
-    .values({
-      tenantId: channel.tenantId,
-      conversationId: conv.id,
-      channelId: channel.id,
-      direction: "inbound",
-      kind: ev.kind,
-      body: ev.body ?? null,
-      subject: ev.subject?.slice(0, 500) ?? null,
-      media: ev.media ?? null,
-      externalId: ev.externalId,
-      status: "received",
-      meta: ev.meta ?? null,
-      sentAt: ev.timestamp,
-      createdAt: ev.timestamp,
-    })
-    .onConflictDoNothing()
-    .returning({ id: commMessages.id });
-  if (inserted.length === 0) {
+  const text = preview(ev.body, KIND_FALLBACK[ev.kind] ?? "Mesaj nou");
+  const label = CHANNEL_LABEL[channel.kind as CommChannelKind] ?? channel.kind;
+  const ts = ev.timestamp;
+
+  /**
+   * Mesajul, conversația și urma din cronologie intră ÎMPREUNĂ. Indexul unic pe mesaj e singurul
+   * marcaj de idempotență: dacă mesajul s-ar scrie și restul ar pica, re-livrarea l-ar vedea ca
+   * dublură și cronologia n-ar mai primi niciodată mesajul.
+   */
+  const insertedId = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(commMessages)
+      .values({
+        tenantId: channel.tenantId,
+        conversationId: conv.id,
+        channelId: channel.id,
+        direction: "inbound",
+        kind: ev.kind,
+        body: ev.body ?? null,
+        subject: ev.subject?.slice(0, 500) ?? null,
+        media: ev.media ?? null,
+        externalId: ev.externalId,
+        status: "received",
+        meta: ev.meta ?? null,
+        sentAt: ts,
+        createdAt: ts,
+      })
+      .onConflictDoNothing()
+      .returning({ id: commMessages.id });
+    if (inserted.length === 0) return null;
+
+    // Mesajele pot sosi în altă ordine (o re-livrare întârziată): momentele doar înaintează, iar
+    // previzualizarea se schimbă doar pentru un mesaj mai nou decât ultimul.
+    const isNewest = sql`(${commConversations.lastMessageAt} is null or ${commConversations.lastMessageAt} <= ${ts})`;
+    await tx
+      .update(commConversations)
+      .set({
+        lastMessageAt: sql`greatest(coalesce(${commConversations.lastMessageAt}, ${ts}), ${ts})`,
+        lastInboundAt: sql`greatest(coalesce(${commConversations.lastInboundAt}, ${ts}), ${ts})`,
+        lastMessagePreview: sql`case when ${isNewest} then ${text} else ${commConversations.lastMessagePreview} end`,
+        lastMessageDirection: sql`case when ${isNewest} then 'inbound' else ${commConversations.lastMessageDirection} end`,
+        unreadCount: sql`${commConversations.unreadCount} + 1`,
+        // Un client care revine redeschide discuția închisă.
+        status: "open",
+        updatedAt: new Date(),
+      })
+      .where(eq(commConversations.id, conv.id));
+
+    if (leadId) {
+      await tx.insert(leadInteractions).values({
+        tenantId: channel.tenantId,
+        leadId,
+        type: INTERACTION_TYPE[channel.kind as CommChannelKind] ?? "note",
+        direction: "inbound",
+        // `lead_interactions.body` e varchar(2000); un email lung ar face inserarea să pice.
+        body: ((ev.subject ? `${ev.subject}\n\n` : "") + (ev.body ?? KIND_FALLBACK[ev.kind] ?? `[${label}]`)).slice(0, 2000),
+        metadata: { commMessageId: inserted[0].id, conversationId: conv.id, channelId: channel.id, via: channel.kind },
+        occurredAt: ts,
+      });
+    }
+    return inserted[0].id;
+  });
+  if (!insertedId) {
     result.duplicates++;
     return;
   }
   result.messages++;
+  if (leadId) await stopCadencesOnReply(channel.tenantId, leadId, null);
 
-  const text = preview(ev.body, KIND_FALLBACK[ev.kind] ?? "Mesaj nou");
   const wasRead = conv.unreadCount === 0;
-  await db
-    .update(commConversations)
-    .set({
-      lastMessageAt: ev.timestamp,
-      lastInboundAt: ev.timestamp,
-      lastMessagePreview: text,
-      lastMessageDirection: "inbound",
-      unreadCount: sql`${commConversations.unreadCount} + 1`,
-      // Un client care revine redeschide discuția închisă.
-      status: "open",
-      updatedAt: new Date(),
-    })
-    .where(eq(commConversations.id, conv.id));
-
-  if (leadId) {
-    const label = CHANNEL_LABEL[channel.kind as CommChannelKind] ?? channel.kind;
-    await db.insert(leadInteractions).values({
-      tenantId: channel.tenantId,
-      leadId,
-      type: INTERACTION_TYPE[channel.kind as CommChannelKind] ?? "note",
-      direction: "inbound",
-      body: (ev.subject ? `${ev.subject}\n\n` : "") + (ev.body ?? KIND_FALLBACK[ev.kind] ?? `[${label}]`),
-      metadata: { commMessageId: inserted[0].id, conversationId: conv.id, channelId: channel.id, via: channel.kind },
-      occurredAt: ev.timestamp,
-    });
-    await stopCadencesOnReply(channel.tenantId, leadId, null);
-  }
-
   if (wasRead) {
     const who = contact.displayName ?? contact.phone ?? contact.email ?? "Un client";
     await notifyResponsible(
@@ -358,17 +427,20 @@ async function ingestContact(channel: CommChannel, ev: ContactEvent): Promise<vo
   }
 }
 
+/** Din ce stări poate trece un mesaj în starea nouă. „read" e final; „failed" nu coboară un „read". */
+const STATUS_FROM: Record<StatusEvent["status"], string[]> = {
+  sent: ["queued"],
+  delivered: ["queued", "sent"],
+  read: ["queued", "sent", "delivered"],
+  failed: ["queued", "sent", "delivered"],
+};
+
+/**
+ * Atomic: condiția e în UPDATE, nu citită înainte. Meta trimite „delivered" și „read" în paralel,
+ * iar varianta citește-apoi-scrie lăsa „delivered" să suprascrie un „read" scris între timp.
+ */
 async function applyStatus(channel: CommChannel, ev: StatusEvent): Promise<boolean> {
-  const [msg] = await db
-    .select({ id: commMessages.id, status: commMessages.status })
-    .from(commMessages)
-    .where(and(eq(commMessages.channelId, channel.id), eq(commMessages.externalId, ev.externalId)));
-  if (!msg) return false;
-  // Statusurile vin în orice ordine (Meta o spune explicit): „delivered" după „read" nu coboară.
-  if (msg.status === "read" || (ev.status !== "failed" && STATUS_RANK[ev.status] <= (STATUS_RANK[msg.status] ?? 0))) {
-    return false;
-  }
-  await db
+  const updated = await db
     .update(commMessages)
     .set({
       status: ev.status,
@@ -378,8 +450,15 @@ async function applyStatus(channel: CommChannel, ev: StatusEvent): Promise<boole
         ? { errorCode: ev.errorCode?.slice(0, 40) ?? null, errorMessage: ev.errorMessage?.slice(0, 1000) ?? null }
         : {}),
     })
-    .where(eq(commMessages.id, msg.id));
-  return true;
+    .where(
+      and(
+        eq(commMessages.channelId, channel.id),
+        eq(commMessages.externalId, ev.externalId),
+        inArray(commMessages.status, STATUS_FROM[ev.status])
+      )
+    )
+    .returning({ id: commMessages.id });
+  return updated.length > 0;
 }
 
 export async function ingestEvents(channel: CommChannel, events: NormalizedEvent[]): Promise<IngestResult> {

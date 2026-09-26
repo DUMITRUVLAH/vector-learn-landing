@@ -115,9 +115,11 @@ commsGmailRoutes.get("/oauth/callback", async (c) => {
 
     // Push-ul (dacă e configurat) + prima sincronizare scurtă. Niciuna nu are voie să strice conectarea.
     try {
+      // Întâi importul scurt (ultimele zile), APOI watch: `watch` fixează historyId-ul curent, iar
+      // după el sincronizarea ar porni de la „acum" și n-ar mai aduce nimic din urmă.
+      await syncGmailChannel(channelId);
       const [ch] = await db.select().from(commChannels).where(eq(commChannels.id, channelId));
       if (ch) await ensureGmailWatch(ch, true);
-      await syncGmailChannel(channelId);
     } catch (e) {
       console.warn("[comms/gmail] prima sincronizare a eșuat", e instanceof Error ? e.message : e);
     }

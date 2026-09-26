@@ -72,10 +72,12 @@ async function dispatch(channel: CommChannel, msg: OutboundMessage): Promise<Sen
   }
   const adapter = getAdapter(channel.kind);
   if (!adapter) return { ok: false, errorCode: "unknown_channel", errorMessage: `Canal necunoscut: ${channel.kind}` };
-  const ctx = adapterContext(channel, channel.kind === "gmail" ? await freshGmailCreds(channel) : undefined);
   try {
+    // În `try`: un token Gmail revocat trebuie să lase mesajul „failed" cu motivul, nu „queued" pe veci.
+    const ctx = adapterContext(channel, channel.kind === "gmail" ? await freshGmailCreds(channel) : undefined);
     return await adapter.send(ctx, msg);
   } catch (err) {
+    if (err instanceof CommsError) return { ok: false, errorCode: err.code, errorMessage: err.message };
     return { ok: false, errorCode: "network", errorMessage: err instanceof Error ? err.message : "Furnizorul nu a răspuns." };
   }
 }
@@ -306,7 +308,9 @@ export async function startConversation(
       .from(commConversations)
       .where(and(eq(commConversations.channelId, channel.id), eq(commConversations.contactId, contact.id), eq(commConversations.externalThreadId, "")));
   }
+  let createdNow = false;
   if (!conv) {
+    createdNow = true;
     [conv] = await db
       .insert(commConversations)
       .values({
@@ -320,5 +324,12 @@ export async function startConversation(
       })
       .returning();
   }
-  return sendInConversation(tenantId, userId, conv.id, input);
+  try {
+    return await sendInConversation(tenantId, userId, conv.id, input);
+  } catch (err) {
+    // O încercare refuzată (consimțământ retras, garda de email, fereastra WhatsApp) nu lasă în
+    // urmă o conversație goală, care ar apărea în inbox și în fișă la fiecare reîncercare.
+    if (createdNow) await db.delete(commConversations).where(eq(commConversations.id, conv.id));
+    throw err;
+  }
 }

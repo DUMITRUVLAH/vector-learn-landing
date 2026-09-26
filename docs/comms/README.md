@@ -147,11 +147,20 @@ O eroare de bază de date dă 500, ca furnizorul să reîncerce. Re-livrarea nu 
 
 ## 6. Securitate și date personale
 
+Deciziile de mai jos vin din revizia de securitate și corectitudine din 2026-09-26. Fiecare are test de regresie în `server/__tests__/comms.routes.test.ts`.
+
+- **Acces:** tot `/api/comms/*` (în afară de webhook-uri și cron) cere acces CRM, ca `/api/crm/*`. Părinții, studenții și oamenii scoși din CRM primesc 403.
+- **Webhook WhatsApp per canal:** o semnătură validă cu App Secret-ul unui canal poate atinge **doar numărul acelui canal**. App Secret-ul e dat de client și Meta nu ni-l confirmă. Doar ruta platformei (semnată cu `META_APP_SECRET`) rutează după `phone_number_id`.
+- **Gmail:** din cutia unui agent **scrie doar el**. Citirea e comună (sunt doar emailurile leadurilor, pe care cronologia leadului le arată oricum echipei).
+- **URL-urile de webhook și verify token-ul** se văd doar de cine are `comms.manage`.
+
 - Tokenurile, App Secret-ul și refresh token-ul Gmail se stochează **doar criptat** (`server/lib/crypto.ts`, AES-256-GCM). Nu apar în niciun răspuns API.
   **Condiție: `ENCRYPTION_KEY` setată în producție.** Fără ea, criptarea refuză să scrie.
 - Webhook-urile: segmentul secret de 48 hex din URL plus semnătura furnizorului, comparate în timp constant. Fără secret configurat, cererea se refuză; verificarea nu se sare.
 - Un token deja folosit de alt workspace e refuzat **înainte** de a-i muta webhook-ul (`identify` rulează înainte de `setWebhook`).
-- Fișierele primite trec prin server (proxy): tokenul botului din URL-ul Telegram și Bearer-ul Meta nu ajung în browser. Se servesc cu `Content-Disposition: attachment` și `nosniff`.
+- Fișierele primite trec prin server (proxy): tokenul botului din URL-ul Telegram și Bearer-ul Meta nu ajung în browser. Se servesc cu `Content-Disposition: attachment` și `nosniff`. Media Viber se descarcă doar de pe `https://*.viber.com`, fără redirect (anti-SSRF).
+- **Idempotența:** mesajul, actualizarea conversației și urma din cronologie se scriu într-o singură tranzacție. Legarea unui contact nou de lead e atomică, deci webhook-urile paralele nu creează leaduri duble. Statusurile doar înaintează, printr-un UPDATE condiționat.
+- Cererile de webhook respinse se jurnalizează fără corp (doar mărimea).
 - **Gmail e cutia personală a agentului.** În CRM intră doar emailurile de la leaduri, de la contacte deja legate sau răspunsurile din fire pornite din CRM. Restul nu se stochează deloc, nici măcar expeditorul. Excepție: pe o cutie comună (office@) se poate bifa „Creează lead din orice email".
 - Deep link-ul Telegram/Viber nu conține date personale: e id-ul leadului plus o semnătură HMAC legată de workspace, deci nu poate fi fabricat pentru alt lead.
 - Deconectarea unui canal șterge secretele și legătura cu contul extern, dar **păstrează istoricul** conversațiilor (e istoria relației cu clientul). Ștergerea datelor unui lead urmează fluxul GDPR existent.

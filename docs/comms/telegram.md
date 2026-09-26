@@ -58,7 +58,10 @@ Toate apelurile: `POST https://api.telegram.org/bot<token>/<metodă>`, cu răspu
 
 ### Webhook
 - Autenticitatea: antetul `X-Telegram-Bot-Api-Secret-Token` trebuie să fie egal cu `secret_token`, comparat în timp constant. Altfel răspundem 401.
-- Telegram reîncearcă orice non-2xx „de un număr rezonabil de ori". Deduplicăm pe `message_id` per bot.
+- `secret_token` e un secret **separat** de segmentul din URL. URL-ul e afișat administratorilor și ajunge în loguri; antetul stă doar criptat la noi și la Telegram.
+- Telegram reîncearcă orice non-2xx „de un număr rezonabil de ori". Deduplicăm pe **chat + `message_id`**: `message_id` e unic doar în interiorul unui chat, fiindcă fiecare chat privat numără de la 1. Pe Telegram Business cheia include și conexiunea.
+- `drop_pending_updates` se folosește doar la prima conectare. La „Testează" sau la schimbarea tokenului, update-urile ținute de Telegram sunt mesajele clienților care n-au ajuns încă.
+- Pe Telegram Business se ignoră ce scrie proprietarul contului din telefonul lui. Acela nu e un mesaj de la client.
 - Tratăm: text, poze (cea mai mare rezoluție), documente, voce/audio, video, sticker, contact, locație, `callback_query` (butoane), `my_chat_member` (blocare), `business_connection`, `business_message`.
 - Numărul de telefon se ia din contact **doar dacă** `contact.user_id == from.id`, adică omul și-a trimis propriul număr. Un contact redirecționat e al altcuiva.
 

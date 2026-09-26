@@ -134,14 +134,23 @@ export function CrmInboxPage() {
     return () => clearTimeout(t);
   }, [loadList, q]);
 
-  // Gmail nu are întotdeauna push (Pub/Sub); deschiderea inboxului e momentul natural de a aduce ce e nou.
+  // Ultima variantă a încărcării, citită de intervale fără să le repornească la fiecare tastă.
+  const loadRef = useRef(loadList);
+  useEffect(() => {
+    loadRef.current = loadList;
+  }, [loadList]);
+
+  // Gmail nu are întotdeauna push (Pub/Sub); deschiderea inboxului e momentul natural de a aduce ce
+  // e nou. O SINGURĂ dată la deschidere — nu la fiecare filtru sau tastă din căutare.
   useEffect(() => {
     void syncGmail()
-      .then((r) => (r.messages > 0 ? loadList(true) : undefined))
+      .then((r) => (r.messages > 0 ? loadRef.current(true) : undefined))
       .catch(() => undefined);
-    const id = setInterval(() => void loadList(true), POLL_MS);
+    const id = setInterval(() => void loadRef.current(true), POLL_MS);
     return () => clearInterval(id);
-  }, [loadList]);
+  }, []);
+
+  const refreshQuietly = useCallback(() => void loadRef.current(true), []);
 
   const open = (id: string | null) => {
     setSelected(id);
@@ -268,7 +277,7 @@ export function CrmInboxPage() {
           {/* Conversația */}
           <Card className={`min-h-[60vh] overflow-hidden p-0 ${selected ? "flex" : "hidden lg:flex"} flex-col`}>
             {selected ? (
-              <Thread key={selected} id={selected} onBack={() => open(null)} onChanged={() => void loadList(true)} />
+              <Thread key={selected} id={selected} onBack={() => open(null)} onChanged={refreshQuietly} />
             ) : (
               <div className="flex flex-1 items-center justify-center p-6">
                 <EmptyState icon={<MessageCircle className="h-6 w-6" />} title="Alege o conversație" description="Mesajele și răspunsul apar aici." />
@@ -298,6 +307,10 @@ function Thread({ id, onBack, onChanged }: ThreadProps) {
   const [sendError, setSendError] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const bottom = useRef<HTMLDivElement | null>(null);
+  const onChangedRef = useRef(onChanged);
+  useEffect(() => {
+    onChangedRef.current = onChanged;
+  }, [onChanged]);
 
   const load = useCallback(
     async (quiet = false) => {
@@ -308,13 +321,13 @@ function Thread({ id, onBack, onChanged }: ThreadProps) {
         if (!quiet) setSubject((s) => s || d.conversation.subject || "");
         if (d.conversation.unreadCount > 0) {
           await markConversationRead(id);
-          onChanged();
+          onChangedRef.current();
         }
       } catch (err) {
         if (!quiet) setError(commsErrorText(err, "Nu am putut deschide conversația."));
       }
     },
-    [id, onChanged]
+    [id]
   );
 
   useEffect(() => {
@@ -390,9 +403,13 @@ function Thread({ id, onBack, onChanged }: ThreadProps) {
           variant="outline"
           size="sm"
           onClick={async () => {
-            await updateConversation(id, { status: conversation.status === "open" ? "closed" : "open" });
-            await load(true);
-            onChanged();
+            try {
+              await updateConversation(id, { status: conversation.status === "open" ? "closed" : "open" });
+              await load(true);
+              onChanged();
+            } catch (err) {
+              setSendError(commsErrorText(err, "Nu am putut schimba starea conversației."));
+            }
           }}
         >
           {conversation.status === "open" ? "Închide" : "Redeschide"}

@@ -185,6 +185,7 @@ commsChannelsRoutes.post("/", manage, zValidator("json", createInput), async (c)
       fetch: providerFetch(),
       webhookUrl: webhookUrlFor(base, body.kind, secret),
       webhookSecret: secret,
+      firstConnect: true,
     });
     await assertExternalFree(body.kind, result.externalId, pending.id);
     const [row] = await db
