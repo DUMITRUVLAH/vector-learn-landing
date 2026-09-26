@@ -45,6 +45,11 @@ const SYNTAX_CODES = [
   "TS1161", // Unterminated regular expression literal
   "TS1381", // Unexpected token
   "TS1382", // Unexpected token
+  // Adăugat 2026-09-26 (COMMS-302): un rebase cu 3 conflicte, din care s-a văzut doar unul,
+  // a comis markerele `<<<<<<< HEAD` în App.tsx și BusinessShell.tsx — iar poarta a raportat
+  // verde. `vite build` pica abia după, deci `main` ar fi rămas roșu. Un fișier cu markere nu se
+  // poate construi, deci gatearea nu blochează nimic legitim.
+  "TS1185", // Merge conflict marker encountered
 ];
 const projects = ["tsconfig.json", "tsconfig.server.json"];
 
@@ -70,7 +75,8 @@ if (fatal.length > 0) {
       "   ⚠️  Erori de SINTAXĂ: fișierul nu se parsează, deci restul verificărilor din el sunt oarbe."
     );
     console.error(
-      "      Cauză frecventă: ghilimele românești („ ”) în interiorul unui șir JS delimitat cu \".\n"
+      "      Cauze frecvente: ghilimele românești („ ”) într-un șir JS delimitat cu \", sau markere de conflict\n" +
+        "      (<<<<<<< / >>>>>>>) rămase după un rebase — verifică `git diff --check` înainte de `rebase --continue`.\n"
     );
   }
   console.error("   Referințe nedefinite → ReferenceError/ecran alb în prod. Repară importurile:\n");
