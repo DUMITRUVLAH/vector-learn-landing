@@ -280,6 +280,56 @@ async function validateBoardVisibility(
   return { visibility, teamId: null };
 }
 
+/**
+ * Spațiul comun al workspace-ului, creat la prima listare a boardurilor: un workspace care tocmai a
+ * pornit modulul nu trebuie să arate „niciun board" unui om care n-a fost adăugat încă nicăieri.
+ * Idempotent: indexul unic parțial (un singur board implicit per workspace) oprește a doua creare,
+ * iar coliziunea a două cereri simultane se ignoră.
+ */
+export async function ensureDefaultBoard(ctx: TaskContext): Promise<void> {
+  const [existing] = await db
+    .select({ id: taskBoards.id })
+    .from(taskBoards)
+    .where(and(eq(taskBoards.tenantId, ctx.tenantId), eq(taskBoards.isDefault, true)))
+    .limit(1);
+  if (existing) return;
+  try {
+    await db.transaction(async (tx) => {
+      const [board] = await tx
+        .insert(taskBoards)
+        .values({
+          tenantId: ctx.tenantId,
+          name: "General",
+          description: "Spațiul comun al organizației: îl vede și lucrează pe el toată lumea.",
+          color: "pastel-rose",
+          isDefault: true,
+          visibility: "company",
+          createdBy: null,
+        })
+        .returning();
+      await tx.insert(taskLists).values(
+        DEFAULT_LISTS.map((list) => ({
+          tenantId: ctx.tenantId,
+          boardId: board.id,
+          name: list.name,
+          position: list.position,
+          isDoneList: list.is_done_list,
+          color: list.color,
+          mapsToStatus: list.maps_to_status,
+        })),
+      );
+    });
+  } catch (error) {
+    // O cerere paralelă l-a creat între verificare și inserare: exact ce voiam.
+    const [again] = await db
+      .select({ id: taskBoards.id })
+      .from(taskBoards)
+      .where(and(eq(taskBoards.tenantId, ctx.tenantId), eq(taskBoards.isDefault, true)))
+      .limit(1);
+    if (!again) throw error;
+  }
+}
+
 /** Board nou + coloanele implicite + creatorul ca admin — o singură tranzacție logică. */
 export async function createBoard(ctx: TaskContext, input: CreateBoardInput): Promise<TaskBoardRow> {
   const name = input.name.trim();

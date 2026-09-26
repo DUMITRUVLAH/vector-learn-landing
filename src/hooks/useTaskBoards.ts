@@ -54,6 +54,8 @@ export interface TasksAuth {
   /** Nu există super-admin în interiorul unui workspace; impersonarea intră ca omul însuși. */
   isSuperAdmin: boolean;
   isManager: boolean;
+  /** Poate crea echipe și le poate schimba membrii (aceeași regulă ca în PAR). */
+  canManageTeams: boolean;
   isLoading: boolean;
 }
 
@@ -70,6 +72,7 @@ export function useTasksAuth(): TasksAuth {
       isHRAdmin: data?.is_admin ?? false,
       isSuperAdmin: false,
       isManager: data?.is_manager ?? false,
+      canManageTeams: data?.can_manage_teams ?? false,
       isLoading,
     }),
     [data, isLoading],

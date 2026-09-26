@@ -45,8 +45,9 @@ import { parTeams } from "./par";
 // ─── task_boards ──────────────────────────────────────────────────────────────
 
 /**
- * Un board = un proiect / un departament. Cel implicit (`is_default`) e spațiul comun al
- * workspace-ului: se creează singur, e deschis tuturor și primește task-urile fără board.
+ * Un board = un proiect / un departament. Cel implicit (`is_default`, „General") e spațiul comun al
+ * workspace-ului: se creează singur la prima intrare în modul (`ensureDefaultBoard`), e deschis
+ * întregii organizații și nu se șterge. Task-urile FĂRĂ board nu ajung pe el — rămân personale.
  *
  * `visibility`: `private` — doar membrii din `task_board_members` · `team` — plus membrii echipei
  * `team_id` · `company` — oricine din workspace. Membrul nominal bate mereu grantul de echipă,

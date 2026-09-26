@@ -20,7 +20,7 @@ import { users } from "../../db/schema/users";
 import { boardTasks, type BoardTaskRow, type TaskCommentRow } from "../../db/schema/tasks";
 import { boardRolesFor, canSeeTask, loadTaskContext, type TaskContext } from "./access";
 
-type Kind = "task_assigned" | "task_approval" | "task_mention" | "task_comment";
+type Kind = "task_assigned" | "task_approval" | "task_mention" | "task_comment" | "task_due_soon";
 
 const MENTION_TOKEN = /@\[([0-9a-fA-F-]{36})\]/g;
 

@@ -78,7 +78,7 @@ import * as svc from "../lib/tasks/service";
 import { TaskError } from "../lib/tasks/service";
 import { syncDueSoon } from "../lib/tasks/notify";
 import { activeStaffIds, listAssignable, listPeople } from "../lib/tasks/people";
-import { addTeamMembers, listWorkspaceTeams, selectableTeams, teamsWithMembers } from "../lib/teams";
+import { addTeamMembers, canManageTeams, listWorkspaceTeams, selectableTeams, teamsWithMembers } from "../lib/teams";
 import { parTeamMembers } from "../db/schema/par";
 import { downloadObject, removeObjects, signUploads } from "../lib/storage/objectStore";
 import { isSafeTenantObjectPath } from "../lib/storage/safePath";
@@ -127,6 +127,7 @@ tasksRoutes.get("/me", async (c) => {
       full_name: user.name?.trim() || user.email,
       is_admin: ctx.isAdmin,
       is_manager: ctx.isManager,
+      can_manage_teams: await canManageTeams(user),
       tenant_id: user.tenantId,
     },
   });
@@ -138,6 +139,7 @@ tasksRoutes.get("/boards", async (c) => {
   const ctx = ctxOf(c);
   const archived = c.req.query("archived") ?? "false";
   const boardId = c.req.query("boardId");
+  await svc.ensureDefaultBoard(ctx);
   const rows = await visibleBoards(ctx);
   const filtered = rows
     .filter(({ board }) => (boardId ? board.id === boardId : true))
@@ -720,6 +722,13 @@ function requireAdmin(ctx: TaskContext): void {
   if (!ctx.isAdmin) throw new TaskError(403, "forbidden", "Doar administratorul organizației");
 }
 
+/** Echipele sunt comune cu PAR, deci și autoritatea: `canManageTeams` din `server/lib/teams.ts`. */
+async function requireTeamManager(c: Context<{ Variables: Vars }>): Promise<void> {
+  if (!(await canManageTeams(c.get("user")))) {
+    throw new TaskError(403, "forbidden", "Doar administratorul sau managerul organizației administrează echipele");
+  }
+}
+
 tasksRoutes.get("/visibility-rules", async (c) => {
   const ctx = ctxOf(c);
   requireAdmin(ctx);
@@ -783,7 +792,7 @@ tasksRoutes.delete("/visibility-rules/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-// ─── Echipe (aceleași ca în PAR; administrarea: administratorul workspace-ului) ─
+// ─── Echipe (aceleași ca în PAR, cu aceeași autoritate: `canManageTeams`) ─────
 
 tasksRoutes.get("/teams/selectable", async (c) => {
   const teams = await selectableTeams(ctxOf(c).tenantId);
@@ -815,7 +824,7 @@ tasksRoutes.post(
   zValidator("json", z.object({ name: z.string().trim().min(2).max(200), user_ids: z.array(uuid).max(100).optional() })),
   async (c) => {
     const ctx = ctxOf(c);
-    requireAdmin(ctx);
+    await requireTeamManager(c);
     const { name, user_ids } = c.req.valid("json");
     const [existing] = await db
       .select({ id: parTeams.id })
@@ -836,7 +845,7 @@ tasksRoutes.patch(
   zValidator("json", z.object({ name: z.string().trim().min(2).max(200).optional(), active: z.boolean().optional() })),
   async (c) => {
     const ctx = ctxOf(c);
-    requireAdmin(ctx);
+    await requireTeamManager(c);
     const id = idParam(c);
     const patch = c.req.valid("json");
     if (patch.name === undefined && patch.active === undefined) throw new TaskError(400, "invalid_data", "Nimic de schimbat");
@@ -861,7 +870,7 @@ tasksRoutes.patch(
 
 tasksRoutes.delete("/teams/:id", async (c) => {
   const ctx = ctxOf(c);
-  requireAdmin(ctx);
+  await requireTeamManager(c);
   const id = idParam(c);
   const [deleted] = await db
     .delete(parTeams)
@@ -874,7 +883,7 @@ tasksRoutes.delete("/teams/:id", async (c) => {
 
 tasksRoutes.post("/teams/:id/members", zValidator("json", z.object({ user_id: uuid })), async (c) => {
   const ctx = ctxOf(c);
-  requireAdmin(ctx);
+  await requireTeamManager(c);
   const id = idParam(c);
   const { user_id } = c.req.valid("json");
   const [team] = await db
@@ -896,7 +905,7 @@ tasksRoutes.post("/teams/:id/members", zValidator("json", z.object({ user_id: uu
 
 tasksRoutes.delete("/teams/:id/members/:userId", async (c) => {
   const ctx = ctxOf(c);
-  requireAdmin(ctx);
+  await requireTeamManager(c);
   const id = idParam(c);
   const userId = idParam(c, "userId");
   const [removed] = await db

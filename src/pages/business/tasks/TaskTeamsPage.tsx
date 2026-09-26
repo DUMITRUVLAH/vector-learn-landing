@@ -97,10 +97,11 @@ function memberName(member: WorkspaceTeam["members"][number], t: TasksT): string
 
 export function TaskTeamsPage() {
   const { t } = useTasksT();
-  const { user, isHRAdmin, isLoading: authLoading } = useTasksAuth();
+  const { user, canManageTeams, isLoading: authLoading } = useTasksAuth();
   // Echipele decid cine vede ce în tot produsul (boarduri, cereri PAR), deci le
   // schimbă doar administratorul organizației. Ceilalți le văd, fără butoane.
-  const isAdmin = isHRAdmin;
+  // Aceeași autoritate ca pe ecranul de echipe din PAR: adminul, managerul sau un administrator PAR.
+  const isAdmin = canManageTeams;
 
   const { data: teams = [], isLoading, isError, refetch } = useTeams();
   const { data: boards = [] } = useBoards();

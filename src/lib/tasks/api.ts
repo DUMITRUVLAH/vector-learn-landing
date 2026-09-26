@@ -608,6 +608,8 @@ export interface TasksMe {
   full_name: string;
   is_admin: boolean;
   is_manager: boolean;
+  /** Echipele sunt comune cu PAR: adminul, managerul sau un administrator PAR le administrează. */
+  can_manage_teams: boolean;
   tenant_id: string;
 }
 

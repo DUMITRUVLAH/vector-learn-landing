@@ -22,6 +22,7 @@ import * as schema from "../db/schema/index";
 import { tenants, users } from "../db/schema";
 import { loginEvents, platformAuditLog, tenantModules } from "../db/schema/platform";
 import { platformAdmins, parPayers } from "../db/schema/par";
+import { DEFAULT_ENABLED_MODULE_KEYS, MODULE_KEYS } from "../lib/platformModules";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -184,10 +185,14 @@ describe("catalog + implicitele pentru workspace-uri noi", () => {
       modules: { key: string; defaultEnabled: boolean }[];
       defaults: Record<string, boolean>;
     };
-    expect(json.modules.map((m) => m.key)).toEqual(["findesk", "par", "itpark", "docmerge"]);
+    // Lista vine din catalogul din cod — un modul nou apare aici fără să fie scris de mână.
+    expect(json.modules.map((m) => m.key)).toEqual([...MODULE_KEYS]);
+    expect(json.modules.map((m) => m.key)).toContain("tasks");
     // Implicitul produsului: PAR îl are oricine, restul le aprinde proprietarul din consolă.
     expect(json.defaults.par).toBe(true);
     expect(json.defaults.findesk).toBe(false);
+    // Managerul de task-uri e oprit implicit: se aprinde per workspace.
+    expect(json.defaults.tasks).toBe(false);
     expect(json.modules.find((m) => m.key === "par")?.defaultEnabled).toBe(true);
   });
 
@@ -298,14 +303,16 @@ describe("ce vede clientul (/api/modules)", () => {
     expect(json.enabled).toContain("par");
   });
 
-  it("IMPLICIT: o organizație fără niciun rând de module vede PAR și doar PAR", async () => {
+  it("IMPLICIT: o organizație fără niciun rând de module vede doar implicitele din cod (PAR, CRM)", async () => {
     // Decizia owner-ului: PAR e baza produsului, restul se aprind din consolă. Testul
     // acoperă și cazul în care migrarea nu a ajuns pe prod — implicitul stă în cod, deci
     // clientul nu rămâne nici cu meniul gol, nici cu module pe care serverul le refuză.
     await testDb.delete(tenantModules).where(eq(tenantModules.tenantId, clientTenantId));
     const res = await asClient("/api/modules");
     const json = (await res.json()) as { enabled: string[]; modules: { key: string; enabled: boolean }[] };
-    expect(json.enabled).toEqual(["par"]);
+    // Implicitul din cod (`defaultEnabled`): PAR și CRM; restul, inclusiv task-urile, se aprind din consolă.
+    expect(json.enabled).toEqual([...DEFAULT_ENABLED_MODULE_KEYS]);
+    expect(json.enabled).not.toContain("tasks");
     expect(json.modules.find((m) => m.key === "findesk")?.enabled).toBe(false);
   });
 
@@ -321,7 +328,7 @@ describe("ce vede clientul (/api/modules)", () => {
     await testDb.delete(tenantModules).where(eq(tenantModules.tenantId, ownerTenantId));
     const res = await asOwner("/api/modules");
     const json = (await res.json()) as { enabled: string[] };
-    expect(json.enabled).toEqual(["findesk", "par", "itpark", "docmerge"]);
+    expect(json.enabled).toEqual([...MODULE_KEYS]);
   });
 });
 
@@ -489,7 +496,7 @@ describe("ansamblu", () => {
     expect(json.workspaces.total).toBeGreaterThanOrEqual(3);
     expect(json.logins.last24h).toBeGreaterThan(0);
     expect(json.logins.failed7d).toBeGreaterThan(0);
-    expect(json.adoption).toHaveLength(4);
+    expect(json.adoption).toHaveLength(MODULE_KEYS.length);
     // Adopția se calculează fail-open: activ = total − opriți EXPLICIT.
     const itpark = json.adoption.find((a) => a.key === "itpark")!;
     expect(itpark.enabled).toBeLessThan(itpark.total);

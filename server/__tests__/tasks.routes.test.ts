@@ -15,6 +15,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { inAppNotifications, tenants, users } from "../db/schema";
+import { parMembers } from "../db/schema/par";
 import { boardTasks, taskActivity } from "../db/schema/tasks";
 
 let pglite: PGlite;
@@ -148,6 +149,20 @@ beforeAll(async () => {
 });
 
 describe("boarduri", () => {
+  it("spațiul comun „General” apare singur, o singură dată, și e deschis oricui; nu se șterge", async () => {
+    as("strain");
+    const first = await call<{ boards: (BoardJson & { is_default: boolean })[] }>("GET", "/boards");
+    const general = first.json.boards.filter((b) => b.is_default);
+    expect(general).toHaveLength(1);
+    expect(general[0]).toMatchObject({ name: "General", visibility: "company", my_role: "editor", can_delete: false });
+    as("maria");
+    const second = await call<{ boards: (BoardJson & { is_default: boolean })[] }>("GET", "/boards?archived=all");
+    expect(second.json.boards.filter((b) => b.is_default).map((b) => b.id)).toEqual([general[0].id]);
+    expect((await listsOf(general[0].id)).map((l) => l.maps_to_status)).toEqual(["todo", "in_progress", "pending", "done"]);
+    as("admin");
+    expect((await call("DELETE", `/boards/${general[0].id}`)).status).toBe(403);
+  });
+
   it("creatorul devine admin, iar boardul se naște cu 4 coloane și o singură coloană de finalizare", async () => {
     as("ion");
     const board = await createBoard("Marketing");
@@ -224,6 +239,18 @@ describe("echipe și vizibilitatea boardului", () => {
     as("ion");
     const selectable = await call<{ teams: { team_id: string; member_count: number }[] }>("GET", "/teams/selectable");
     expect(selectable.json.teams.find((t) => t.team_id === teamId)?.member_count).toBe(2);
+  });
+
+  it("echipele au aceeași autoritate ca în PAR: managerul și un par_admin numit le administrează", async () => {
+    as("vlad");
+    const byManager = await call<{ team: { id: string } }>("POST", "/teams", { name: "Echipa managerului" });
+    expect(byManager.status).toBe(201);
+    expect((await call<{ me: { can_manage_teams: boolean } }>("GET", "/me")).json.me.can_manage_teams).toBe(true);
+    as("strain");
+    expect((await call<{ me: { can_manage_teams: boolean } }>("GET", "/me")).json.me.can_manage_teams).toBe(false);
+    expect((await call("PATCH", `/teams/${byManager.json.team.id}`, { name: "Furată" })).status).toBe(403);
+    await testDb.insert(parMembers).values({ tenantId, userId: people.strain.id, role: "par_admin" });
+    expect((await call("PATCH", `/teams/${byManager.json.team.id}`, { name: "Redenumită de par_admin" })).status).toBe(200);
   });
 
   it("un board de echipă e deschis membrilor echipei ca editori — și închis celorlalți", async () => {

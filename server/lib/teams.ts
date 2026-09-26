@@ -8,12 +8,15 @@
  *   - Task-uri: un board cu `visibility = 'team'` e deschis membrilor echipei lui, iar
  *     coechipierii apar primii în selectorul de responsabili (`server/lib/tasks/access.ts`).
  *
- * Aici stă doar administrarea (listare, creare, membri), comună celor două seturi de rute:
- * `/api/par/teams` (administratorul PAR) și `/api/tasks/teams` (administratorul workspace-ului).
+ * Aici stă administrarea (listare, creare, membri), comună celor două seturi de rute —
+ * `/api/par/teams` și `/api/tasks/teams` — și regula UNICĂ despre cine o poate face
+ * (`canManageTeams`): aceleași rânduri nu au voie să aibă două autorități diferite, altfel un
+ * manager ar putea șterge o echipă din PAR și ar primi 403 pe aceeași echipă din Task-uri.
  */
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { parTeamMembers, parTeams } from "../db/schema/par";
+import { parMembers, parTeamMembers, parTeams } from "../db/schema/par";
+import { IMPLICIT_PAR_ADMIN_TENANT_ROLES } from "../middleware/requirePARRole";
 import { users } from "../db/schema/users";
 
 export interface TeamMemberDto {
@@ -120,4 +123,18 @@ export async function addTeamMembers(tenantId: string, teamId: string, userIds: 
     .onConflictDoNothing()
     .returning({ userId: parTeamMembers.userId });
   return inserted.map((r) => r.userId);
+}
+
+/**
+ * Cine administrează echipele: adminul sau managerul workspace-ului, ori un administrator PAR
+ * numit explicit — exact regula `requirePARRole("par_admin")` de pe `/api/par/teams`.
+ */
+export async function canManageTeams(user: { id: string; tenantId: string; role: string }): Promise<boolean> {
+  if (IMPLICIT_PAR_ADMIN_TENANT_ROLES.includes(user.role)) return true;
+  const [row] = await db
+    .select({ id: parMembers.id })
+    .from(parMembers)
+    .where(and(eq(parMembers.tenantId, user.tenantId), eq(parMembers.userId, user.id), eq(parMembers.role, "par_admin")))
+    .limit(1);
+  return Boolean(row);
 }
