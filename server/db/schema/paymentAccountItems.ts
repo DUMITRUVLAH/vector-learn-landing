@@ -34,6 +34,9 @@ export const paymentAccountItems = pgTable(
     lineSubtotalCents: integer("line_subtotal_cents").notNull().default(0),
     lineVatCents: integer("line_vat_cents").notNull().default(0),
     lineTotalCents: integer("line_total_cents").notNull().default(0),
+    /** Produsul din catalogul CRM din care a pornit linia (0196). Fără FK — catalogul se poate
+     *  arhiva, contul emis rămâne neschimbat. */
+    productId: uuid("product_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

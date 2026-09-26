@@ -43,6 +43,7 @@ export * from "./sellerProfiles";
 export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
+export * from "./paymentAccountTemplates";
 // PAR module
 export * from "./par";
 export * from "./parEinvoices";

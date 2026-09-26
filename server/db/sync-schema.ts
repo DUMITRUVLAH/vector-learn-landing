@@ -10,6 +10,7 @@ import { PAR_DRIVE_ENSURE_STATEMENTS } from "./ensure/parDriveSync";
 import { CRM_PARITY_ENSURE_STATEMENTS } from "./ensure/crmParity";
 import { PONTAJ_ENSURE_STATEMENTS } from "./ensure/pontaj";
 import { COMMS_ENSURE_STATEMENTS } from "./ensure/comms";
+import { CONT_PLATA_ENSURE_STATEMENTS } from "./ensure/contPlata";
 
 /**
  * Self-healing schema sync — runs at deploy AFTER migrations (see scripts/vercel-migrate.mjs).
@@ -827,6 +828,8 @@ async function main() {
     ...PONTAJ_ENSURE_STATEMENTS,
     // COMMS-301 (migrarea 0195): webhook-urile canalelor scriu aici la primul mesaj primit.
     ...COMMS_ENSURE_STATEMENTS,
+    // CONTPLATA-faza-1 (migrarea 0196): șabloanele contului de plată.
+    ...CONT_PLATA_ENSURE_STATEMENTS,
     // Migrarea 0154 (audit perf): indexuri compuse/parțiale pe interogările hot-path ale PAR —
     // fără migrări fiabile pe prod, indexurile trebuie create explicit aici, nu doar în migrare.
     `CREATE INDEX IF NOT EXISTS "par_payer_modules_tenant_module_idx" ON "par_payer_modules" ("tenant_id","module_key")`,

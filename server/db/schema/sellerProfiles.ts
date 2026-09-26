@@ -1,4 +1,6 @@
 import {
+  boolean,
+  text,
   pgTable,
   uuid,
   varchar,
@@ -35,6 +37,28 @@ export const sellerProfiles = pgTable(
     defaultSeries: varchar("default_series", { length: 20 }).notNull().default("CP"),
     /** Default VAT rate as a whole percent, e.g. 20 */
     defaultVatRate: integer("default_vat_rate").notNull().default(20),
+
+    // --- CONTPLATA-faza-1 (0196): cum ARATĂ contul și cum se NUMEROTEAZĂ ---
+    // Rechizitele nu se mai țin aici: sursa lor e „Datele firmei" (fin_org_profile), aceeași ca
+    // pentru oferte și contracte. Câmpurile de mai sus rămân doar ca rezervă pentru conturi vechi.
+    /** Culoarea de accent, #rrggbb. Validată la scriere; una invalidă revine la implicit în PDF. */
+    accentColor: varchar("accent_color", { length: 7 }).notNull().default("#047857"),
+    /** Macheta: modern | clasic | compact. */
+    layout: varchar("layout", { length: 20 }).notNull().default("modern"),
+    logoUrl: text("logo_url"),
+    showLogo: boolean("show_logo").notNull().default(true),
+    showAmountWords: boolean("show_amount_words").notNull().default(true),
+    showSignature: boolean("show_signature").notNull().default(true),
+    showStamp: boolean("show_stamp").notNull().default(false),
+    footerText: text("footer_text"),
+    defaultNotes: text("default_notes"),
+    defaultDueDays: integer("default_due_days").notNull().default(5),
+    defaultLang: varchar("default_lang", { length: 2 }).notNull().default("ro"),
+    /** Formatul numărului: {serie}, {an}, {nr}. */
+    numberPattern: varchar("number_pattern", { length: 60 }).notNull().default("{serie}-{an}-{nr}"),
+    numberPad: integer("number_pad").notNull().default(4),
+    /** Primul număr al secvenței — pentru cine vine din alt program și e deja la 278. */
+    numberStart: integer("number_start").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

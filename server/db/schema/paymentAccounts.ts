@@ -7,7 +7,9 @@ import {
   pgEnum,
   index,
   text,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { companyClients } from "./companyClients";
 
@@ -54,12 +56,31 @@ export const paymentAccounts = pgTable(
     sellerIban: varchar("seller_iban", { length: 34 }),
     sellerBankName: varchar("seller_bank_name", { length: 255 }),
     sellerBankCode: varchar("seller_bank_code", { length: 32 }),
+    // CONTPLATA-faza-1 (0196): restul rechizitelor noastre, înghețate la fel ca primele.
+    sellerBic: varchar("seller_bic", { length: 11 }),
+    sellerPhone: varchar("seller_phone", { length: 64 }),
+    sellerEmail: varchar("seller_email", { length: 255 }),
+    sellerAdministrator: varchar("seller_administrator", { length: 255 }),
 
     // --- Buyer (plătitor) snapshot ---
     buyerName: varchar("buyer_name", { length: 500 }).notNull(),
     buyerIdno: varchar("buyer_idno", { length: 32 }),
     buyerAddress: varchar("buyer_address", { length: 500 }),
     buyerCity: varchar("buyer_city", { length: 255 }),
+    // CONTPLATA-faza-1 (0196): „nu intră toate datele clientului" — contactele și banca lui.
+    buyerVatCode: varchar("buyer_vat_code", { length: 32 }),
+    buyerEmail: varchar("buyer_email", { length: 255 }),
+    buyerPhone: varchar("buyer_phone", { length: 64 }),
+    buyerIban: varchar("buyer_iban", { length: 34 }),
+    buyerBankName: varchar("buyer_bank_name", { length: 255 }),
+    buyerContact: varchar("buyer_contact", { length: 255 }),
+
+    // --- Legăturile cu CRM-ul (fără FK: fișa sau leadul pot fi șterse, contul rămâne probă) ---
+    crmCompanyId: uuid("crm_company_id"),
+    leadId: uuid("lead_id"),
+    templateId: uuid("template_id"),
+    /** Limba documentului: ro | ru | en. */
+    lang: varchar("lang", { length: 2 }).notNull().default("ro"),
 
     // --- Totals (minor units / bani) ---
     subtotalCents: integer("subtotal_cents").notNull().default(0),
@@ -77,6 +98,10 @@ export const paymentAccounts = pgTable(
     statusIdx: index("payment_accounts_status_idx").on(t.tenantId, t.status),
     numberIdx: index("payment_accounts_number_idx").on(t.tenantId, t.series, t.number),
     clientIdx: index("payment_accounts_client_idx").on(t.clientId),
+    /** Numărul unui cont e unic în organizație — garda de ultimă instanță contra dublurilor. */
+    docNumUniq: uniqueIndex("payment_accounts_docnum_uniq")
+      .on(t.tenantId, t.documentNumber)
+      .where(sql`${t.documentNumber} IS NOT NULL`),
   })
 );
 
