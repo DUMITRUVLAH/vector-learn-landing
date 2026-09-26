@@ -1,6 +1,6 @@
 # CRM e2e — 2530 scenarii
 
-Rulat: 2026-09-26T11:35:06.650Z · țintă http://localhost:3150 · 14.8s · **2530 trec, 0 pică**
+Rulat: 2026-09-26T11:48:36.224Z · țintă http://localhost:3150 · 16.3s · **2530 trec, 0 pică**
 
 | Grup | Trec | Pică |
 |---|---:|---:|

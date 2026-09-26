@@ -35,6 +35,11 @@ describe("classifyClientError", () => {
     expect(classifyClientError(new Error('invalid byte sequence for encoding "UTF8": 0x00'), true)?.status).toBe(400);
   });
 
+  it("valoare de enum invalidă (tot 22P02) e pană de schemă, nu input — rămâne 500", () => {
+    const err = Object.assign(new Error('invalid input value for enum interaction_type: "telegram"'), { code: "22P02" });
+    expect(classifyClientError(err, false)).toBeNull();
+  });
+
   it("bug-urile reale de bază rămân 500 (constrângeri, coloane lipsă)", () => {
     expect(classifyClientError(Object.assign(new Error("dup"), { code: "23505" }), true)).toBeNull();
     expect(classifyClientError(new Error('column "x" does not exist'), false)).toBeNull();

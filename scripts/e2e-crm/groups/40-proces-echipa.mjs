@@ -114,10 +114,10 @@ const BASE = ["crm.access", "leads.view_all", "leads.view_own", "leads.edit", "r
 const ADMIN_ALL = [
   "crm.access", "leads.view_all", "leads.view_own", "leads.edit", "leads.delete", "leads.export",
   "reports.view_team", "reports.view_own", "documents.create", "products.manage", "pipelines.manage",
-  "automations.manage", "assignment.manage", "cadences.manage", "audit.view",
+  "automations.manage", "assignment.manage", "cadences.manage", "comms.manage", "audit.view",
 ];
 const MANAGER = [...BASE, "leads.delete", "leads.export", "reports.view_team", "products.manage", "pipelines.manage",
-  "automations.manage", "assignment.manage", "cadences.manage", "audit.view"];
+  "automations.manage", "assignment.manage", "cadences.manage", "comms.manage", "audit.view"];
 const sorted = (a) => [...(a ?? [])].sort();
 
 export function register(suite) {
@@ -1401,7 +1401,7 @@ function rolesGroup(suite) {
     s.intruder = await signupTenant(`intrus-roluri-${RUN}`);
   });
 
-  add("adminul are exact cele 15 drepturi CRM", async (s) => {
+  add("adminul are exact cele 16 drepturi CRM (cu comms.manage, COMMS-301)", async (s) => {
     const p = await myPerms(s.a);
     same(sorted(p.permissions), sorted(ADMIN_ALL), "drepturile adminului");
     same(sorted(p.fromRole), sorted(ADMIN_ALL), "fromRole");
@@ -1460,7 +1460,7 @@ function rolesGroup(suite) {
     expectStatus(await api(s.b, "GET", "/api/crm/audit"), 403);
   });
 
-  add("rol → admin: toate cele 15; înapoi la agent: 6", async (s) => {
+  add("rol → admin: toate cele 16; înapoi la agent: 6", async (s) => {
     expectStatus(await setRole(s, "admin"), 200);
     same(sorted((await myPerms(s.b)).permissions), sorted(ADMIN_ALL), "admin");
     expectStatus(await setRole(s, "teacher"), 200);

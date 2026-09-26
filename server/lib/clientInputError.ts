@@ -44,10 +44,15 @@ export function classifyClientError(err: unknown, hasJsonBody: boolean): ClientE
     return { status, error: status === 400 ? "invalid_body" : err.message || "request_error" };
   }
   if (err instanceof SyntaxError && hasJsonBody) return { status: 400, error: "invalid_json" };
+  const msg = err instanceof Error ? err.message : "";
+  // 22P02 acoperă și „invalid input value for enum" — dar valoarea unui enum o pune SERVERUL (o
+  // constantă din cod, ex. un canal nou fără migrare aplicată), nu clientul. Aia e pană de schemă
+  // și trebuie să rămână 500 cu telemetrie, nu să fie ascunsă ca 400 (prins la rebase, 26.09.2026:
+  // „telegram"/„viber" fără migrarea 0195 pe o bază veche).
+  if (/for enum/i.test(msg)) return null;
   const state = sqlState(err);
   if (state && INPUT_SQLSTATES.has(state)) return { status: 400, error: "invalid_input" };
   // PGlite (baza locală și a testelor) nu pune mereu `code`; mesajul e același ca în Postgres.
-  const msg = err instanceof Error ? err.message : "";
   if (/invalid input syntax for type (uuid|integer|bigint|numeric|boolean|date|timestamp)/i.test(msg)) {
     return { status: 400, error: "invalid_input" };
   }
