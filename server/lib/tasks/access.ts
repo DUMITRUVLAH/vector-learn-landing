@@ -33,6 +33,14 @@ import { teammateUserIds } from "../par/teamScope";
 import { activeTeamIdsOf } from "../teams";
 
 export type BoardRole = "viewer" | "editor" | "admin";
+
+/** Conturile care nu fac muncă în workspace (părinți, elevi din produsul Learn). */
+export const NON_STAFF_ROLES = ["student", "parent"] as const;
+
+/** Intră în managerul de task-uri? Doar personalul — aceeași regulă ca selectorul de responsabili. */
+export function isStaffRole(role: string): boolean {
+  return !(NON_STAFF_ROLES as readonly string[]).includes(role);
+}
 export type VisibilityScope = "own" | "team" | "company";
 
 export interface TaskContext {

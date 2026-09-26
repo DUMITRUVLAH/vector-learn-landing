@@ -441,7 +441,17 @@ export function BoardKanbanView({
                           .map((l) => (
                             <DropdownMenuItem
                               key={l.id}
-                              onClick={() => listOps.moveAll.mutate({ fromListId: listId, toListId: l.id })}
+                              onClick={() =>
+                                listOps.moveAll.mutate(
+                                  { fromListId: listId, toListId: l.id },
+                                  {
+                                    onSuccess: ({ skipped }) => {
+                                      if (skipped > 0) toast.info(t("board.list.moveAllSkipped", { count: skipped }));
+                                    },
+                                    onError: (error) => toast.error(taskErrorMessage(error, t)),
+                                  },
+                                )
+                              }
                             >
                               {l.name}
                             </DropdownMenuItem>

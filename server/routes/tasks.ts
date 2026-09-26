@@ -57,6 +57,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import {
   boardRights,
   canEditBoardRole,
+  isStaffRole,
   loadBoardWithRole,
   loadTaskContext,
   taskBoardIds,
@@ -82,6 +83,14 @@ import { addTeamMembers, canManageTeams, listWorkspaceTeams, selectableTeams, te
 import { parTeamMembers } from "../db/schema/par";
 import { downloadObject, removeObjects, signUploads } from "../lib/storage/objectStore";
 import { isSafeTenantObjectPath } from "../lib/storage/safePath";
+import {
+  ALLOWED_ATTACHMENT_TYPES,
+  MAX_ATTACHMENT_BYTES,
+  TASK_ATTACHMENT_BUCKET,
+  isTaskAttachmentPath,
+  servingFor,
+  taskUploadName,
+} from "../lib/tasks/attachments";
 import { magicBytesMatchBuffer } from "./parAttachments";
 import { contentDisposition } from "../lib/http/contentDisposition";
 import { writeAuditLog } from "../lib/auditLogger";
@@ -93,7 +102,11 @@ export const tasksRoutes = new Hono<{ Variables: Vars }>();
 tasksRoutes.use("*", requireAuth);
 // Contextul (echipe, coechipieri, regula de vizibilitate) se încarcă o dată per cerere.
 tasksRoutes.use("*", async (c, next) => {
-  c.set("taskCtx", await loadTaskContext(c.get("user")));
+  const user = c.get("user");
+  // Părinții și elevii (produsul Learn împarte tabela `users`) nu lucrează în workspace: fără
+  // gardul ăsta erau editori pe boardurile organizației și citeau directorul de oameni.
+  if (!isStaffRole(user.role)) return c.json({ error: "forbidden" }, 403);
+  c.set("taskCtx", await loadTaskContext(user));
   await next();
 });
 
@@ -156,14 +169,14 @@ tasksRoutes.get("/boards", async (c) => {
 const listSeed = z.object({
   name: z.string().trim().min(1).max(200),
   is_done_list: z.boolean().optional(),
-  color: z.string().max(50).optional(),
+  color: z.string().max(40).optional(),
   maps_to_status: z.enum(["todo", "in_progress", "pending", "done"]).nullable().optional(),
 });
 
 const createBoardSchema = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().max(10_000).nullable().optional(),
-  color: z.string().min(1).max(50).optional(),
+  color: z.string().min(1).max(40).optional(),
   visibility: z.enum(["private", "team", "company"]).optional(),
   team_id: uuid.nullable().optional(),
   lists: z.array(listSeed).max(20).nullable().optional(),
@@ -179,7 +192,7 @@ tasksRoutes.post("/boards", zValidator("json", createBoardSchema), async (c) => 
 const boardPatchSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(10_000).nullable().optional(),
-  color: z.string().min(1).max(50).optional(),
+  color: z.string().min(1).max(40).optional(),
   visibility: z.enum(["private", "team", "company"]).optional(),
   team_id: uuid.nullable().optional(),
   archived: z.boolean().optional(),
@@ -274,7 +287,7 @@ const listPatchSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   position: z.number().finite().optional(),
   is_done_list: z.boolean().optional(),
-  color: z.string().min(1).max(50).optional(),
+  color: z.string().min(1).max(40).optional(),
   maps_to_status: z.enum(["todo", "in_progress", "pending", "done"]).nullable().optional(),
   archived: z.boolean().optional(),
 });
@@ -292,8 +305,8 @@ tasksRoutes.post("/lists/:id/duplicate", zValidator("json", z.object({ copy_suff
 });
 
 tasksRoutes.post("/lists/:id/move-all", zValidator("json", z.object({ to_list_id: uuid })), async (c) => {
-  const moved = await svc.moveAllToList(ctxOf(c), idParam(c), c.req.valid("json").to_list_id);
-  return c.json({ moved });
+  const { moved, skipped } = await svc.moveAllToList(ctxOf(c), idParam(c), c.req.valid("json").to_list_id);
+  return c.json({ moved, skipped });
 });
 
 tasksRoutes.post("/lists/:id/sort", zValidator("json", z.object({ key: z.string().max(20) })), async (c) => {
@@ -537,35 +550,18 @@ tasksRoutes.post("/comment-counts", zValidator("json", z.object({ task_ids: z.ar
   const ctx = ctxOf(c);
   const ids = c.req.valid("json").task_ids;
   if (ids.length === 0) return c.json({ counts: {} });
+  // Doar task-urile pe care apelantul le vede: altfel numărul trăda comentarii pe task-uri private.
+  const boards = await visibleBoards(ctx);
   const rows = await db
     .select({ taskId: taskComments.taskId, n: sql<number>`count(*)::int` })
     .from(taskComments)
-    .where(and(eq(taskComments.tenantId, ctx.tenantId), inArray(taskComments.taskId, ids)))
+    .innerJoin(boardTasks, eq(boardTasks.id, taskComments.taskId))
+    .where(and(eq(taskComments.tenantId, ctx.tenantId), inArray(taskComments.taskId, ids), visibleTasksWhere(ctx, taskBoardIds(boards, ctx))))
     .groupBy(taskComments.taskId);
   const counts: Record<string, number> = {};
   for (const row of rows) counts[row.taskId] = Number(row.n);
   return c.json({ counts });
 });
-
-/** Bucket propriu: fișierele task-urilor n-au ce căuta lângă dosarele de plată. */
-export const TASK_ATTACHMENT_BUCKET = "task-attachments";
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const ALLOWED_ATTACHMENT_TYPES = new Set([
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "text/plain",
-  "text/csv",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/zip",
-]);
 
 /** Pasul 1: dreptul se verifică ÎNAINTE să dăm un URL de scriere. */
 tasksRoutes.post(
@@ -573,11 +569,12 @@ tasksRoutes.post(
   zValidator("json", z.object({ fileName: z.string().min(1).max(255), mime: z.string().max(150), sizeBytes: z.number().int().min(1).max(MAX_ATTACHMENT_BYTES) })),
   async (c) => {
     const ctx = ctxOf(c);
-    await svc.loadVisibleTask(ctx, idParam(c));
+    const { task } = await svc.loadVisibleTask(ctx, idParam(c));
     const body = c.req.valid("json");
     if (!ALLOWED_ATTACHMENT_TYPES.has(body.mime)) throw new TaskError(400, "invalid_data", "Tipul fișierului nu este permis");
     try {
-      const [signed] = await signUploads(TASK_ATTACHMENT_BUCKET, ctx.tenantId, [{ fileName: body.fileName }]);
+      // Id-ul task-ului intră în cale: finalize și comentariul acceptă doar căi semnate pentru el.
+      const [signed] = await signUploads(TASK_ATTACHMENT_BUCKET, ctx.tenantId, [{ fileName: taskUploadName(task.id, body.fileName) }]);
       return c.json({ path: signed.path, signedUrl: signed.signedUrl });
     } catch {
       return c.json({ error: "storage_unavailable", detail: "Nu pot pregăti încărcarea. Încearcă din nou." }, 503);
@@ -591,10 +588,20 @@ tasksRoutes.post(
   zValidator("json", z.object({ path: z.string().min(1).max(500), fileName: z.string().min(1).max(255), mime: z.string().max(150) })),
   async (c) => {
     const ctx = ctxOf(c);
-    await svc.loadVisibleTask(ctx, idParam(c));
+    const { task } = await svc.loadVisibleTask(ctx, idParam(c));
     const body = c.req.valid("json");
-    if (!isSafeTenantObjectPath(body.path, ctx.tenantId)) throw new TaskError(400, "invalid_data", "Cale invalidă");
+    // Doar o cale semnată pentru ACEST task: altfel ramura de mai jos, care șterge obiectul la
+    // tip nepotrivit, ștergea fișierul oricui din workspace (ADV-TASKS-11).
+    if (!isTaskAttachmentPath(body.path, ctx.tenantId, task.id)) throw new TaskError(400, "invalid_data", "Cale invalidă");
     if (!ALLOWED_ATTACHMENT_TYPES.has(body.mime)) throw new TaskError(400, "invalid_data", "Tipul fișierului nu este permis");
+    // Un fișier deja atașat unui comentariu nu mai e „în curs de urcare": nu se re-verifică și,
+    // mai ales, nu se șterge pe baza unui tip declarat greșit.
+    const [attached] = await db
+      .select({ id: taskComments.id })
+      .from(taskComments)
+      .where(and(eq(taskComments.taskId, task.id), sql`${taskComments.attachments} @> ${JSON.stringify([{ path: body.path }])}::jsonb`))
+      .limit(1);
+    if (attached) throw new TaskError(409, "invalid_data", "Fișierul e deja atașat unui comentariu.");
     let bytes: Buffer;
     try {
       bytes = await downloadObject(TASK_ATTACHMENT_BUCKET, body.path);
@@ -628,8 +635,12 @@ tasksRoutes.get("/tasks/:id/attachments/file", async (c) => {
   } catch {
     return c.json({ error: "preview_unavailable" }, 422);
   }
-  c.header("Content-Type", attachment.type || "application/octet-stream");
-  c.header("Content-Disposition", contentDisposition("inline", attachment.name, "fisier"));
+  // Tipul salvat în comentariu vine de la client: servirea îl decide din lista permisă și din
+  // octeții reali, nu din ce scrie acolo (ADV-TASKS-01 — un `text/html` rula pe domeniul nostru).
+  const served = servingFor(attachment.type, bytes, magicBytesMatchBuffer);
+  c.header("Content-Type", served.contentType);
+  c.header("Content-Disposition", contentDisposition(served.disposition, attachment.name, "fisier"));
+  if (served.sandbox) c.header("Content-Security-Policy", "sandbox");
   c.header("Cache-Control", "private, max-age=3600");
   c.header("X-Content-Type-Options", "nosniff");
   return c.body(new Uint8Array(bytes));

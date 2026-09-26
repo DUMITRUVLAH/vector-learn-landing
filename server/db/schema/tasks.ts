@@ -199,8 +199,12 @@ export const boardTasks = pgTable(
     approverIds: jsonb("approver_ids").$type<string[]>().notNull().default([]),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    /**
+     * `SET NULL`, ca în sursă: ștergerea seriei (doar odată cu boardul ei) nu ia cu ea zilele deja
+     * lucrate — o ocurență mutată pe alt board rămâne acolo, desprinsă (ADV-TASKS-04).
+     */
     recurrenceParentId: uuid("recurrence_parent_id").references((): AnyPgColumn => boardTasks.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     occurrenceDate: date("occurrence_date"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -214,7 +218,8 @@ export const boardTasks = pgTable(
     index("board_tasks_parent_idx").on(t.parentTaskId),
     index("board_tasks_assigned_idx").on(t.tenantId, t.assignedTo),
     index("board_tasks_due_idx").on(t.tenantId, t.dueDate),
-    uniqueIndex("board_tasks_occurrence_uniq").on(t.recurrenceParentId, t.occurrenceDate),
+    // `board_tasks_occurrence_uniq` (o zi per serie, doar între rândurile VII) e parțial, deci stă
+    // în SQL (`server/db/ensure/tasks.ts`): o ocurență ștearsă nu mai ține ziua ocupată.
   ],
 );
 

@@ -36,6 +36,29 @@ vi.mock("../middleware/requireAuth", () => ({
   },
 }));
 
+/** Ce „urcă" browserul: calea semnată → octeți. Căile au forma reală (`buildObjectPath`). */
+const storage = new Map<string, Buffer>();
+
+vi.mock("../lib/storage/objectStore", async () => {
+  const actual = await vi.importActual<typeof import("../lib/storage/objectStore")>("../lib/storage/objectStore");
+  return {
+    ...actual,
+    signUploads: async (_bucket: string, tenant: string, files: Array<{ fileName: string }>) =>
+      files.map((f) => {
+        const p = actual.buildObjectPath(tenant, f.fileName);
+        return { fileName: f.fileName, path: p, signedUrl: `https://storage.test/${p}?token=x` };
+      }),
+    downloadObject: async (_bucket: string, p: string) => {
+      const bytes = storage.get(p);
+      if (!bytes) throw new Error("not found");
+      return bytes;
+    },
+    removeObjects: async (_bucket: string, paths: string[]) => {
+      for (const p of paths) storage.delete(p);
+    },
+  };
+});
+
 import { Hono } from "hono";
 
 let app: Hono;
@@ -146,6 +169,7 @@ beforeAll(async () => {
   await mk("vlad", "Vlad Manager", "manager");
   await mk("strain", "Străin din afara echipei", "teacher");
   await mk("intrus", "Intrus", "admin", otherTenantId);
+  await mk("parinte", "Părinte din Learn", "parent");
 });
 
 describe("boarduri", () => {
@@ -573,5 +597,253 @@ describe("notificări, comentarii, căutare", () => {
     as("ion");
     expect((await call("GET", "/tasks/nu-e-uuid")).status).toBe(404);
     expect((await call("GET", "/boards/par-prefill-123/lists")).status).toBe(404);
+  });
+});
+
+/**
+ * Revizuirea adversarială din 26.09.2026 (ADV-TASKS-01..12): fiecare test reproduce atacul
+ * verificat de revizor și ar fi picat pe codul de dinainte de reparație.
+ */
+describe("revizuirea adversarială", () => {
+  const recurrence = JSON.stringify({ frequency: "daily", interval: 1, days: [], ends_at: null });
+  const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+  const fileUrl = (taskId: string, p: string) => `/api/tasks/tasks/${taskId}/attachments/file?path=${encodeURIComponent(p)}`;
+
+  async function sign(taskId: string, fileName: string, mime: string): Promise<string> {
+    const res = await call<{ path: string }>("POST", `/tasks/${taskId}/attachments/sign`, { fileName, mime, sizeBytes: 100 });
+    expect(res.status, JSON.stringify(res.json)).toBe(200);
+    return res.json.path;
+  }
+
+  it("ADV-01: un atașament declarat text/html nu intră, iar servirea nu crede tipul salvat", async () => {
+    as("ion");
+    const board = await createBoard("Atașamente", { visibility: "company" });
+    const task = await createTask({ title: "Cu fișier", board_id: board.id });
+    const path = await sign(task.id, "raport.pdf", "application/pdf");
+    // Atacul: HTML urcat direct în Storage, finalize sărit, tipul pus de mână în comentariu.
+    storage.set(path, Buffer.from("<script>fetch('/api/par')</script>"));
+    const html = await call("POST", `/tasks/${task.id}/comments`, {
+      content: "x",
+      attachments: [{ path, name: "raport.html", type: "text/html", size: 40 }],
+    });
+    expect(html.status).toBe(400);
+    // Un tip permis peste octeți care nu-l confirmă: metadatele trec, servirea însă e o descărcare opacă.
+    const disguised = await call("POST", `/tasks/${task.id}/comments`, {
+      content: "x",
+      attachments: [{ path, name: "raport.pdf", type: "application/pdf", size: 40 }],
+    });
+    expect(disguised.status).toBe(201);
+    const served = await app.request(fileUrl(task.id, path));
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toBe("application/octet-stream");
+    expect(served.headers.get("content-disposition")).toMatch(/^attachment/);
+    expect(served.headers.get("content-security-policy")).toBe("sandbox");
+
+    // Un PDF adevărat, trecut prin finalize, se deschide în pagină.
+    const real = await sign(task.id, "bun.pdf", "application/pdf");
+    storage.set(real, Buffer.from("%PDF-1.7\n%âãÏÓ\n"));
+    const fin = await call<{ attachment: Record<string, unknown> }>("POST", `/tasks/${task.id}/attachments/finalize`, {
+      path: real,
+      fileName: "bun.pdf",
+      mime: "application/pdf",
+    });
+    expect(fin.status).toBe(200);
+    expect((await call("POST", `/tasks/${task.id}/comments`, { content: "", attachments: [fin.json.attachment] })).status).toBe(201);
+    const pdf = await app.request(fileUrl(task.id, real));
+    expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    expect(pdf.headers.get("content-disposition")).toMatch(/^inline/);
+
+    // Calea e legată de task: același fișier nu poate fi „atașat" pe alt task.
+    const other = await createTask({ title: "Altul", board_id: board.id });
+    expect((await call("POST", `/tasks/${other.id}/comments`, { content: "", attachments: [fin.json.attachment] })).status).toBe(400);
+  });
+
+  it("ADV-11: finalize nu poate șterge fișierul altui task și nici unul deja atașat", async () => {
+    as("ion");
+    const board = await createBoard("Fișiere Ion", { visibility: "company" });
+    const task = await createTask({ title: "Contract", board_id: board.id });
+    const path = await sign(task.id, "contract.pdf", "application/pdf");
+    storage.set(path, Buffer.from("%PDF-1.4 contract"));
+    const fin = await call<{ attachment: Record<string, unknown> }>("POST", `/tasks/${task.id}/attachments/finalize`, {
+      path,
+      fileName: "contract.pdf",
+      mime: "application/pdf",
+    });
+    expect((await call("POST", `/tasks/${task.id}/comments`, { content: "", attachments: [fin.json.attachment] })).status).toBe(201);
+
+    as("strain");
+    const mine = await createTask({ title: "Al meu" });
+    const foreign = await call("POST", `/tasks/${mine.id}/attachments/finalize`, { path, fileName: "x.png", mime: "image/png" });
+    expect(foreign.status).toBe(400);
+    expect(storage.has(path)).toBe(true);
+    // Chiar pe task-ul pe care îl vede (board al organizației), un fișier atașat nu se șterge.
+    const attached = await call("POST", `/tasks/${task.id}/attachments/finalize`, { path, fileName: "x.png", mime: "image/png" });
+    expect(attached.status).toBe(409);
+    expect(storage.has(path)).toBe(true);
+  });
+
+  it("ADV-02: duplicarea unei coloane nu copiază task-urile private ale altora", async () => {
+    as("ion");
+    const board = await createBoard("Salarii", { visibility: "company" });
+    const lists = await listsOf(board.id);
+    await createTask({ title: "Salarii 2027", description: "Ion 5000, Maria 7000", board_id: board.id, list_id: lists[0].id, is_private: true });
+    await createTask({ title: "Public", board_id: board.id, list_id: lists[0].id });
+    as("strain");
+    expect((await call("POST", `/lists/${lists[0].id}/duplicate`, { copy_suffix: "(copie)" })).status).toBe(200);
+    const seen = await call<{ tasks: TaskJson[] }>("GET", `/boards/${board.id}/tasks`);
+    expect(seen.json.tasks.some((t) => t.title.startsWith("Salarii"))).toBe(false);
+    expect(seen.json.tasks.filter((t) => t.title === "Public")).toHaveLength(2);
+    // Creatorul își duplică propria coloană: copia task-ului privat rămâne privată.
+    as("ion");
+    expect((await call("POST", `/lists/${lists[0].id}/duplicate`, { copy_suffix: "(a doua)" })).status).toBe(200);
+    as("maria");
+    const maria = await call<{ tasks: TaskJson[] }>("GET", `/boards/${board.id}/tasks`);
+    expect(maria.json.tasks.some((t) => t.title.startsWith("Salarii"))).toBe(false);
+  });
+
+  it("ADV-05: „mută tot” mută ce se poate și spune câte au rămas; privatele altora nici nu intră", async () => {
+    as("ion");
+    const board = await createBoard("Mutări", { visibility: "company" });
+    const lists = await listsOf(board.id);
+    await createTask({ title: "liber", board_id: board.id, list_id: lists[0].id });
+    await createTask({ title: "cu aprobare", board_id: board.id, list_id: lists[0].id, approver_ids: [people.maria.id] });
+    as("maria");
+    const hers = await createTask({ title: "privat Maria", board_id: board.id, list_id: lists[0].id, is_private: true });
+    as("ion");
+    const res = await call<{ moved: number; skipped: number }>("POST", `/lists/${lists[0].id}/move-all`, { to_list_id: lists[3].id });
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ moved: 1, skipped: 1 });
+    const [stayed] = await testDb.select().from(boardTasks).where(eq(boardTasks.id, hers.id));
+    expect(stayed.listId).toBe(lists[0].id);
+  });
+
+  it("ADV-04: ștergerea boardului seriei nu ia cu ea o zi mutată pe alt board", async () => {
+    as("ion");
+    const a = await createBoard("Seria A");
+    const b = await createBoard("Seria B");
+    const series = await createTask({
+      title: "Zilnic A",
+      board_id: a.id,
+      due_date: new Date(Date.now() + 86_400_000).toISOString(),
+      is_recurring: true,
+      recurrence_rule: recurrence,
+    });
+    const occurrence = await call<{ id: string }>("POST", `/tasks/${series.id}/occurrences`, { date: inDays(3) });
+    expect((await call("POST", `/tasks/${occurrence.json.id}/move-board`, { board_id: b.id })).status).toBe(200);
+    expect((await call("DELETE", `/boards/${a.id}`)).status).toBe(200);
+    const survived = await call<{ task: TaskJson }>("GET", `/tasks/${occurrence.json.id}`);
+    expect(survived.status).toBe(200);
+    expect(survived.json.task.board_id).toBe(b.id);
+  });
+
+  it("ADV-06: un task privat nu scapă prin clopoțel, numărători, subtaskuri sau restaurare", async () => {
+    as("ion");
+    const board = await createBoard("Confidențial", { visibility: "company" });
+    const secret = await createTask({
+      title: "Concediere — confidențial",
+      board_id: board.id,
+      is_private: true,
+      assignees: [people.maria.id],
+      due_date: new Date().toISOString(),
+    });
+    expect((await call("POST", `/tasks/${secret.id}/comments`, { content: "notă" })).status).toBe(201);
+
+    as("maria");
+    expect((await call("GET", "/me")).status).toBe(200);
+    const bell = await testDb
+      .select()
+      .from(inAppNotifications)
+      .where(and(eq(inAppNotifications.recipientUserId, people.maria.id), eq(inAppNotifications.kind, "task_due_soon")));
+    expect(bell.some((n) => (n.payload as { task_id?: string }).task_id === secret.id)).toBe(false);
+    const counts = await call<{ counts: Record<string, number> }>("POST", "/comment-counts", { task_ids: [secret.id] });
+    expect(counts.json.counts[secret.id]).toBeUndefined();
+    expect((await call("POST", "/tasks", { title: "sub", board_id: board.id, parent_task_id: secret.id })).status).toBe(400);
+
+    as("ion");
+    expect((await call("DELETE", `/tasks/${secret.id}`)).status).toBe(200);
+    as("strain");
+    expect((await call("POST", `/tasks/${secret.id}/restore`)).status).toBe(404);
+    as("ion");
+    expect((await call("POST", `/tasks/${secret.id}/restore`)).status).toBe(200);
+  });
+
+  it("ADV-07: când vin și statusul și coloana, coloana decide", async () => {
+    as("ion");
+    const board = await createBoard("Coerent");
+    const lists = await listsOf(board.id);
+    const task = await createTask({ title: "t", board_id: board.id, list_id: lists[0].id });
+    const patched = await call<{ task: TaskJson }>("PATCH", `/tasks/${task.id}`, { status: "in_progress", list_id: lists[3].id });
+    expect(patched.json.task).toMatchObject({ status: "done", list_id: lists[3].id });
+    expect(patched.json.task.completed_at).not.toBeNull();
+    const created = await createTask({ title: "u", board_id: board.id, list_id: lists[0].id, status: "done" });
+    expect(created).toMatchObject({ status: "todo", list_id: lists[0].id, completed_at: null });
+  });
+
+  it("ADV-08: conturile de părinte/elev nu intră în modul", async () => {
+    as("parinte");
+    expect((await call("GET", "/boards")).status).toBe(403);
+    expect((await call("GET", "/people")).status).toBe(403);
+    expect((await call("POST", "/tasks", { title: "nu" })).status).toBe(403);
+  });
+
+  it("ADV-09: o zi ștearsă a seriei se poate materializa din nou; cea veche nu se mai poate restaura peste ea", async () => {
+    as("ion");
+    const series = await createTask({
+      title: "Zilnic B",
+      due_date: new Date(Date.now() + 86_400_000).toISOString(),
+      is_recurring: true,
+      recurrence_rule: recurrence,
+    });
+    const day = inDays(4);
+    const first = await call<{ id: string }>("POST", `/tasks/${series.id}/occurrences`, { date: day });
+    expect((await call("DELETE", `/tasks/${first.json.id}`)).status).toBe(200);
+    const second = await call<{ id: string }>("POST", `/tasks/${series.id}/occurrences`, { date: day });
+    expect(second.json.id).not.toBe(first.json.id);
+    expect((await call("GET", `/tasks/${second.json.id}`)).status).toBe(200);
+    const restore = await call<{ error: string }>("POST", `/tasks/${first.json.id}/restore`);
+    expect(restore.status).toBe(409);
+    expect(restore.json.error).toBe("occurrence_exists");
+  });
+
+  it("ADV-10: intrările invalide dau 400, nu 500", async () => {
+    as("ion");
+    expect((await call("POST", "/boards", { name: "Culoare", color: "x".repeat(45) })).status).toBe(400);
+    expect((await call("POST", "/tasks", { title: "an zero", due_date: "0000-01-01" })).status).toBe(400);
+    expect((await call("POST", "/tasks", { title: "an negativ", due_date: "-000001-01-01T00:00:00Z" })).status).toBe(400);
+    expect((await call("POST", "/tasks", { title: "30 februarie", due_date: "2099-02-30" })).status).toBe(400);
+    const series = await createTask({
+      title: "Zilnic C",
+      due_date: new Date(Date.now() + 86_400_000).toISOString(),
+      is_recurring: true,
+      recurrence_rule: recurrence,
+    });
+    expect((await call("POST", `/tasks/${series.id}/occurrences`, { date: "2099-02-30" })).status).toBe(400);
+    expect((await call("POST", `/tasks/${series.id}/occurrences`, { date: "2099-13-01" })).status).toBe(400);
+  });
+
+  it("ADV-12: ștergerea ia subtaskurile de pe orice adâncime, iar restaurarea le aduce pe toate", async () => {
+    as("ion");
+    const board = await createBoard("Adânc");
+    const ids: string[] = [];
+    for (let level = 0; level < 12; level += 1) {
+      const task = await createTask({ title: `nivel ${level}`, board_id: board.id, parent_task_id: ids[level - 1] });
+      ids.push(task.id);
+    }
+    expect((await call("DELETE", `/tasks/${ids[0]}`)).status).toBe(200);
+    for (const id of ids) expect((await call("GET", `/tasks/${id}`)).status).toBe(404);
+    const restored = await call<{ restored: number }>("POST", `/tasks/${ids[0]}/restore`);
+    expect(restored.json.restored).toBe(12);
+  });
+
+  it("un task privat nu blochează munca altora", async () => {
+    as("ion");
+    const board = await createBoard("Blocaj", { visibility: "company" });
+    const shared = await createTask({ title: "Comun", board_id: board.id, assignees: [people.maria.id] });
+    const personal = await createTask({ title: "Al meu, privat", board_id: board.id, is_private: true });
+    expect((await call("POST", "/dependencies", { task_id: shared.id, depends_on_task_id: personal.id })).status).toBe(201);
+    as("maria");
+    const done = await call<{ task: TaskJson }>("PATCH", `/tasks/${shared.id}`, { status: "done" });
+    expect(done.status).toBe(200);
+    expect(done.json.task.status).toBe("done");
   });
 });

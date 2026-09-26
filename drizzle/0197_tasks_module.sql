@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS "board_tasks" (
     "approver_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
     "approved_at" timestamp with time zone,
     "approved_by" uuid REFERENCES "users"("id") ON DELETE set null,
-    "recurrence_parent_id" uuid REFERENCES "board_tasks"("id") ON DELETE cascade,
+    "recurrence_parent_id" uuid REFERENCES "board_tasks"("id") ON DELETE set null,
     "occurrence_date" date,
     "completed_at" timestamp with time zone,
     "deleted_at" timestamp with time zone,
@@ -103,7 +103,7 @@ CREATE INDEX IF NOT EXISTS "board_tasks_assigned_idx" ON "board_tasks" ("tenant_
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "board_tasks_due_idx" ON "board_tasks" ("tenant_id","due_date");
 --> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "board_tasks_occurrence_uniq" ON "board_tasks" ("recurrence_parent_id","occurrence_date");
+CREATE UNIQUE INDEX IF NOT EXISTS "board_tasks_occurrence_uniq" ON "board_tasks" ("recurrence_parent_id","occurrence_date") WHERE "recurrence_parent_id" IS NOT NULL AND "deleted_at" IS NULL;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "task_activity" (
     "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

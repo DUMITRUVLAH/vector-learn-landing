@@ -18,7 +18,7 @@ import { db } from "../../db/client";
 import { inAppNotifications } from "../../db/schema/inAppNotifications";
 import { users } from "../../db/schema/users";
 import { boardTasks, type BoardTaskRow, type TaskCommentRow } from "../../db/schema/tasks";
-import { boardRolesFor, canSeeTask, loadTaskContext, type TaskContext } from "./access";
+import { boardRolesFor, canSeeTask, loadTaskContext, visibleTasksWhere, type TaskContext } from "./access";
 
 type Kind = "task_assigned" | "task_approval" | "task_mention" | "task_comment" | "task_due_soon";
 
@@ -123,6 +123,10 @@ export async function syncDueSoon(ctx: TaskContext): Promise<void> {
           gte(boardTasks.dueDate, from),
           lte(boardTasks.dueDate, to),
           sql`${boardTasks.assignees} @> ${JSON.stringify([ctx.userId])}::jsonb`,
+          // Aceeași regulă ca restul notificărilor: un task privat e doar al creatorului, chiar
+          // dacă altcineva figurează ca responsabil — titlul lui nu ajunge în clopoțelul nimănui
+          // altcuiva (ADV-TASKS-06).
+          visibleTasksWhere(ctx, []),
         ),
       )
       .limit(200);

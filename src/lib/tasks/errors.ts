@@ -40,6 +40,7 @@ const CODES: Record<string, string> = {
   invalid_data: 'board.errors.invalidData',
   validation_error: 'board.errors.invalidData',
   module_disabled: 'board.errors.forbidden',
+  occurrence_exists: 'board.errors.occurrenceExists',
 };
 
 /** Fragmente stabile din mesajele DB → cheia de traducere. */

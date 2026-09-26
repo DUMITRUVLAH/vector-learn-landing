@@ -9,7 +9,7 @@
  * Erorile sunt `TaskError` cu un cod stabil (`needs_approval`, `blocked_by_dependency`…), pe care
  * clientul îl traduce (`src/lib/tasks/errors.ts`) — nu text de afișat.
  */
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
   boardTasks,
@@ -34,6 +34,7 @@ import {
   canSoftDelete,
   isFullEditor,
   loadBoardWithRole,
+  visibleTasksWhere,
   type BoardFacts,
   type BoardRole,
   type TaskContext,
@@ -51,7 +52,7 @@ import {
 import { activeStaffIds } from "./people";
 import { notifyTaskComment, notifyTaskUsers } from "./notify";
 import { isActiveTeamOfTenant } from "../teams";
-import { isSafeTenantObjectPath } from "../storage/safePath";
+import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, isTaskAttachmentPath } from "./attachments";
 import { nextDueAfterCompletion, parseRecurrence } from "./recurrence";
 
 export class TaskError extends Error {
@@ -157,18 +158,22 @@ async function validatePlacement(
   }
   if (row.parentTaskId) {
     if (row.id && row.parentTaskId === row.id) throw new TaskError(400, "parent_invalid");
-    const [parent] = await db
-      .select({ boardId: boardTasks.boardId, deletedAt: boardTasks.deletedAt, tenantId: boardTasks.tenantId })
-      .from(boardTasks)
-      .where(eq(boardTasks.id, row.parentTaskId))
-      .limit(1);
+    const [parent] = await db.select().from(boardTasks).where(eq(boardTasks.id, row.parentTaskId)).limit(1);
     if (!parent || parent.tenantId !== ctx.tenantId || parent.boardId !== row.boardId) throw new TaskError(400, "parent_invalid");
     if (!row.deletedAt && parent.deletedAt) throw new TaskError(400, "parent_invalid");
-    // Ierarhie circulară: rândul nu are voie să fie strămoșul noului părinte.
+    // Un subtask se atârnă doar de un task pe care apelantul îl vede (ADV-TASKS-06): altfel un
+    // id aflat pe undeva lega munca lui de task-ul privat al altcuiva.
+    if (!parent.deletedAt && !canSeeTask(ctx, parent, await boardFactsOf(ctx, parent.boardId))) {
+      throw new TaskError(400, "parent_invalid");
+    }
+    // Ierarhie circulară: rândul nu are voie să fie strămoșul noului părinte. Fără plafon de
+    // adâncime — `seen` oprește urcarea dacă datele au deja un ciclu.
     if (row.id) {
       let cursor: string | null = row.parentTaskId;
-      for (let depth = 0; cursor && depth < 50; depth += 1) {
+      const seen = new Set<string>();
+      while (cursor && !seen.has(cursor)) {
         if (cursor === row.id) throw new TaskError(400, "cycle");
+        seen.add(cursor);
         const [up] = await db
           .select({ parent: boardTasks.parentTaskId })
           .from(boardTasks)
@@ -261,7 +266,7 @@ export interface CreateBoardInput {
 function validateBoardMeta(name: string, description: string | null | undefined, color: string): void {
   if (name.trim().length < 1 || name.trim().length > 200) throw new TaskError(400, "invalid_data", "Numele boardului are între 1 și 200 de caractere");
   if (description && description.length > 10_000) throw new TaskError(400, "invalid_data", "Descriere prea lungă");
-  if (color.length < 1 || color.length > 50) throw new TaskError(400, "invalid_data", "Culoare invalidă");
+  if (color.length < 1 || color.length > 40) throw new TaskError(400, "invalid_data", "Culoare invalidă");
 }
 
 async function validateBoardVisibility(
@@ -430,6 +435,8 @@ export async function deleteBoard(ctx: TaskContext, boardId: string): Promise<nu
       .from(boardTasks)
       .where(and(eq(boardTasks.boardId, boardId), isNull(boardTasks.deletedAt)));
     // Copiii întâi nu e nevoie: `parent_task_id` e ON DELETE CASCADE, la fel istoricul/comentariile.
+    // Ocurențele unei serii mutate pe ALT board rămân acolo: `recurrence_parent_id` e SET NULL
+    // (ca în sursă), deci ștergerea seriei nu ia cu ea zilele deja lucrate (ADV-TASKS-04).
     await tx.delete(boardTasks).where(and(eq(boardTasks.boardId, boardId), eq(boardTasks.tenantId, ctx.tenantId)));
     await tx.delete(taskBoards).where(and(eq(taskBoards.id, boardId), eq(taskBoards.tenantId, ctx.tenantId)));
     return Number(row?.n ?? 0);
@@ -469,7 +476,7 @@ async function loadListForEdit(ctx: TaskContext, listId: string): Promise<TaskLi
 
 function validateListMeta(name: string, color: string, position: number): void {
   if (name.trim().length < 1 || name.trim().length > 200) throw new TaskError(400, "invalid_data", "Numele coloanei are între 1 și 200 de caractere");
-  if (color.length < 1 || color.length > 50) throw new TaskError(400, "invalid_data", "Culoare invalidă");
+  if (color.length < 1 || color.length > 40) throw new TaskError(400, "invalid_data", "Culoare invalidă");
   if (!Number.isFinite(position)) throw new TaskError(400, "invalid_data", "Poziție invalidă");
 }
 
@@ -546,7 +553,7 @@ export async function countListTasks(ctx: TaskContext, listId: string): Promise<
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(boardTasks)
-    .where(and(eq(boardTasks.listId, list.id), isNull(boardTasks.deletedAt)));
+    .where(and(eq(boardTasks.listId, list.id), visibleTasksWhere(ctx, [list.boardId])));
   return Number(row?.n ?? 0);
 }
 
@@ -559,10 +566,12 @@ export async function duplicateList(ctx: TaskContext, listId: string, copySuffix
     color: source.color,
     maps_to_status: source.mapsToStatus as TaskStatus | null,
   });
+  // Doar task-urile pe care apelantul le vede: copia îi aparține lui, deci copierea task-ului
+  // privat al altcuiva îl făcea public pentru tot boardul (ADV-TASKS-02).
   const tasks = await db
     .select()
     .from(boardTasks)
-    .where(and(eq(boardTasks.listId, listId), isNull(boardTasks.parentTaskId), isNull(boardTasks.deletedAt)))
+    .where(and(eq(boardTasks.listId, listId), isNull(boardTasks.parentTaskId), visibleTasksWhere(ctx, [source.boardId])))
     .orderBy(asc(boardTasks.position));
   if (tasks.length === 0) return;
   const inserted = await db
@@ -584,6 +593,7 @@ export async function duplicateList(ctx: TaskContext, listId: string, copySuffix
         startDate: t.startDate,
         tags: t.tags,
         taskSet: t.taskSet,
+        isPrivate: t.isPrivate,
         position: (i + 1) * 1024,
       })),
     )
@@ -591,27 +601,44 @@ export async function duplicateList(ctx: TaskContext, listId: string, copySuffix
   for (const row of inserted) await recordActivity(ctx, null, row);
 }
 
-/** Toate task-urile unei coloane în alta, în ordine, cu statusul aliniat la coloana-țintă. */
-export async function moveAllToList(ctx: TaskContext, fromListId: string, toListId: string): Promise<number> {
+/**
+ * Toate task-urile unei coloane în alta, în ordine, cu statusul aliniat la coloana-țintă.
+ * Întoarce câte s-au mutat și câte au RĂMAS (o închidere care cere aprobare sau are dependențe
+ * deschise): înainte, primul refuz oprea bucla la jumătate, cu o parte din coloană deja mutată și
+ * un 403 la client (ADV-TASKS-05). Task-urile pe care apelantul nu le vede nici nu intră în calcul.
+ */
+export async function moveAllToList(
+  ctx: TaskContext,
+  fromListId: string,
+  toListId: string,
+): Promise<{ moved: number; skipped: number }> {
   const from = await loadListForEdit(ctx, fromListId);
   const to = await loadListForEdit(ctx, toListId);
   if (from.boardId !== to.boardId) throw new TaskError(400, "list_mismatch");
-  if (from.id === to.id) return 0;
+  if (from.id === to.id) return { moved: 0, skipped: 0 };
   // Toată coloana, subtaskuri incluse: altfel ele rămâneau în coloana golită (de obicei arhivată după).
   const tasks = await db
     .select()
     .from(boardTasks)
-    .where(and(eq(boardTasks.listId, fromListId), isNull(boardTasks.deletedAt)))
+    .where(and(eq(boardTasks.listId, fromListId), visibleTasksWhere(ctx, [from.boardId])))
     .orderBy(asc(boardTasks.position), asc(boardTasks.createdAt));
   let position = await appendPosition(ctx, to.boardId, to.id);
   const target = { is_done_list: to.isDoneList, name: to.name, maps_to_status: to.mapsToStatus };
+  let moved = 0;
+  let skipped = 0;
   for (const task of tasks) {
     const patch = moveStatusPatch(task.status as TaskStatus, target);
-    // Mutarea în bloc nu are voie să ocolească aprobările și dependențele unei închideri.
-    await applyTaskUpdate(ctx, task, { listId: to.id, position, ...(patch.status ? { status: patch.status } : {}) }, { system: false });
-    position += 1024;
+    try {
+      // Mutarea în bloc nu are voie să ocolească aprobările și dependențele unei închideri.
+      await applyTaskUpdate(ctx, task, { listId: to.id, position, ...(patch.status ? { status: patch.status } : {}) }, { system: false });
+      moved += 1;
+      position += 1024;
+    } catch (error) {
+      if (!(error instanceof TaskError) || error.status >= 500) throw error;
+      skipped += 1;
+    }
   }
-  return tasks.length;
+  return { moved, skipped };
 }
 
 const SORT_KEYS = ["title", "due_date", "priority", "created_at", "status"] as const;
@@ -622,11 +649,11 @@ const STATUS_RANK: Record<string, number> = { todo: 0, in_progress: 1, pending: 
 /** Reordonează persistent task-urile unei coloane după o cheie. */
 export async function sortList(ctx: TaskContext, listId: string, key: string): Promise<void> {
   if (!(SORT_KEYS as readonly string[]).includes(key)) throw new TaskError(400, "bad_sort_key");
-  await loadListForEdit(ctx, listId);
+  const list = await loadListForEdit(ctx, listId);
   const tasks = await db
     .select()
     .from(boardTasks)
-    .where(and(eq(boardTasks.listId, listId), isNull(boardTasks.deletedAt)))
+    .where(and(eq(boardTasks.listId, listId), visibleTasksWhere(ctx, [list.boardId])))
     .orderBy(asc(boardTasks.position));
   const sorted = [...tasks].sort((a, b) => {
     if (key === "title") return a.title.localeCompare(b.title, "ro");
@@ -724,10 +751,32 @@ export interface CreateTaskInput {
   approver_ids?: string[];
 }
 
+/**
+ * `AAAA-LL-ZZ` e o zi care există? `new Date` rostogolește „30 februarie" în martie, iar anul 0
+ * sau unul negativ ajung până la Postgres și întorc 500 (ADV-TASKS-10). `Date.UTC` mută anii
+ * 0–99 în 1900–1999, deci și ei pică verificarea — nimeni nu planifică task-uri în anul 50.
+ */
+function isRealDay(day: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(day);
+  if (!match) return false;
+  const [year, month, date] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const d = new Date(Date.UTC(year, month - 1, date));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === date;
+}
+
+/** Încălcarea unui index unic (23505) — aceeași pe postgres-js (prod) și pe PGlite (teste). */
+function isUniqueViolation(error: unknown): boolean {
+  const codeOf = (e: unknown): unknown => (typeof e === "object" && e !== null ? (e as { code?: unknown }).code : undefined);
+  const cause = typeof error === "object" && error !== null ? (error as { cause?: unknown }).cause : undefined;
+  return codeOf(error) === "23505" || codeOf(cause) === "23505";
+}
+
 const toDate = (v: string | null | undefined): Date | null => {
   if (!v) return null;
   const d = new Date(v);
-  if (Number.isNaN(d.getTime())) throw new TaskError(400, "invalid_data", "Dată invalidă");
+  const year = d.getUTCFullYear();
+  const invalid = Number.isNaN(d.getTime()) || year < 1 || year > 9999 || (/^\d{4}-\d{2}-\d{2}/.test(v) && !isRealDay(v));
+  if (invalid) throw new TaskError(400, "invalid_data", "Dată invalidă");
   return d;
 };
 
@@ -745,6 +794,11 @@ export async function createTask(ctx: TaskContext, input: CreateTaskInput): Prom
   if (listId && !input.status) {
     const list = lists.find((l) => l.id === listId);
     if (list) status = moveStatusPatch("todo", listLike(list)).status ?? "todo";
+  } else if (listId && input.status) {
+    // Amândouă cerute: coloana decide (ea e ce vede Kanbanul), altfel un „gata" rămânea în
+    // „De făcut" și vederile se contraziceau definitiv (ADV-TASKS-07).
+    const list = lists.find((l) => l.id === listId);
+    if (list) status = moveStatusPatch(input.status, listLike(list)).status ?? input.status;
   } else if (!listId && boardId && lists.length > 0) {
     listId = listIdForStatus(status, "todo", null, lists.map(listLike)) ?? lists.find((l) => !l.isDoneList)?.id ?? null;
   }
@@ -860,12 +914,20 @@ const sameValue = (a: unknown, b: unknown): boolean => {
   return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 };
 
-async function openBlockers(ctx: TaskContext, taskId: string): Promise<{ visible: string[]; hidden: number }> {
+/**
+ * Dependențele încă deschise. Una PRIVATĂ contează doar pentru un task privat al aceluiași om:
+ * nimeni altcineva n-o vede, deci nimeni altcineva n-ar putea-o debloca — un task comun rămânea
+ * blocat definitiv de munca personală a cuiva (revizuirea adversarială, riscul rezidual).
+ */
+async function openBlockers(ctx: TaskContext, task: BoardTaskRow): Promise<{ visible: string[]; hidden: number }> {
+  const privateCounts = task.isPrivate
+    ? or(eq(boardTasks.isPrivate, false), eq(boardTasks.createdBy, task.createdBy))
+    : eq(boardTasks.isPrivate, false);
   const rows = await db
     .select({ blocker: boardTasks })
     .from(taskDependencies)
     .innerJoin(boardTasks, eq(boardTasks.id, taskDependencies.dependsOnTaskId))
-    .where(and(eq(taskDependencies.taskId, taskId), ne(boardTasks.status, "done"), isNull(boardTasks.deletedAt)));
+    .where(and(eq(taskDependencies.taskId, task.id), ne(boardTasks.status, "done"), isNull(boardTasks.deletedAt), privateCounts));
   if (rows.length === 0) return { visible: [], hidden: 0 };
   const facts = await boardRolesFor(ctx, rows.map((r) => r.blocker.boardId).filter((id): id is string => !!id));
   const visible: string[] = [];
@@ -912,10 +974,13 @@ async function applyTaskUpdate(
       const lists = await activeLists(before.boardId);
       const target = listIdForStatus(patch.status as TaskStatus, before.status as TaskStatus, before.listId, lists.map(listLike));
       if (target) patch.listId = target;
-    } else if (listRequested && !statusRequested && patch.listId) {
+    } else if (listRequested && patch.listId) {
+      // Doar coloana, sau coloana ȘI statusul: coloana decide (ADV-TASKS-07). Pornim de la statusul
+      // cerut, dacă există, ca o pereche coerentă să treacă neatinsă.
       const [list] = await db.select().from(taskLists).where(eq(taskLists.id, patch.listId)).limit(1);
       if (list) {
-        const derived = moveStatusPatch(before.status as TaskStatus, listLike(list));
+        const from = (statusRequested ? patch.status : before.status) as TaskStatus;
+        const derived = moveStatusPatch(from, listLike(list));
         if (derived.status) patch.status = derived.status;
       }
     }
@@ -938,7 +1003,7 @@ async function applyTaskUpdate(
 
   // Completarea (hr_task_guard_completion).
   if (nextStatus === "done" && before.status !== "done") {
-    const blockers = await openBlockers(ctx, before.id);
+    const blockers = await openBlockers(ctx, before);
     if (blockers.visible.length > 0 || blockers.hidden > 0) {
       const parts = [...blockers.visible];
       if (blockers.hidden > 0) parts.push(`${blockers.hidden} task(uri) fără acces`);
@@ -1034,16 +1099,23 @@ export async function claimTask(ctx: TaskContext, id: string): Promise<BoardTask
 
 // ─── Mutarea pe alt board ─────────────────────────────────────────────────────
 
+/**
+ * Toți urmașii, pe ORICE adâncime. Plafonul vechi (10 niveluri) lăsa subtaskuri vii sub un părinte
+ * șters (ADV-TASKS-12); `seen` oprește parcurgerea dacă datele au deja un ciclu.
+ */
 async function descendantIds(rootId: string, onlyDeletedAt?: Date | null): Promise<string[]> {
   const out: string[] = [];
+  const seen = new Set([rootId]);
   let frontier = [rootId];
-  for (let depth = 0; depth < 10 && frontier.length > 0; depth += 1) {
+  while (frontier.length > 0) {
     const rows = await db
       .select({ id: boardTasks.id, deletedAt: boardTasks.deletedAt })
       .from(boardTasks)
       .where(inArray(boardTasks.parentTaskId, frontier));
     const next: string[] = [];
     for (const row of rows) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
       next.push(row.id);
       if (onlyDeletedAt === undefined || iso(row.deletedAt) === iso(onlyDeletedAt)) out.push(row.id);
     }
@@ -1094,18 +1166,26 @@ export async function restoreTask(ctx: TaskContext, id: string): Promise<number>
   const task = await loadTaskRow(ctx, id, true);
   if (!task || !task.deletedAt) throw notFound();
   const board = await boardFactsOf(ctx, task.boardId);
-  if (!canSoftDelete(ctx, task, board)) throw notFound();
+  // Întâi: l-ar vedea dacă n-ar fi șters? Altfel un editor de board restaura task-ul privat al
+  // altcuiva, pe care nu-l vede (ADV-TASKS-06). Apoi dreptul de ștergere/restaurare.
+  if (!canSeeTask(ctx, { ...task, deletedAt: null }, board) || !canSoftDelete(ctx, task, board)) throw notFound();
   if (task.parentTaskId) {
     const [parent] = await db.select({ deletedAt: boardTasks.deletedAt }).from(boardTasks).where(eq(boardTasks.id, task.parentTaskId)).limit(1);
     if (parent?.deletedAt) throw new TaskError(400, "parent_invalid");
   }
   const ids = [task.id, ...(await descendantIds(task.id, task.deletedAt))];
-  const restored = await db
-    .update(boardTasks)
-    .set({ deletedAt: null, updatedAt: new Date() })
-    .where(and(inArray(boardTasks.id, ids), eq(boardTasks.deletedAt, task.deletedAt)))
-    .returning({ id: boardTasks.id });
-  return restored.length;
+  try {
+    const restored = await db
+      .update(boardTasks)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(and(inArray(boardTasks.id, ids), eq(boardTasks.deletedAt, task.deletedAt)))
+      .returning({ id: boardTasks.id });
+    return restored.length;
+  } catch (error) {
+    // O ocurență ștearsă a cărei zi are între timp alt rând viu (indexul unic parțial).
+    if (isUniqueViolation(error)) throw new TaskError(409, "occurrence_exists", "Ziua are deja un task al seriei");
+    throw error;
+  }
 }
 
 // ─── Recurență ────────────────────────────────────────────────────────────────
@@ -1162,7 +1242,7 @@ async function spawnNextOccurrence(ctx: TaskContext, done: BoardTaskRow): Promis
  * întoarce același id. Termenul păstrează ora seriei.
  */
 export async function materializeOccurrence(ctx: TaskContext, seriesId: string, day: string): Promise<string> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new TaskError(400, "invalid_data", "Zi invalidă");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !isRealDay(day)) throw new TaskError(400, "invalid_data", "Zi invalidă");
   // Ziua de azi și trecutul au deja rânduri reale (seria însăși); se materializează doar viitorul.
   if (day <= new Date().toISOString().slice(0, 10)) throw new TaskError(400, "invalid_data", "Se pot materializa doar zile viitoare");
   const { task: series, board } = await loadVisibleTask(ctx, seriesId);
@@ -1212,10 +1292,12 @@ export async function materializeOccurrence(ctx: TaskContext, seriesId: string, 
     return row.id;
   } catch (error) {
     // Două clicuri simultane pe aceeași zi: indexul unic a păstrat primul rând — îl întoarcem.
+    // Doar un rând VIU: o ocurență ștearsă nu ține ziua ocupată (indexul e parțial, ca în sursă),
+    // iar id-ul ei ar fi dus clientul la un 404 (ADV-TASKS-09).
     const [again] = await db
       .select({ id: boardTasks.id })
       .from(boardTasks)
-      .where(and(eq(boardTasks.recurrenceParentId, seriesId), eq(boardTasks.occurrenceDate, day)))
+      .where(and(eq(boardTasks.recurrenceParentId, seriesId), eq(boardTasks.occurrenceDate, day), isNull(boardTasks.deletedAt)))
       .limit(1);
     if (again) return again.id;
     throw error;
@@ -1248,10 +1330,17 @@ export async function addComment(ctx: TaskContext, taskId: string, content: stri
   if (text.length > 20_000) throw new TaskError(400, "invalid_data", "Comentariul depășește 20000 caractere");
   if (attachments.length > 10) throw new TaskError(400, "too_many");
   for (const a of attachments) {
-    // Calea vine de la client: doar obiecte din folderul workspace-ului, fără „..".
-    if (!isSafeTenantObjectPath(a.path, ctx.tenantId) || a.path.length > 500 || !a.name || a.name.length > 255 || a.size > 10 * 1024 * 1024) {
-      throw new TaskError(400, "invalid_data", "Metadate de atașament invalide");
-    }
+    // Metadatele vin de la client și ocolesc `finalize`: calea trebuie semnată pentru ACEST task,
+    // iar tipul să fie din lista permisă — un `text/html` declarat aici se servea ca pagină pe
+    // domeniul aplicației (ADV-TASKS-01).
+    const invalid =
+      !isTaskAttachmentPath(a.path, ctx.tenantId, task.id) ||
+      !ALLOWED_ATTACHMENT_TYPES.has(a.type) ||
+      a.path.length > 500 ||
+      !a.name ||
+      a.name.length > 255 ||
+      a.size > MAX_ATTACHMENT_BYTES;
+    if (invalid) throw new TaskError(400, "invalid_data", "Metadate de atașament invalide");
   }
   const mentioned = extractMentions(text);
   if (mentioned.length > 25) throw new TaskError(400, "too_many");
@@ -1259,7 +1348,7 @@ export async function addComment(ctx: TaskContext, taskId: string, content: stri
   if (mentioned.some((id) => !valid.has(id))) throw forbidden("Poți menționa doar colegi activi din organizație");
   const [row] = await db
     .insert(taskComments)
-    .values({ tenantId: ctx.tenantId, taskId, userId: ctx.userId, content: text, attachments, mentions: mentioned })
+    .values({ tenantId: ctx.tenantId, taskId: task.id, userId: ctx.userId, content: text, attachments, mentions: mentioned })
     .returning();
   await notifyTaskComment(ctx, task, row);
   return row;

@@ -549,9 +549,12 @@ export async function duplicateList(listId: string, copySuffix: string, _actorId
   await api(`${BASE}/lists/${listId}/duplicate`, json("POST", { copy_suffix: copySuffix }));
 }
 
-/** Mută toate task-urile dintr-o coloană în alta, păstrând ordinea — un singur drum la server. */
-export async function moveAllTasksToList(fromListId: string, toListId: string): Promise<number> {
-  return (await api<{ moved: number }>(`${BASE}/lists/${fromListId}/move-all`, json("POST", { to_list_id: toListId }))).moved;
+/**
+ * Mută toate task-urile dintr-o coloană în alta, păstrând ordinea — un singur drum la server.
+ * `skipped` = cele care au rămas pe loc (închiderea lor cere aprobare sau are dependențe deschise).
+ */
+export async function moveAllTasksToList(fromListId: string, toListId: string): Promise<{ moved: number; skipped: number }> {
+  return api<{ moved: number; skipped: number }>(`${BASE}/lists/${fromListId}/move-all`, json("POST", { to_list_id: toListId }));
 }
 
 export type ListSortKey = "title" | "due_date" | "priority" | "created_at";

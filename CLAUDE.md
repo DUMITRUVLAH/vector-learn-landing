@@ -481,6 +481,13 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   PATCH into "clear this field" (2026-09-23: every "Salvează ciornă" wiped the payee name + bank).
   Test every PATCH route with a `PATCH {}` followed by a read. See
   [docs/solutions/architecture-patterns/zod-transform-turns-absent-into-clear.md].
+- **User files are served with a server-decided type.** A route that streams an uploaded file back
+  must NOT copy the stored/client-supplied `type` into `Content-Type`: inline only for allow-listed
+  images/PDF/text whose magic bytes confirm the type, everything else `attachment` +
+  `application/octet-stream` + `Content-Security-Policy: sandbox`. And validate the type on EVERY
+  write path (a comment body that skips `finalize` is a write path). A stored `text/html` served
+  inline from `/api/*` runs on our origin with the viewer's session — see
+  [docs/solutions/security-issues/attachment-type-trusted-from-client.md].
 - **Webhook/callback handlers that mutate financial state** must REJECT anything they cannot
   cryptographically verify — "no secret configured" means "don't trust" (400), never "skip the check".
   Secrets at rest use AES-256-GCM (`server/lib/crypto.ts`), never base64.

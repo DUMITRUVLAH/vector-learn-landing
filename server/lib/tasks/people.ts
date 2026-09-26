@@ -15,10 +15,7 @@ import { db } from "../../db/client";
 import { users } from "../../db/schema/users";
 import { pontajProfiles } from "../../db/schema/pontaj";
 import { taskBoardMembers } from "../../db/schema/tasks";
-import type { TaskContext } from "./access";
-
-/** Conturile care nu fac muncă în workspace (părinți, elevi din produsul Learn). */
-const NON_STAFF_ROLES = ["student", "parent"] as const;
+import { NON_STAFF_ROLES, type TaskContext } from "./access";
 
 export interface PersonDto {
   user_id: string;
