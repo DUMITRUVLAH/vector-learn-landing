@@ -629,40 +629,30 @@ describe("facturile din ultimul an — cazul ATIC (2026-09-25)", () => {
     expect(rows.find((r) => r.parId === altaSuma)!.status).toBe("expected");
   });
 
-  it("factura fiscală atașată, emisă în afara SFS (Moldcell „MM”), nu mai apare „Lipsește”", async () => {
-    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+  it("un act atașat nu ține loc de e-Factura: fără factură în SFS, cererea rămâne în așteptare", async () => {
+    const { scanEfacturasForTenant, syncEfacturaCandidates } = await import("../services/par/efacturaScan");
+    // Moldcell: la cerere e atașată factura din sistemul lor (seria MM), dar comparăm cu SFS, nu cu
+    // dosarul. Un marcaj automat vechi („factură fiscală atașată") trebuie să redevină așteptare.
     const moldcell = await paidPar({ requestNo: "PAR-MC", idno: "1002600046027", amountCents: 9100, paidAt: "2026-09-18" });
-    const contDePlata = await paidPar({ requestNo: "PAR-BTS", idno: "1008600061565", amountCents: 430075, paidAt: "2026-09-17" });
-    await testDb.insert(parAttachments).values([
-      {
-        tenantId,
-        parId: moldcell,
-        fileName: "20260810066000349271006600034927_202608_MM8705846.signed.pdf",
-        fileUrl: textPdfDataUrl("Factura fiscala Seria, Nr. MM 8705846 Servicii comunicatii electronice 2729.18"),
-        mimeType: "application/pdf",
-        kind: "invoice",
-      },
-      {
-        tenantId,
-        parId: contDePlata,
-        fileName: "cont.pdf",
-        fileUrl: textPdfDataUrl("CONT DE PLATA nr. 00005996150 din 15 septembrie 2026 Factura fiscala va urma"),
-        mimeType: "application/pdf",
-        kind: "invoice",
-      },
-    ]);
+    await syncEfacturaCandidates(tenantId);
+    await testDb
+      .update(parEinvoices)
+      .set({ status: "received_manual", lastScanSource: "attachment", markedNote: "Factură fiscală atașată, emisă în afara SFS: seria MM" })
+      .where(eq(parEinvoices.parId, moldcell));
+    await testDb.insert(parAttachments).values({
+      tenantId,
+      parId: moldcell,
+      fileName: "20260810066000349271006600034927_202608_MM8705846.signed.pdf",
+      fileUrl: textPdfDataUrl("Factura fiscala Seria, Nr. MM 8705846"),
+      mimeType: "application/pdf",
+      kind: "invoice",
+    });
 
-    const result = await scanEfacturasForTenant(tenantId, undefined, stubClient([]));
+    await scanEfacturasForTenant(tenantId, undefined, stubClient([]));
 
-    const rows = await testDb.select().from(parEinvoices).where(eq(parEinvoices.tenantId, tenantId));
-    const mc = rows.find((r) => r.parId === moldcell)!;
-    expect(mc.status).toBe("received_manual");
-    expect(mc.lastScanSource).toBe("attachment");
-    expect(mc.markedNote).toContain("MM");
-    expect(mc.markedNote).toContain("8705846");
-    // Un cont de plată nu e factură fiscală: rămâne de urmărit.
-    expect(rows.find((r) => r.parId === contDePlata)!.status).toBe("expected");
-    expect(result.message).toContain("în afara SFS");
+    const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, moldcell));
+    expect(row.status).toBe("expected");
+    expect(row.markedNote).toBeNull();
   });
 
   it("nu așteaptă e-Factura când beneficiarul e chiar organizația plătitoare", async () => {
@@ -673,5 +663,29 @@ describe("facturile din ultimul an — cazul ATIC (2026-09-25)", () => {
 
     const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
     expect(row.status).toBe("not_applicable");
+  });
+});
+
+describe("diagnosticul pe furnizor", () => {
+  it("întreabă SFS pe fiecare stare și spune unde stau facturile furnizorului", async () => {
+    const { diagnoseSupplierInSfs } = await import("../services/par/efacturaScan");
+    const calls: Array<{ status: number; supplier: string | null | undefined }> = [];
+    const client = {
+      searchInvoices: async (_r: string, _a: number, p: { invoiceStatus: number; supplierIdno?: string | null }) => {
+        calls.push({ status: p.invoiceStatus, supplier: p.supplierIdno });
+        return p.invoiceStatus === 8
+          ? [{ seria: "EBM", number: "000111222", invoiceStatus: 8, invoiceStatusLabel: "", message: null }]
+          : [];
+      },
+    } as unknown as EfacturaMdClient;
+
+    const d = await diagnoseSupplierInSfs(tenantId, "1003600106115", new Date("2026-01-01"), new Date("2026-09-26"), client);
+
+    expect(d.available).toBe(true);
+    expect(calls.every((c) => c.supplier === "1003600106115")).toBe(true);
+    expect(calls.map((c) => c.status)).toContain(8);
+    const signed = d.byStatus.find((s) => s.status === 8)!;
+    expect(signed.count).toBe(1);
+    expect(signed.sample).toEqual(["EBM 000111222"]);
   });
 });

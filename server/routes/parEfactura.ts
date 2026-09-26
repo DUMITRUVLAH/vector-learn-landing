@@ -7,6 +7,7 @@
  *   GET  /api/par/efactura/invoices                     → TOATE facturile primite în SFS (brut)
  *   GET  /api/par/efactura/invoices/:seria/:number      → conținutul unei facturi (toate câmpurile)
  *   GET  /api/par/efactura/invoices/:seria/:number/pdf  → documentul PDF oficial, din SFS
+ *   GET  /api/par/efactura/diagnose/supplier/:idno      → facturile unui furnizor în SFS, pe stări
  *   GET  /api/par/efactura/settings                     → configurarea SFS (par_admin)
  *   PUT  /api/par/efactura/settings                     → salvează configurarea SFS (par_admin)
  *   POST /api/par/efactura/settings/test                → test de conexiune la SFS (par_admin)
@@ -51,6 +52,7 @@ import {
   listBuyerInvoicesForTenant,
   getBuyerInvoiceDetail,
   getBuyerInvoicePdf,
+  diagnoseSupplierInSfs,
 } from "../services/par/efacturaScan";
 import {
   syncBuyerInvoices,
@@ -368,6 +370,22 @@ const INVOICE_ID_RE = /^[A-Za-z0-9-]{1,50}$/;
  * Conținutul unei facturi primite — furnizor, cumpărător, date, totaluri, liniile de marfă.
  * Asta răspunde la „ce scrie, de fapt, în factura asta?", fără să deschizi portalul SFS.
  */
+/**
+ * Diagnostic: facturile unui furnizor în SFS, stare cu stare. Doar citire, doar finanțe/admin.
+ * Răspunde la „colegii zic că factura e în sistem — de ce nu apare?".
+ */
+parEfacturaRoutes.get("/diagnose/supplier/:idno", async (c) => {
+  const user = c.get("user");
+  if (!(await isElevated(user.id, user.tenantId))) {
+    return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
+  }
+  const idno = c.req.param("idno").replace(/[^0-9A-Za-z]/g, "").slice(0, 20);
+  if (!idno) return c.json({ error: "invalid_idno" }, 400);
+  const to = queryDate(c.req.query("to"), true) ?? new Date();
+  const from = queryDate(c.req.query("from")) ?? new Date(to.getTime() - 400 * 24 * 60 * 60 * 1000);
+  return c.json(await diagnoseSupplierInSfs(user.tenantId, idno, from, to));
+});
+
 parEfacturaRoutes.get("/invoices/:seria/:number", async (c) => {
   const user = c.get("user");
   if (!(await isElevated(user.id, user.tenantId))) {

@@ -22,10 +22,8 @@ import { db } from "../../db/client";
 import { parRequests, parPayments, parVendors, parPayers, parAttachments } from "../../db/schema/par";
 import { parEinvoices } from "../../db/schema/parEinvoices";
 import { finSfsSettings } from "../../db/schema/finEinvoices";
-import { loadAttachmentBytes } from "../../lib/par/attachmentStore";
-import { extractPdfText } from "../../lib/ai/pdfText";
 import { loadSfsConfig } from "../../lib/fin/sfsConfig";
-import { EfacturaMdClient, EFACTURA_MD_ACTOR } from "../../lib/efacturaMoldova";
+import { EfacturaMdClient, EFACTURA_MD_ACTOR, EFACTURA_MD_STATUS } from "../../lib/efacturaMoldova";
 import {
   expectsEfactura,
   matchInvoiceForPar,
@@ -34,7 +32,6 @@ import {
   normalizeFiscalId,
   sameFiscalId,
   sameCompanyName,
-  detectFiscalInvoice,
   efacturaRefsFromText,
   DEFAULT_DAYS_BEFORE_PAYMENT,
   type SfsInvoiceDetail,
@@ -201,8 +198,18 @@ export async function syncEfacturaCandidates(
       });
       continue;
     }
-    // O factură găsită sau marcată manual rămâne așa: sincronizarea descrie AȘTEPTAREA, nu rezultatul.
-    if (current.status === "found" || current.status === "received_manual") continue;
+    // O factură găsită sau marcată de un OM rămâne așa: sincronizarea descrie AȘTEPTAREA, nu rezultatul.
+    // Excepție: marcajele automate „factură fiscală atașată" (25.09.2026, retrase la cererea
+    // owner-ului — comparăm cererea cu e-Factura din SFS, nu cu actele din dosar) redevin așteptări.
+    const autoMarked = current.status === "received_manual" && current.lastScanSource === "attachment" && !current.markedByUserId;
+    if (!autoMarked && (current.status === "found" || current.status === "received_manual")) continue;
+    if (autoMarked) {
+      await db
+        .update(parEinvoices)
+        .set({ status: nextStatus, markedNote: null, lastScanSource: null, lastScanMessage: verdict.reason, updatedAt: new Date() })
+        .where(eq(parEinvoices.id, current.id));
+      continue;
+    }
     if (current.status === nextStatus && current.supplierIdno === (who.idno ? normalizeFiscalId(who.idno) : null)) {
       continue;
     }
@@ -241,10 +248,6 @@ const SCAN_ARCHIVE_WINDOWS = 4;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Aceleași stări ca în matchInvoiceForPar: ciornă, refuzată, anulată nu dovedesc nimic. */
 const DEAD_STATUSES = new Set([0, 2, 5]);
-
-/** Câte PDF-uri atașate citim într-o scanare și cât de mari pot fi. */
-const PDF_READ_MAX = 40;
-const PDF_READ_MAX_BYTES = 8 * 1024 * 1024;
 
 function idnoWarning(sfsIdno: string | null, requestIdno: string | null): string {
   return ` · ATENȚIE: în SFS furnizorul are codul fiscal ${sfsIdno ?? "?"}, în cerere e ${requestIdno ?? "?"} — corectează prestatorul.`;
@@ -399,7 +402,6 @@ export async function scanEfacturasForTenant(
 
   const now = new Date();
   let found = 0;
-  let receivedOutside = 0;
 
   // Ordine deterministă: cererile plătite cel mai devreme își aleg factura primele.
   const ordered = [...tracked].sort((a, b) => {
@@ -417,15 +419,7 @@ export async function scanEfacturasForTenant(
   // factura vine des ÎNAINTEA plății, uneori cu luni (audit: emisă 23.04, plătită 15.09) — în
   // afara oricărei ferestre rezonabile de potrivire.
   const attachments = await db
-    .select({
-      parId: parAttachments.parId,
-      fileName: parAttachments.fileName,
-      analysis: parAttachments.analysis,
-      storagePath: parAttachments.storagePath,
-      fileUrl: parAttachments.fileUrl,
-      mimeType: parAttachments.mimeType,
-      sizeBytes: parAttachments.sizeBytes,
-    })
+    .select({ parId: parAttachments.parId, fileName: parAttachments.fileName, analysis: parAttachments.analysis })
     .from(parAttachments)
     .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, ordered.map((t) => t.parId))));
   // …și descrierea cererii: PAR-0008 scrie „conform facturii cu nr. EBK000758854" fără s-o atașeze.
@@ -442,26 +436,6 @@ export async function scanEfacturasForTenant(
   for (const a of attachments) addRefs(a.parId, [...efacturaRefsFromText(a.fileName), ...efacturaRefsFromText(a.analysis)]);
   for (const t of texts) addRefs(t.parId, [...efacturaRefsFromText(t.endUse), ...efacturaRefsFromText(t.note)]);
 
-  // Textul PDF-urilor atașate: seria e-Facturii tipărită pe document (când numele fișierului nu o
-  // poartă) și facturile fiscale emise în afara SFS (Moldcell „MM", Orange „AAX"). Doar PDF-uri cu
-  // strat de text, cu plafon — scanarea nu are voie să devină un OCR pe tot dosarul.
-  const fiscalByPar = new Map<string, { seria: string; number: string; fileName: string }>();
-  let pdfBudget = PDF_READ_MAX;
-  for (const a of attachments) {
-    if (pdfBudget <= 0) break;
-    const isPdf = (a.mimeType ?? "").includes("pdf") || /\.pdf$/i.test(a.fileName);
-    if (!isPdf || (a.sizeBytes ?? 0) > PDF_READ_MAX_BYTES) continue;
-    pdfBudget--;
-    let text = "";
-    try {
-      text = await extractPdfText((await loadAttachmentBytes(a)).bytes);
-    } catch {
-      continue; // un act care nu se poate citi nu schimbă nimic — rămâne ce știam
-    }
-    addRefs(a.parId, efacturaRefsFromText(text));
-    const fiscal = detectFiscalInvoice(text);
-    if (fiscal && !fiscalByPar.has(a.parId)) fiscalByPar.set(a.parId, { ...fiscal, fileName: a.fileName });
-  }
   const byKey = new Map<string, SfsInvoiceSummary>(invoices.map((inv) => [invoiceKey(inv), inv]));
   const unknownRefs = [...refsByPar.values()].flat().filter((r) => !byKey.has(invoiceKey(r)));
   let refNote: string | null = null;
@@ -586,23 +560,6 @@ export async function scanEfacturasForTenant(
           updatedAt: now,
         })
         .where(eq(parEinvoices.id, row.id));
-    } else if (fiscalByPar.has(row.parId)) {
-      // Nu e în SFS, dar la cerere e atașată o factură fiscală emisă prin sistemul propriu al
-      // furnizorului. Documentul fiscal există — „Lipsește" ar fi fals, iar un reminder, nedrept.
-      const fiscal = fiscalByPar.get(row.parId)!;
-      receivedOutside++;
-      const note = `Factură fiscală atașată, emisă în afara SFS: seria ${fiscal.seria} nr. ${fiscal.number} (${fiscal.fileName}).`;
-      await db
-        .update(parEinvoices)
-        .set({
-          status: "received_manual",
-          markedNote: note,
-          lastScanAt: now,
-          lastScanSource: "attachment",
-          lastScanMessage: note,
-          updatedAt: now,
-        })
-        .where(eq(parEinvoices.id, row.id));
     } else {
       await db
         .update(parEinvoices)
@@ -620,10 +577,8 @@ export async function scanEfacturasForTenant(
     }
   }
 
-  const missing = ordered.length - found - receivedOutside;
-  const base = `Am comparat cu ${invoices.length} facturi relevante din SFS; ${found} potrivire/potriviri${
-    receivedOutside ? `, ${receivedOutside} cu factură fiscală atașată emisă în afara SFS` : ""
-  }, ${missing} cereri rămân fără factură.`;
+  const missing = ordered.length - found;
+  const base = `Am comparat cu ${invoices.length} facturi relevante din SFS; ${found} potrivire/potriviri, ${missing} cereri rămân fără factură.`;
   return {
     available: true,
     source: "sfs",
@@ -782,6 +737,68 @@ export async function listBuyerInvoicesForTenant(
     range,
     sync,
   };
+}
+
+// ─── 3bis. Diagnostic: unde stau în SFS facturile unui furnizor? ─────────────
+
+export interface SupplierDiagnosis {
+  available: boolean;
+  message: string;
+  supplierIdno: string;
+  from: string;
+  to: string;
+  byStatus: Array<{ status: number; label: string; count: number; sample: string[]; error: string | null }>;
+}
+
+/** Stările SFS în care poate sta o factură primită (fără ciorne — pe acelea nu le vede cumpărătorul). */
+const DIAGNOSE_STATUSES = [1, 7, 3, 8, 6, 2, 5, 10];
+
+/**
+ * Întreabă SFS, stare cu stare, ce facturi are un furnizor către noi într-o perioadă.
+ *
+ * Există pentru întrebarea „colegii zic că factura Orange e în sistem — de ce n-o vedem?": o
+ * factură poate sta într-o stare pe care nicio listă n-o expune (așa s-a descoperit starea 8).
+ * Doar citire; câte un apel pe stare, cu pauză, ca să nu declanșăm refuzul SFS la rafale.
+ */
+export async function diagnoseSupplierInSfs(
+  tenantId: string,
+  supplierIdno: string,
+  from: Date,
+  to: Date,
+  clientOverride?: EfacturaMdClient
+): Promise<SupplierDiagnosis> {
+  const base = { supplierIdno, from: from.toISOString(), to: to.toISOString(), byStatus: [] as SupplierDiagnosis["byStatus"] };
+  const { client, message } = await clientFor(tenantId, clientOverride);
+  if (!client) return { ...base, available: false, message };
+
+  for (const status of DIAGNOSE_STATUSES) {
+    try {
+      const found = await client.searchInvoices(`par-efp-diag-${Date.now()}-${status}`, EFACTURA_MD_ACTOR.CUMPARATOR, {
+        invoiceStatus: status,
+        supplierIdno,
+        issuedFrom: from,
+        issuedTo: to,
+      });
+      base.byStatus.push({
+        status,
+        label: EFACTURA_MD_STATUS[status] ?? String(status),
+        count: found.length,
+        sample: found.slice(0, 10).map((f) => `${f.seria} ${f.number}`),
+        error: null,
+      });
+    } catch (e) {
+      base.byStatus.push({
+        status,
+        label: EFACTURA_MD_STATUS[status] ?? String(status),
+        count: 0,
+        sample: [],
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    await new Promise((r) => setTimeout(r, clientOverride ? 0 : 400));
+  }
+  const total = base.byStatus.reduce((a, b) => a + b.count, 0);
+  return { ...base, available: true, message: `${total} facturi de la ${supplierIdno} în SFS în perioada cerută.` };
 }
 
 // ─── 4. O singură factură: toate câmpurile + documentul PDF ──────────────────

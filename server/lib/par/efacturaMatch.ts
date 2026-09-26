@@ -526,7 +526,7 @@ export function parseSfsInvoiceDetail(xml: string | null | undefined): SfsInvoic
   };
 }
 
-// ─── Dovezi în afara SFS-ului ─────────────────────────────────────────────────
+// ─── Aceeași firmă, cod fiscal diferit ────────────────────────────────────────
 
 /**
  * Cheia de comparație a unei denumiri de firmă: fără diacritice, ghilimele, punctuație și forma
@@ -551,23 +551,4 @@ export function companyNameKey(name: string | null | undefined): string {
 export function sameCompanyName(a: string | null | undefined, b: string | null | undefined): boolean {
   const ka = companyNameKey(a);
   return ka.length >= 4 && ka === companyNameKey(b);
-}
-
-/**
- * O factură fiscală emisă ÎN AFARA SIA „e-Factura", recunoscută din textul PDF-ului atașat.
- *
- * Operatorii mari o emit prin sistemul propriu, cu serie proprie: Moldcell „Factură fiscală Seria,
- * Nr. MM 8705846", Orange „Factura fiscală Seria AAX Numărul facturii 8298458". Nu vor apărea
- * niciodată în SFS, deci „Lipsește e-Factura" ar fi fals pentru ele. Un cont de plată / proformă
- * („CONT DE PLATĂ", „СЧЕТ-ФАКТУРА") NU e factură fiscală — plata s-a făcut pe el, factura urmează.
- */
-export function detectFiscalInvoice(text: string | null | undefined): { seria: string; number: string } | null {
-  if (!text) return null;
-  const flat = text.replace(/\s+/g, " ");
-  if (!/factur\S{0,3}\s+fiscal/i.test(flat)) return null;
-  // Antetul unui cont de plată, NU orice „cont de plăți": factura Orange are eticheta
-  // „Cont de plati: MD94…" (contul bancar al cumpărătorului) și era respinsă din cauza ei.
-  if (/cont\s+de\s+pl[aă]t[aă]?\s*(?:nr|№)|proform|сч[её]т[\s-]*(?:фактур|на\s+оплат)/i.test(flat)) return null;
-  const m = /Seria[\s,.:]*(?:Nr\.?[\s:]*)?([A-Z]{1,4})(?:\s*|\s+Num\S*\s+(?:facturii\s+)?)(\d{5,10})(?!\d)/.exec(flat);
-  return m ? { seria: m[1], number: m[2] } : null;
 }

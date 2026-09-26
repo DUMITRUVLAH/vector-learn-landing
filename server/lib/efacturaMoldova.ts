@@ -794,7 +794,14 @@ export class EfacturaMdClient {
   async searchInvoices(
     requestId: string,
     actorRole: number,
-    params: { invoiceStatus: number; buyerIdno?: string | null; issuedFrom: Date; issuedTo: Date }
+    params: {
+      invoiceStatus: number;
+      buyerIdno?: string | null;
+      /** Doar facturile acestui furnizor — pentru diagnosticul „unde e factura lui X?". */
+      supplierIdno?: string | null;
+      issuedFrom: Date;
+      issuedTo: Date;
+    }
   ): Promise<InvoiceListItem[]> {
     const inner =
       `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
@@ -806,6 +813,8 @@ export class EfacturaMdClient {
       `<d:EndDate>${params.issuedTo.toISOString()}</d:EndDate>` +
       `<d:StartDate>${params.issuedFrom.toISOString()}</d:StartDate>` +
       `</d:IssuedOn>` +
+      // SupplierIDNO vine după IssuedOn/Number/RegisteredOn/Seria în xs:sequence.
+      (params.supplierIdno ? `<d:SupplierIDNO>${escapeXml(params.supplierIdno)}</d:SupplierIDNO>` : "") +
       `</d:Parameters>`;
     const xml = await this.call("SearchInvoices", inner);
     return this.parseInvoiceList(xml);
