@@ -163,10 +163,8 @@ export function AssignmentTab() {
                 on={!!byTemplate.get(scenario.key)?.enabled}
                 busy={busyKey !== null}
                 onToggle={(next) => void toggleScenario(scenario, next)}
-                onCustomize={() => {
-                  const installed = byTemplate.get(scenario.key);
-                  if (installed) setEditing(installed);
-                }}
+                // Doar un scenariu deja pornit are o regulă de modificat (condiții, cine intră în tragere).
+                onCustomize={byTemplate.get(scenario.key) ? () => setEditing(byTemplate.get(scenario.key) ?? null) : undefined}
               />
             </li>
           ))}

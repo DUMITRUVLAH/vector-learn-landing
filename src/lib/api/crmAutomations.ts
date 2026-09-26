@@ -240,6 +240,13 @@ function describeWhen(trigger: AutomationTrigger, stageLabel?: (key: string) => 
   return TRIGGER_LABELS[trigger.kind];
 }
 
+function dueText(days: number | undefined): string {
+  if (days == null) return "";
+  if (days === 0) return " cu scadență azi";
+  if (days === 1) return " cu scadență mâine";
+  return ` cu scadență în ${days} zile`;
+}
+
 /** O regulă, spusă ca o frază — pentru lista de reguli. */
 export function describeAutomation(
   auto: Pick<CrmAutomation, "trigger" | "conditions" | "actions">,
@@ -254,7 +261,7 @@ export function describeAutomation(
     .map((a) => {
       switch (a.type) {
         case "create_task":
-          return `creează taskul „${a.title}”${a.dueInDays != null ? ` cu scadență în ${a.dueInDays} zile` : ""}`;
+          return `creează taskul „${a.title}”${dueText(a.dueInDays)}`;
         case "move_stage":
           return `mută în „${stageLabel?.(a.stageKey) ?? a.stageKey}”`;
         case "add_tag":

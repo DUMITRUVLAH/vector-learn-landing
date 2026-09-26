@@ -220,7 +220,7 @@ function RulesTab() {
               <li key={scenario.key}>
                 <ScenarioCard
                   title={scenario.title}
-                  why={installed ? describeAutomation(installed, stageLabel) : scenario.why}
+                  why={installed && isCustomized(installed, scenario, stages) ? describeAutomation(installed, stageLabel) : scenario.why}
                   on={!!installed?.enabled}
                   busy={busyKey === scenario.key}
                   unavailable={unavailable}
@@ -312,6 +312,24 @@ function RulesTab() {
       )}
     </div>
   );
+}
+
+/**
+ * A schimbat omul scenariul prin „Personalizează"? Atunci cardul spune regula LUI, nu explicația
+ * generică — altfel ar scrie „3 zile" peste o regulă mutată pe 5.
+ */
+function isCustomized(rule: CrmAutomation, scenario: AutomationScenario, stages: CrmStage[]): boolean {
+  const built = scenario.build(stages);
+  if (!built) return true;
+  const shape = (x: Pick<CrmAutomationInput, "trigger" | "conditions" | "actions">) =>
+    JSON.stringify({
+      kind: x.trigger.kind,
+      toStage: x.trigger.toStage ?? null,
+      idleDays: x.trigger.idleDays ?? null,
+      conditions: x.conditions,
+      actions: x.actions,
+    });
+  return shape(rule) !== shape(built);
 }
 
 // ─── Editorul de regulă ──────────────────────────────────────────────────────
