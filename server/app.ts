@@ -164,6 +164,12 @@ import { crmAssignmentRoutes } from "./routes/crmAssignment";
 import { crmDistributionRoutes } from "./routes/crmDistribution";
 import { crmKpiTargetsRoutes } from "./routes/crmKpiTargets";
 import { crmCommsRoutes } from "./routes/crmComms";
+// COMMS-301: comunicare omnicanal — WhatsApp, Telegram, Viber, Gmail (docs/comms/)
+import { commsWebhooksRoutes } from "./routes/commsWebhooks";
+import { commsChannelsRoutes } from "./routes/commsChannels";
+import { commsInboxRoutes } from "./routes/commsInbox";
+import { commsGmailRoutes } from "./routes/commsGmail";
+import { commsCronRoutes } from "./routes/commsCron";
 import { publicErrorMessage } from "./lib/publicError";
 import { docsRoutes } from "./routes/docs";
 import { denyWhenImpersonating, logImpersonatedWrites } from "./middleware/impersonationGuard";
@@ -252,6 +258,9 @@ app.use("/api/par/:id/pay", denyWhenImpersonating);
 app.use("/api/par/:id/finance", denyWhenImpersonating);
 app.use("/api/par/:id/purchase-order", denyWhenImpersonating);
 app.use("/api/par/bulk-approve", denyWhenImpersonating);
+// COMMS-301: un superadmin care „intră în contul clientului" nu trimite mesaje reale clienților lui.
+app.use("/api/comms/inbox/conversations/:id/messages", denyWhenImpersonating);
+app.use("/api/comms/inbox/start", denyWhenImpersonating);
 // Restul scrierilor sunt permise, dar lasă urmă cu actorul REAL, nu cu utilizatorul împrumutat.
 app.use("/api/*", logImpersonatedWrites);
 
@@ -496,6 +505,14 @@ app.route("/api/crm/assignment", crmAssignmentRoutes);
 app.route("/api/crm/distribution", crmDistributionRoutes);
 app.route("/api/crm/kpi-targets", crmKpiTargetsRoutes);
 app.route("/api/crm/comms", crmCommsRoutes);
+// COMMS-301: webhook-urile furnizorilor sunt PUBLICE (apărarea: segmentul secret + semnătura),
+// cronul are CRON_SECRET; restul cer sesiune. Prefixe separate, ca `requireAuth` al unui router să
+// nu se aplice webhook-urilor.
+app.route("/api/comms/webhooks", commsWebhooksRoutes);
+app.route("/api/comms/cron", commsCronRoutes);
+app.route("/api/comms/gmail", commsGmailRoutes);
+app.route("/api/comms/channels", commsChannelsRoutes);
+app.route("/api/comms/inbox", commsInboxRoutes);
 // DG-102: registrul de acte (generare documente → PDF → PAR)
 app.route("/api/docs", docsRoutes);
 

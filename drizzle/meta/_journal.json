@@ -1359,6 +1359,13 @@
       "when": 1789000000017,
       "tag": "0194_crm_invitatii_echipa",
       "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "7",
+      "when": 1789000000018,
+      "tag": "0195_comms_omnichannel",
+      "breakpoints": true
     }
   ]
 }

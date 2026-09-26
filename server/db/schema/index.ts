@@ -94,3 +94,5 @@ export * from "./docShareLinks";
 export * from "./crmAutomations";
 // Pontaj self-service — evidența timpului de muncă (PONTAJ-001)
 export * from "./pontaj";
+// Comunicare omnicanal — WhatsApp, Telegram, Viber, Gmail (COMMS-301)
+export * from "./comms";

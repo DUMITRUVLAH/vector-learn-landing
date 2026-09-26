@@ -31,6 +31,8 @@ export type CrmPermission =
   | "automations.manage"
   | "assignment.manage"
   | "cadences.manage"
+  /** COMMS-301: conectează/deconectează canalele (WhatsApp, Telegram, Viber, Gmail comun). */
+  | "comms.manage"
   | "audit.view";
 
 /** Rolurile de workspace ale FinFlow (`users.role`). */
@@ -69,6 +71,7 @@ export const CRM_ROLE_PERMISSIONS: Record<WorkspaceRole, CrmPermission[]> = {
     "automations.manage",
     "assignment.manage",
     "cadences.manage",
+    "comms.manage",
     "audit.view",
   ],
   manager: [
@@ -81,6 +84,7 @@ export const CRM_ROLE_PERMISSIONS: Record<WorkspaceRole, CrmPermission[]> = {
     "automations.manage",
     "assignment.manage",
     "cadences.manage",
+    "comms.manage",
     "audit.view",
   ],
   teacher: [...COMMERCIAL_BASE],

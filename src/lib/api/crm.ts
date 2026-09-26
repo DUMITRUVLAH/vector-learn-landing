@@ -1215,6 +1215,7 @@ export type CrmPermission =
   | "automations.manage"
   | "assignment.manage"
   | "cadences.manage"
+  | "comms.manage"
   | "audit.view";
 
 export interface CrmPermissionsResponse {

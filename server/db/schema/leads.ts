@@ -149,6 +149,9 @@ export const interactionTypeEnum = pgEnum("interaction_type", [
   "meeting",
   "stage_change",
   "system",
+  // COMMS-301: mesajele din inboxul omnicanal se oglindesc în cronologia leadului (migrarea 0195).
+  "telegram",
+  "viber",
 ]);
 
 export const interactionDirectionEnum = pgEnum("interaction_direction", [

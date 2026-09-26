@@ -37,6 +37,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   "automations.manage": "Administrează automatizări",
   "assignment.manage": "Administrează distribuirea",
   "cadences.manage": "Administrează cadențe",
+  "comms.manage": "Conectează canale de mesaje",
   "audit.view": "Vede jurnalul",
 };
 
