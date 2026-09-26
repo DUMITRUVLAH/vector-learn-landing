@@ -17,6 +17,8 @@ import {
   type Agreement,
 } from "@/lib/api/finAgreements";
 import { api } from "@/lib/api";
+import { useRouter } from "@/router/HashRouter";
+import { listCrmCompanies } from "@/lib/api/crmCompanies";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,8 +59,13 @@ export function AgreementsPage() {
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
+  const { path } = useRouter();
+  // NAV-12: în CRM, contractul se face cu clientul CRM. `?firma=<id>` vine din fișa clientului.
+  const inCrm = path.startsWith("/business/crm");
+  const presetCompanyId = inCrm ? (path.match(/[?&]firma=([0-9a-f-]{36})/i)?.[1] ?? undefined) : undefined;
+  const [showCreate, setShowCreate] = useState(!!presetCompanyId);
   const [parties, setParties] = useState<Party[]>([]);
+  const [crmCompanies, setCrmCompanies] = useState<Party[]>([]);
 
   // Load agreements
   const fetchAgreements = useCallback(async () => {
@@ -89,6 +96,18 @@ export function AgreementsPage() {
     void fetchAgreements();
     void fetchParties();
   }, [fetchAgreements, fetchParties]);
+
+  useEffect(() => {
+    if (!inCrm) return;
+    listCrmCompanies()
+      .then((r) => setCrmCompanies((r.items ?? []).map((c) => ({ id: c.id, name: c.name }))))
+      .catch(() => setCrmCompanies([]));
+  }, [inCrm]);
+
+  // O firmă CRM care e deja partener FinDesk (același nume) apare o singură dată — la parteneri —
+  // în afară de cea preselectată din fișă, care trebuie să rămână aleasă.
+  const partyNames = new Set(parties.map((p) => p.name.trim().toLowerCase()));
+  const crmOnly = crmCompanies.filter((c) => c.id === presetCompanyId || !partyNames.has(c.name.trim().toLowerCase()));
 
   // When a contract is cancelled, update it in the list
   const handleCancelled = useCallback((id: string) => {
@@ -227,6 +246,8 @@ export function AgreementsPage() {
       {showCreate && (
         <CreateAgreementDialog
           parties={parties}
+          crmCompanies={inCrm ? crmOnly : undefined}
+          initialCrmCompanyId={presetCompanyId}
           onCreated={handleCreated}
           onClose={() => setShowCreate(false)}
         />

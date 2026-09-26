@@ -21,6 +21,7 @@ import {
   MessageCircle,
   MessageSquare,
   Pencil,
+  FileSignature,
   Phone,
   StickyNote,
   Users,
@@ -31,6 +32,8 @@ import { Alert, Badge, Button, Card, EmptyState, Table, TableBody, TableCell, Ta
 import { Link, useRouter } from "@/router/HashRouter";
 import { pipelineHref } from "@/lib/crm/pipelineUrl";
 import { COMPANIES_LIST_PATH, companyIdFromPath } from "@/lib/crm/companyUrl";
+import { CRM_CONTRACTS_ROUTE } from "@/lib/fin/finNav";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { crmDocPath } from "@/lib/docs/paths";
 import { CRM_DOC_KIND_LABELS, CRM_DOC_STATUS_LABELS } from "@/lib/api/crmDocuments";
 import { formatDate, formatRelative } from "@/lib/i18n/format";
@@ -64,6 +67,7 @@ const OUTCOME_VARIANT: Record<CrmDealOutcome, "secondary" | "success" | "destruc
 export function CrmCompanyDetailPage() {
   const { path } = useRouter();
   const id = companyIdFromPath(path);
+  const { isEnabled } = useEnabledModules();
   const [data, setData] = useState<CrmCompanyOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,10 +106,22 @@ export function CrmCompanyDetailPage() {
             Toți clienții
           </Link>
           {company && (
-            <Button variant="outline" onClick={() => setEditing(true)}>
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-              Editează
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {/* NAV-12: contractul se pornește din fișa clientului, cu firma deja aleasă. */}
+              {isEnabled("findesk") && (
+                <Link
+                  to={`${CRM_CONTRACTS_ROUTE}?firma=${company.id}`}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground no-underline hover:bg-muted hover:no-underline max-sm:min-h-11"
+                >
+                  <FileSignature className="h-4 w-4" aria-hidden="true" />
+                  Contract nou
+                </Link>
+              )}
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+                Editează
+              </Button>
+            </div>
           )}
         </div>
 

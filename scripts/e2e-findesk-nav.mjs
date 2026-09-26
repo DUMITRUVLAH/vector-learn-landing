@@ -201,6 +201,36 @@ async function main() {
   check("link vechi /app/fin/calendar → /business/fin/calendar", new URL(page.url()).hash === "#/business/fin/calendar", new URL(page.url()).hash);
   if (partyId) await ctx.request.delete(`${BASE}/api/fin/parties/${partyId}`);
 
+  // NAV-12: contract din fișa unui client CRM — firma vine preselectată, iar contractul se leagă de
+  // partenerul FinDesk al firmei (creat o singură dată).
+  const firm = `E2E Firma CRM ${Date.now()}`;
+  const firmRes = await ctx.request.post(`${BASE}/api/crm/companies`, { data: { name: firm, idno: "1003600055555" } });
+  const firmJson = firmRes.ok() ? await firmRes.json() : null;
+  const firmId = firmJson?.id ?? firmJson?.data?.id;
+  check("CRM: firmă creată prin API", !!firmId, `status ${firmRes.status()}`);
+  if (firmId) {
+    errors.length = 0;
+    await page.goto(`${BASE}/#/business/crm/clienti/${firmId}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2500);
+    await page.getByRole("link", { name: "Contract nou" }).click();
+    await page.waitForTimeout(2500);
+    const selected = await page.locator("#agr-party").inputValue().catch(() => "");
+    const contractTitle = `E2E contract ${Date.now()}`;
+    await page.locator("#agr-title").fill(contractTitle);
+    await page.getByRole("button", { name: "Creează contract", exact: true }).click();
+    await page.waitForTimeout(2500);
+    const list = await (await ctx.request.get(`${BASE}/api/fin/agreements?limit=100`)).json();
+    const agreement = (list?.data ?? []).find((a) => a.title === contractTitle);
+    const partyOk = agreement?.partyId
+      ? (await (await ctx.request.get(`${BASE}/api/fin/parties/${agreement.partyId}`)).json())?.data?.name === firm
+      : false;
+    check(
+      "CRM: „Contract nou” din fișa clientului creează contractul pe firma lui",
+      selected === `crm:${firmId}` && !!agreement && partyOk && errors.length === 0,
+      `preselectat=${selected} contract=${!!agreement} partener=${partyOk}${errors.length ? ` JS: ${errors[0]}` : ""}`,
+    );
+  }
+
   // Acțiunea, nu doar butonul: „Factură nouă" de pe ecranul de start deschide formularul.
   await page.goto(`${BASE}/#/business/fin/`, { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Factură nouă" }).first().click();

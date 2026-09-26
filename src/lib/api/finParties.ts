@@ -192,3 +192,14 @@ export async function getTopClients(limit = 10): Promise<{ data: TopClient[] }> 
 export async function getSegmentDistribution(): Promise<{ data: SegmentDistribution }> {
   return api<{ data: SegmentDistribution }>("/api/fin/parties/analytics/segments");
 }
+
+/**
+ * NAV-12: partenerul FinDesk al unei firme din CRM — găsit după IDNO/nume sau creat o singură dată.
+ * Contractele și facturile se leagă de `fin_parties`; clientul din CRM e o `crm_companies`.
+ */
+export function partyFromCrmCompany(companyId: string): Promise<{ data: Party; created: boolean }> {
+  return api<{ data: Party; created: boolean }>("/api/fin/parties/from-crm-company", {
+    method: "POST",
+    body: JSON.stringify({ companyId }),
+  });
+}

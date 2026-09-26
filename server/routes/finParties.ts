@@ -22,6 +22,7 @@ import { and, eq, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { finParties, finPartyContacts } from "../db/schema/finParties";
 import { finInvoices } from "../db/schema/finInvoices";
+import { crmCompanies } from "../db/schema/crmCompanies";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 // ─── Segment computation ──────────────────────────────────────────────────────
@@ -511,6 +512,68 @@ finPartiesRoutes.post("/", zValidator("json", createPartySchema), async (c) => {
     .returning();
 
   return c.json({ data: created }, 201);
+});
+
+// ─── NAV-12: partenerul FinDesk al unei firme din CRM ─────────────────────────
+
+/**
+ * POST /api/fin/parties/from-crm-company  { companyId }
+ *
+ * Contractele și facturile stau acum și în CRM, dar se leagă de un partener FinDesk (`fin_parties`),
+ * iar clientul vânzătorului e o firmă CRM (`crm_companies`). Fără punte, din CRM nu puteai face un
+ * contract cu propriul client. Endpointul găsește partenerul potrivit — întâi după IDNO, apoi după
+ * nume — și îl creează doar dacă nu există. Idempotent: două click-uri nu fac doi parteneri.
+ */
+const fromCrmCompanySchema = z.object({ companyId: z.string().uuid() });
+
+finPartiesRoutes.post("/from-crm-company", zValidator("json", fromCrmCompanySchema), async (c) => {
+  const user = c.get("user");
+  const { companyId } = c.req.valid("json");
+
+  const [company] = await db
+    .select()
+    .from(crmCompanies)
+    .where(and(eq(crmCompanies.id, companyId), eq(crmCompanies.tenantId, user.tenantId)))
+    .limit(1);
+  if (!company) return c.json({ error: "Firma nu există în CRM." }, 404);
+
+  // IDNO-ul din CRM e text liber (până la 40 de caractere); în FinDesk intră doar unul valid.
+  const idno = company.idno?.replace(/\s+/g, "") ?? "";
+  const validIdno = idnoRegex.test(idno) ? idno : null;
+
+  const byIdno = validIdno
+    ? await db
+        .select()
+        .from(finParties)
+        .where(and(eq(finParties.tenantId, user.tenantId), eq(finParties.idno, validIdno)))
+        .limit(1)
+    : [];
+  const existing =
+    byIdno[0] ??
+    (
+      await db
+        .select()
+        .from(finParties)
+        .where(and(eq(finParties.tenantId, user.tenantId), sql`lower(trim(${finParties.name})) = lower(trim(${company.name}))`))
+        .limit(1)
+    )[0];
+  if (existing) return c.json({ data: existing, created: false });
+
+  const [created] = await db
+    .insert(finParties)
+    .values({
+      tenantId: user.tenantId,
+      kind: "client",
+      name: company.name,
+      country: "MD",
+      idno: validIdno,
+      address: company.address ?? null,
+      email: company.email ?? null,
+      phone: company.phone?.slice(0, 30) ?? null,
+      notes: "Creat din CRM",
+    })
+    .returning();
+  return c.json({ data: created, created: true }, 201);
 });
 
 // ─── Partial update ───────────────────────────────────────────────────────────

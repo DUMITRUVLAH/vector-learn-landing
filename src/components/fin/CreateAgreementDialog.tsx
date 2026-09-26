@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, Loader2, AlertTriangle } from "lucide-react";
 import { createAgreement, type AgreementStatus } from "@/lib/api/finAgreements";
 import { ApiError } from "@/lib/api";
+import { partyFromCrmCompany } from "@/lib/api/finParties";
 
 import { DateField } from "@/components/ds";
 interface Party {
@@ -17,17 +18,29 @@ interface Party {
 
 interface CreateAgreementDialogProps {
   parties: Party[];
+  /**
+   * NAV-12: în CRM, clienții CRM apar primii. Alegerea unuia găsește (sau creează o dată) partenerul
+   * FinDesk corespunzător — contractul rămâne legat de `fin_parties`, ca facturarea să meargă.
+   */
+  crmCompanies?: Party[];
+  /** Firma CRM preselectată (din fișa clientului: „Contract nou”). */
+  initialCrmCompanyId?: string;
   onCreated: () => void;
   onClose: () => void;
 }
 
+/** Valorile din selector: `crm:<id>` pentru o firmă CRM, id-ul direct pentru un partener FinDesk. */
+const CRM_PREFIX = "crm:";
+
 export function CreateAgreementDialog({
   parties,
+  crmCompanies,
+  initialCrmCompanyId,
   onCreated,
   onClose,
 }: CreateAgreementDialogProps) {
   const [title, setTitle] = useState("");
-  const [partyId, setPartyId] = useState("");
+  const [partyId, setPartyId] = useState(initialCrmCompanyId ? `${CRM_PREFIX}${initialCrmCompanyId}` : "");
   const [status, setStatus] = useState<AgreementStatus>("draft");
   const [currency, setCurrency] = useState("MDL");
   const [startDate, setStartDate] = useState("");
@@ -57,9 +70,12 @@ export function CreateAgreementDialog({
     setLoading(true);
     setError(null);
     try {
+      const resolvedPartyId = partyId.startsWith(CRM_PREFIX)
+        ? (await partyFromCrmCompany(partyId.slice(CRM_PREFIX.length))).data.id
+        : partyId || null;
       await createAgreement({
         title: title.trim(),
-        partyId: partyId || null,
+        partyId: resolvedPartyId,
         status,
         currency,
         startDate: startDate || null,
@@ -158,11 +174,32 @@ export function CreateAgreementDialog({
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">— Selectează partener —</option>
-              {parties.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              {crmCompanies && crmCompanies.length > 0 ? (
+                <>
+                  <optgroup label="Clienți CRM">
+                    {crmCompanies.map((p) => (
+                      <option key={`crm-${p.id}`} value={`${CRM_PREFIX}${p.id}`}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {parties.length > 0 && (
+                    <optgroup label="Parteneri FinDesk">
+                      {parties.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </>
+              ) : (
+                parties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
