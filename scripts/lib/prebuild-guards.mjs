@@ -17,4 +17,5 @@ export const STATIC_GUARDS = [
   ["linkuri moarte în meniu", "scripts/check-nav-links.mjs"],
   ["moneda cererii pe ecrane și în PDF", "scripts/check-par-currency.mjs"],
   ["statement-breakpoints în migrări", "scripts/check-migration-breakpoints.mjs"],
+  ["jurnalul de migrări (numere duplicate, .sql lipsă)", "scripts/check-migration-journal.mjs"],
 ];

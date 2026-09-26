@@ -49,6 +49,13 @@ jobs:
       - name: Migration-breakpoint gate
         run: node scripts/check-migration-breakpoints.mjs
 
+      # 3b. Migration journal — no duplicate number/tag (parallel agents minted 0191 and 0192 twice on
+      #     2026-09-26), every entry has its .sql and vice versa. Plus the parallel-shipping tooling tests.
+      - name: Migration-journal gate
+        run: node scripts/check-migration-journal.mjs
+      - name: Parallel-agents tooling tests
+        run: npx vitest run scripts/__tests__/migrationPlan.test.mjs scripts/__tests__/parallel-migrations.test.mjs
+
       # 4. Schema drift — every table/column the code declares must be created by a migration,
       #    else a fresh deploy 500s. sync-schema.ts only adds columns, never whole tables.
       - name: Schema-drift gate

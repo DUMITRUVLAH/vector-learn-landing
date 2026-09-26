@@ -62,3 +62,6 @@ backlog/research/**/TRIAL-ACCOUNT-CREDENTIALS.local.md
 
 # Originalele salvate de scripts/storage-compress.ts înainte de a suprascrie în Storage.
 .storage-backup/
+
+# Portul de dev al worktree-ului (scripts/dev-worktree.mjs)
+.dev-port

@@ -197,6 +197,10 @@ Invoke `persona-student`. Pass the ID. Save report. Always continue.
 
    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
    ```
+0. **Parallel agents are the norm.** Work in your own worktree (`npm run worktree -- <slug> --install`,
+   own `.dev-port`), create migrations only with `npm run migration:new -- <slug>`, and deliver to main
+   only with `npm run ship` (it does the rebase below + journal union + renumbering + guards + push).
+   For an implementation task you delegate while other agents may run, prefer the `parallel-dev` agent.
 5. **Rebase onto current main BEFORE pushing (keeps PRs mergeable, prevents drift-rot):**
    ```bash
    git fetch origin main -q
@@ -234,7 +238,7 @@ for this run. Merging is outward-facing and hard to reverse — it stays the own
    - `git fetch origin <branch>` then `git rev-list --count origin/main..origin/<branch>`.
      **0 commits ahead = STALE** (work already on main) → `gh pr close` with a note, do not merge.
    - `gh pr view <n> --json baseRefName` → if base ≠ `main`, `gh pr edit <n> --base main` first.
-   - Check migration prefixes vs main (test-runner gate 4a-bis). Collision → renumber before merge.
+   - Check migration prefixes vs main (test-runner gate 4a-bis). Collision → `npm run ship` renumbers it.
 2. **Merge the clean, collision-free, migration-free PRs first** (lowest risk), oldest-first.
 3. **After each merge, main moves** — re-check the next PR's mergeability; rebase it onto the new main
    if needed. Sequential merges of overlapping PRs will conflict; rebase, don't force.

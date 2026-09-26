@@ -169,8 +169,11 @@ De ce: branch-urile care stau deschise putrezesc în conflicte ireconciliabile �
 PR-uri, iar merge-ul lor în bloc a produs outage-ul din 2026-06-02 (§3.5.1ter). Deploy mic și des bate
 merge mare și rar.
 
-Cum: construiesc pe branch-ul de fază (§0.2), rulez gate-urile, apoi `git push origin <branch>:main`
-când e fast-forward curat — nu atinge working tree-ul, deci e sigur și cu chaturi paralele (§0.4).
+Cum: construiesc pe branch-ul de fază (§0.2), rulez gate-urile, apoi **`npm run ship`**
+(`scripts/ship-to-main.mjs`): fetch + rebase pe main, conflictul pe `_journal.json` rezolvat prin
+uniune, migrările proprii renumerotate peste main cu `when` crescător, gărzile de prod, `push HEAD:main`
+fără force, reîncercare dacă alt agent a livrat între timp. Se oprește (branch intact) la orice conflict
+de cod adevărat. **Nu mai împinge nimeni în main de mână.**
 
 **Înainte de FIECARE push în `main`, obligatoriu** (asta NU se relaxează — e singurul lucru care ține
 prod-ul în viață):
@@ -223,6 +226,12 @@ nesalvată**, inclusiv fișierele noi.
 > (`vendorAutosave.ts` scris peste `vendorAutoSave.ts` existent — macOS e case-insensitive).
 
 ### Soluția tehnică: un `git worktree` per chat (izolare reală)
+
+> **Scurtătura (2026-09-26): `npm run worktree -- <slug> --install`** face tot ce e mai jos —
+> worktree din `origin/main` proaspăt, `.env` copiat, port liber 3150–3199 scris în `.dev-port`.
+> `npm run worktree -- --list` arată toate worktree-urile: port, fișiere necomise, commituri nelivrate.
+> Agentul care știe tot fluxul ăsta de la cap la coadă: **`parallel-dev`** (`.claude/agents/parallel-dev.md`)
+> — folosește-l pentru orice implementare pornită când mai rulează și alți agenți.
 
 Un worktree = **director propriu pe disc + branch propriu**, dar același `.git` și același
 istoric. Două chaturi în două worktree-uri nu se pot călca pe picioare: `stash`/`checkout`
@@ -394,6 +403,13 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   leave NO uncommitted migration, and `npm run db:reset && npm run db:seed` must succeed.
   A schema change without a committed migration breaks every fresh deploy. (This is how the
   `pipeline_stages`/`lead_tasks`/`message_templates` tables almost shipped with no migration.)
+- **Migration numbers come ONLY from `npm run migration:new -- <slug>` (2026-09-26).** It reserves the
+  number atomically on GitHub (`refs/migration-reservations/NNNN`, a unique token pushed with
+  `--force-with-lease=<ref>:` — exactly one of N racing agents wins) and writes the `.sql` + journal entry
+  with a `when` above everything. `npm run ship` renumbers any own migration that still collides and
+  fixes its `when` (drizzle SKIPS a migration whose `when` ≤ the last applied one — silently).
+  `scripts/check-migration-journal.mjs` (build + CI) fails on duplicate number/tag or a missing `.sql`.
+  Proven by `scripts/__tests__/parallel-migrations.test.mjs` (bare repo + racing clones).
 - **Migration prefix collision (the #1 prod-breaker):** drizzle numbers migrations from the branch
   point, so parallel branches all mint the same `0016_`. Every migration prefix a branch adds must be
   **> the max prefix on `origin/main`**; if not, renumber (rename `.sql` + `meta/<idx>_snapshot.json`,

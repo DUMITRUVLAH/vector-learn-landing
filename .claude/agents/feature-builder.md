@@ -30,11 +30,13 @@ Read one spec from `backlog/specs/<ID>.md`, implement it completely, and report 
    - Touch targets minimum 44×44px (`touch-target` utility)
 9. **Romanian copy.** All user-facing strings in Romanian, consistent with existing landing tone.
 10. **Routing:** Use simple hash-based routing (`window.location.hash`) or install `react-router-dom` if not present. The page must be accessible at the declared path. In-app links must use real app routes (e.g. `#/app/login`), never dead anchors like `#login`.
-11. **Schema changes → migrations (non-negotiable).** If you touch `server/db/schema/*`: first
-    `git fetch origin main -q`, then `npm run db:generate`, **commit the generated migration**, and
-    verify `npm run db:reset && npm run db:seed` succeed. A schema change without a committed migration
+11. **Schema changes → migrations (non-negotiable).** If you touch `server/db/schema/*`: create the
+    migration with **`npm run migration:new -- <slug>`** (atomic number reservation — other agents run in
+    parallel; never pick a number yourself, `db:generate` is broken here), write the SQL with
+    `--> statement-breakpoint` between statements, add a `sync-schema.ts` `ENSURE_STATEMENTS` heal for any
+    NEW TABLE on a request path, **commit the migration**, and verify `npm run db:reset && npm run db:seed` succeed. A schema change without a committed migration
     is INCOMPLETE — it breaks every fresh deploy.
-    - **Prefix collision is the #1 prod-breaker.** drizzle numbers migrations from YOUR branch point,
+    - (Background — `migration:new` and `npm run ship` now do this for you:) **Prefix collision is the #1 prod-breaker.** drizzle numbers migrations from YOUR branch point,
       so parallel branches all mint the same `0016_`. Before committing, ensure the new migration's
       prefix is **greater than the max prefix on `origin/main`**:
       `git ls-tree origin/main drizzle/ --name-only | grep -oE '[0-9]{4}' | sort -n | tail -1`.

@@ -116,6 +116,9 @@ A branch that rebuilds fine *on itself* can still 500 prod after merge, because 
 migration prefix (e.g. `0016_`) that ALREADY EXISTS on `main` with different content. This is
 the collision that broke routes before (see migration-prefix-collisions). Check it explicitly:
 ```bash
+# Preferred (2026-09-26): one command — duplicates, missing .sql, own `when` above main.
+git fetch origin main -q && node scripts/check-migration-journal.mjs --base origin/main
+# Equivalent manual checks (kept for reference):
 git fetch origin main -q
 # Every migration prefix added on this branch must be > the max prefix on origin/main.
 MAIN_MAX=$(git ls-tree origin/main drizzle/ --name-only | grep -oE '[0-9]{4}' | sort -n | tail -1)
@@ -125,9 +128,8 @@ BRANCH_MIN_NEW=$(git diff --name-only origin/main...HEAD | grep -oE 'drizzle/[0-
 node -e "const j=require('./drizzle/meta/_journal.json');const i=j.entries.map(e=>e.idx);const d=i.filter((x,n)=>i.indexOf(x)!==n);if(d.length){console.error('DUP journal idx:',d);process.exit(1)}else console.log('journal idx OK')"
 ```
 - If any migration prefix added on the branch is **≤ the max prefix on `origin/main`** → **FAIL** with
-  `MIGRATION_COLLISION`: the builder/improver must renumber the migration to the next free index
-  (max-on-main + 1), rename its `meta/<idx>_snapshot.json`, fix `meta/_journal.json` (`idx` + `tag`),
-  then re-run 4a. Never merge a colliding migration — it corrupts the journal and 500s prod.
+  `MIGRATION_COLLISION`. Fix: `npm run ship -- --dry-run` shows the renumbering; `npm run ship` applies it
+  (rename .sql/snapshot, journal `idx`/`tag`/`when`, atomic re-reservation). Then re-run 4a. Never merge a colliding migration — it corrupts the journal and 500s prod.
 - If `_journal.json` has any duplicate `idx` → **FAIL** (`DUP journal idx`).
 
 ### 4b. API integration smoke (BLOCKING — catches route/DB/auth breaks)
