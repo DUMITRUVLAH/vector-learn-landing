@@ -277,8 +277,9 @@ export function register(suite) {
     const r = await api(ctx.other, "GET", url);
     expectNo5xx(r);
     expect(!r.text.includes(MARK), `clientul B vede date ale clientului A: ${r.text.slice(0, 160)}`);
-    const items = r.ok ? listOf(r.json) : null;
-    expect(!items || items.length === 0 || !items.some((x) => JSON.stringify(x).includes(RUN)), "lista conține rânduri ale clientului A");
+    for (const [k, id] of Object.entries(ctx.aIds)) {
+      if (k !== "member") expect(!r.text.includes(id), `răspunsul conține id-ul ${k} al clientului A`);
+    }
   });
 
   suite.add(G, "după toate încercările clientului B, datele clientului A sunt neatinse", async (ctx) => {
