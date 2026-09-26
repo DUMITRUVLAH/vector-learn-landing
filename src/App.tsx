@@ -346,6 +346,7 @@ function Routes() {
         : sub === "scrisori" ? <ItparkLettersPage />
         : sub === "ready" ? <ItparkReadinessPage />
         : sub === "declaratie" ? <ItparkSelfDeclarationPage />
+        : sub === "edit" ? <ItparkWizard mode="edit" />
         : <ItparkDetail />;
       return <BusinessGuardPage><Suspense fallback={null}>{page}</Suspense></BusinessGuardPage>;
     }

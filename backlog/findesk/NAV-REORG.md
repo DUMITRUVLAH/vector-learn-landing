@@ -55,11 +55,11 @@ e-Factura, mutarea în CRM a ce ține de vânzări și un prim ecran mai bun.
 | NAV-08 | IT Park: modulul întreg rutat în `/business/fin/itpark/*` (azi doar detaliul, rupt) | livrat |
 | NAV-09 | Fără `/app/fin`: 23 de linkuri + redirecționare, 3 pagini orfane rutate, fișa partenerului reparată | livrat |
 | NAV-10 | Bancă: un singur import și o singură coadă de potrivire (propunere, mai jos) | **decizie owner** |
+| NAV-11 | IT Park: editarea unui dosar (formularul de creare în mod „edit”) | livrat |
 
 ## Backlog descoperit (nu intră în faza asta)
 
-- **IT Park: editarea unui dosar nu există.** Fișa avea buton „Editează” spre `/:id/edit`, rută
-  inexistentă (scos în NAV-08). API-ul `updateEngagement` există; lipsește doar formularul.
+- ~~IT Park: editarea unui dosar nu există~~ → NAV-11.
 
 - Contractul din CRM se leagă de un partener FinDesk (`fin_parties`), nu de firma din CRM
   (`crm companies`). Un contract pornit din fișa clientului CRM ar trebui să preia firma automat.

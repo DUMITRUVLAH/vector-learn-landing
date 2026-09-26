@@ -141,6 +141,28 @@ async function main() {
       ].filter(Boolean);
       check(`IT Park ${pg.path.replace(engId, ":id")}`, problems.length === 0, problems.join(" · "));
     }
+    // NAV-11: editarea — acțiunea, nu butonul. Dosarul e „În lucru" cu un venit ajustat calculat;
+    // o corectură de adresă din formular nu are voie să-l readucă la „Ciornă" sau să-i șteargă cifra.
+    await ctx.request.put(`${BASE}/api/itpark/engagements/${engId}`, {
+      data: { residentName: resident, idno: "1003600000000", vatPayer: false, periodStart: "2026-01-01", periodEnd: "2026-12-31", reportingYear: 2026, status: "in_progress", adjustedRevenueCents: 1234500 },
+    });
+    errors.length = 0;
+    await page.goto(`${BASE}/#/business/fin/itpark/${engId}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2000);
+    await page.getByRole("link", { name: "Editează" }).click();
+    await page.waitForTimeout(2000);
+    await page.locator("#legalAddress").fill("mun. Chișinău, str. E2E 1");
+    await page.getByRole("button", { name: /Continuă/ }).click();
+    await page.getByRole("button", { name: /Continuă/ }).click();
+    await page.getByRole("button", { name: /Salvează modificările/ }).click();
+    await page.waitForTimeout(2500);
+    const after = await (await ctx.request.get(`${BASE}/api/itpark/engagements/${engId}`)).json();
+    const saved = after?.engagement ?? after?.data ?? after;
+    check(
+      "IT Park: editarea salvează și păstrează starea și calculul",
+      saved?.legalAddress === "mun. Chișinău, str. E2E 1" && saved?.status === "in_progress" && saved?.adjustedRevenueCents === 1234500 && new URL(page.url()).hash === `#/business/fin/itpark/${engId}` && errors.length === 0,
+      `adresă=${saved?.legalAddress} status=${saved?.status} ajustat=${saved?.adjustedRevenueCents} url=${new URL(page.url()).hash}${errors.length ? ` JS: ${errors[0]}` : ""}`,
+    );
     await ctx.request.delete(`${BASE}/api/itpark/engagements/${engId}`);
   }
 

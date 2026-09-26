@@ -233,6 +233,12 @@ export default function ItparkDetail() {
         // Autodeclarația și lista de pregătire aveau pagini complete, dar niciun link spre ele.
         <div className="flex flex-wrap gap-2">
           <a
+            href={`#${itparkSubPath(id, "edit")}`}
+            className="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground no-underline hover:bg-muted hover:no-underline"
+          >
+            Editează
+          </a>
+          <a
             href={`#${itparkSubPath(id, "declaratie")}`}
             className="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground no-underline hover:bg-muted hover:no-underline"
           >

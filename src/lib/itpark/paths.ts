@@ -17,7 +17,7 @@ export const itparkDashboardPath = (): string => `${ITPARK_BASE}/dashboard`;
 export const itparkPath = (id: string): string => `${ITPARK_BASE}/${id}`;
 
 /** Sub-paginile unui dosar. */
-export type ItparkSubPage = "anexa2" | "anexa3" | "anexa4" | "scrisori" | "ready" | "declaratie";
+export type ItparkSubPage = "anexa2" | "anexa3" | "anexa4" | "scrisori" | "ready" | "declaratie" | "edit";
 export const itparkSubPath = (id: string, sub: ItparkSubPage): string => `${ITPARK_BASE}/${id}/${sub}`;
 
 /** Segmente care NU sunt id-uri de dosar, deși stau pe aceeași poziție. */

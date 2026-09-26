@@ -11,8 +11,10 @@
  * Fallback graceful dacă lookup eșuează (timeout/offline/404) — câmpurile rămân editabile manual.
  */
 import { AppShell } from "@/components/app/AppShell";
-import { useState, useRef, useCallback } from "react";
-import { createEngagement } from "../../../../lib/api/itparkEngagements";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { createEngagement, getEngagement, updateEngagement, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
+import { useRouter } from "@/router/HashRouter";
+import { itparkIdFromPath, itparkListPath, itparkPath } from "@/lib/itpark/paths";
 
 import { DateField } from "@/components/ds";
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -417,9 +419,53 @@ function validate(step: StepNum, data: WizardData): Partial<Record<keyof WizardD
   return errors;
 }
 
-export default function ItparkWizard() {
+/** Dosarul existent → câmpurile formularului (sumele în lei, ca la creare). */
+function toWizardData(eng: ItparkEngagement): WizardData {
+  return {
+    residentName: eng.residentName,
+    idno: eng.idno,
+    legalAddress: eng.legalAddress ?? "",
+    subdivisionAddresses: eng.subdivisionAddresses ?? "",
+    mitpContractNo: eng.mitpContractNo ?? "",
+    mitpContractDate: eng.mitpContractDate ?? "",
+    periodStart: eng.periodStart,
+    periodEnd: eng.periodEnd,
+    reportingYear: String(eng.reportingYear),
+    vatPayer: eng.vatPayer,
+    subcontractorCostsCents: String((eng.subcontractorCostsCents ?? 0) / 100),
+    auditFirmName: eng.auditFirmName ?? "",
+  };
+}
+
+export interface ItparkWizardProps {
+  /**
+   * NAV-11: „edit" încarcă dosarul din rută și îl salvează cu PUT. Fișa avea un buton „Editează"
+   * spre o rută care nu exista; API-ul de actualizare exista, formularul nu.
+   */
+  mode?: "create" | "edit";
+}
+
+export default function ItparkWizard({ mode = "create" }: ItparkWizardProps) {
+  const { path } = useRouter();
+  const editId = mode === "edit" ? itparkIdFromPath(path) : "";
+  const [original, setOriginal] = useState<ItparkEngagement | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<StepNum>(1);
   const [data, setData] = useState<WizardData>(DEFAULT_DATA);
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+    if (!editId) {
+      setLoadError("Dosarul nu există sau linkul e greșit.");
+      return;
+    }
+    getEngagement(editId)
+      .then((eng) => {
+        setOriginal(eng);
+        setData(toWizardData(eng));
+      })
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Dosarul nu a putut fi încărcat."));
+  }, [mode, editId]);
   const [errors, setErrors] = useState<Partial<Record<keyof WizardData, string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -456,27 +502,44 @@ export default function ItparkWizard() {
     }
     setSubmitting(true);
     setSubmitError(null);
+    const fields = {
+      residentName: data.residentName.trim(),
+      idno: data.idno.trim(),
+      mitpContractNo: data.mitpContractNo || null,
+      mitpContractDate: data.mitpContractDate || null,
+      legalAddress: data.legalAddress || null,
+      subdivisionAddresses: data.subdivisionAddresses || null,
+      vatPayer: data.vatPayer,
+      periodStart: data.periodStart,
+      periodEnd: data.periodEnd,
+      reportingYear: parseInt(data.reportingYear, 10),
+      auditFirmName: data.auditFirmName || null,
+      subcontractorCostsCents: Math.round(parseFloat(data.subcontractorCostsCents || "0") * 100),
+    };
+    if (mode === "edit" && original) {
+      try {
+        // PUT validează corpul întreg cu valori implicite: câmpurile pe care formularul nu le arată
+        // (starea, venitul ajustat, vânzările calculate din anexe) se retrimit neschimbate — altfel o
+        // corectură de adresă ar fi readus dosarul la „Ciornă" și ar fi șters calculul.
+        await updateEngagement(original.id, {
+          ...fields,
+          status: original.status,
+          subcontractorCostsPct: original.subcontractorCostsPct,
+          totalSalesCents: original.totalSalesCents,
+          adjustedRevenueCents: original.adjustedRevenueCents,
+          employeeInfoProcedure: original.employeeInfoProcedure,
+        });
+        window.location.hash = `#${itparkPath(original.id)}`;
+      } catch (e) {
+        setSubmitError(e instanceof Error ? e.message : "Eroare la salvare");
+        setSubmitting(false);
+      }
+      return;
+    }
     try {
-      const eng = await createEngagement({
-        residentName: data.residentName.trim(),
-        idno: data.idno.trim(),
-        mitpContractNo: data.mitpContractNo || null,
-        mitpContractDate: data.mitpContractDate || null,
-        legalAddress: data.legalAddress || null,
-        subdivisionAddresses: data.subdivisionAddresses || null,
-        vatPayer: data.vatPayer,
-        periodStart: data.periodStart,
-        periodEnd: data.periodEnd,
-        reportingYear: parseInt(data.reportingYear, 10),
-        auditFirmName: data.auditFirmName || null,
-        status: "draft",
-        subcontractorCostsCents: Math.round(
-          parseFloat(data.subcontractorCostsCents || "0") * 100
-        ),
-        adjustedRevenueCents: 0,
-      });
+      const eng = await createEngagement({ ...fields, status: "draft", adjustedRevenueCents: 0 });
       // Redirect la detaliu
-      window.location.hash = `#/business/fin/itpark/${eng.id}`;
+      window.location.hash = `#${itparkPath(eng.id)}`;
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Eroare la salvare");
       setSubmitting(false);
@@ -485,8 +548,29 @@ export default function ItparkWizard() {
 
   const stepNums: StepNum[] = [1, 2, 3];
 
+  const isEdit = mode === "edit";
+  if (isEdit && (loadError || !original)) {
+    return (
+      <AppShell pageTitle="Editează dosarul">
+        {loadError ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive" role="alert">
+            <p className="text-sm">{loadError}</p>
+            <a href={`#${itparkListPath()}`} className="mt-2 inline-block text-sm underline">Înapoi la dosare</a>
+          </div>
+        ) : (
+          <div className="flex min-h-64 items-center justify-center" aria-busy="true" aria-label="Se încarcă dosarul">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" role="status" />
+          </div>
+        )}
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell pageTitle="Dosar IT Park nou" pageDescription="Rezidentul, perioada și contractul MITP — apoi liniile de venit.">
+    <AppShell
+      pageTitle={isEdit ? `Editează: ${original?.residentName ?? "dosar"}` : "Dosar IT Park nou"}
+      pageDescription="Rezidentul, perioada și contractul MITP — apoi liniile de venit."
+    >
     {/* NAV-08: pagina n-avea shell; titlul stă în antet, nu într-un <h1> propriu. */}
     <div className="max-w-xl space-y-6">
       {/* Header */}
@@ -498,7 +582,7 @@ export default function ItparkWizard() {
           <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
-          <span className="text-foreground font-medium">Dosar nou</span>
+          <span className="text-foreground font-medium">{isEdit ? "Editare" : "Dosar nou"}</span>
         </nav>
       </div>
 
@@ -596,7 +680,7 @@ export default function ItparkWizard() {
               </>
             ) : (
               <>
-                Creează dosarul
+                {isEdit ? "Salvează modificările" : "Creează dosarul"}
                 <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
