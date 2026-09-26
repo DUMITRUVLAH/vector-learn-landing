@@ -193,6 +193,14 @@ crmCompaniesRoutes.get("/:id/leads", async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
 
+  // O firmă inexistentă sau a altui workspace e 404, ca la `/:id/overview` — nu o listă goală
+  // care se poate confunda cu „firma există, dar n-are leaduri".
+  const [company] = await db
+    .select({ id: crmCompanies.id })
+    .from(crmCompanies)
+    .where(and(eq(crmCompanies.id, id), eq(crmCompanies.tenantId, user.tenantId)));
+  if (!company) return c.json({ error: "not_found" }, 404);
+
   const items = await db
     .select({
       id: leads.id,

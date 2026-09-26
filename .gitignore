@@ -65,3 +65,4 @@ backlog/research/**/TRIAL-ACCOUNT-CREDENTIALS.local.md
 
 # Portul de dev al worktree-ului (scripts/dev-worktree.mjs)
 .dev-port
+backlog/reports/crm-e2e-1000/latest.json

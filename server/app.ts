@@ -171,12 +171,18 @@ import { commsInboxRoutes } from "./routes/commsInbox";
 import { commsGmailRoutes } from "./routes/commsGmail";
 import { commsCronRoutes } from "./routes/commsCron";
 import { publicErrorMessage } from "./lib/publicError";
+import { classifyClientError } from "./lib/clientInputError";
 import { docsRoutes } from "./routes/docs";
 import { denyWhenImpersonating, logImpersonatedWrites } from "./middleware/impersonationGuard";
 
 export const app = new Hono();
 
 app.onError((err, c) => {
+  // Input greșit al clientului (JSON stricat, id care nu e uuid, octet nul) = 4xx, nu pană de
+  // server și nu alertă către proprietar. Vezi lib/clientInputError.ts.
+  const hasJsonBody = /json/i.test(c.req.header("content-type") ?? "") && !["GET", "HEAD"].includes(c.req.method);
+  const clientError = classifyClientError(err, hasJsonBody);
+  if (clientError) return c.json({ error: clientError.error }, clientError.status);
   console.error("[ERR]", err.message);
   // PLATFORM-002: excepțiile nu mai mor în log-ul serverului — ajung în Consola Platformă,
   // iar la primul lor tip nou pleacă și un email către proprietar. `void`: raportarea nu
