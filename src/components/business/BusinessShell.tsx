@@ -52,6 +52,7 @@ import {
   X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon} from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
+import { clearOrphanScrollLock } from "@/lib/scrollLockGuard";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
@@ -756,6 +757,8 @@ export function BusinessShell({
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => { setDrawerOpen(false); }, [path]);
+  // O fereastră închisă prost pe pagina de dinainte nu are voie să blocheze derularea pe asta.
+  useEffect(() => { clearOrphanScrollLock(); }, [path]);
 
   const handleLogout = async () => {
     await session.logout();
