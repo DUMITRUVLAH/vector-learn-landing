@@ -18,7 +18,7 @@
  * `drop` citește o valoare învechită (stale closure).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, KanbanSquare, LayoutList, Download, Bell, BarChart3 } from "lucide-react";
+import { Plus, Loader2, AlertCircle, Users, Settings, Search, KanbanSquare, LayoutList, Download, BarChart3, SlidersHorizontal } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
@@ -40,10 +40,13 @@ import {
 } from "@/lib/api/crm";
 import { cleanCrmSegments, crmSegmentCount, type CrmSegmentFilters } from "@/lib/crm/segmentFilters";
 import { readPipelineUrl, syncPipelineUrl } from "@/lib/crm/pipelineUrl";
-import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, crmSourceLabel, stageColorClasses } from "@/components/crm/constants";
-import { formatCents, formatCentsShort, leadValueToCents, leadCardLines } from "@/components/crm/format";
+import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, stageColorClasses } from "@/components/crm/constants";
+import { formatCents, formatCentsShort, leadValueToCents } from "@/components/crm/format";
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
 import { LeadDetailSheet } from "@/components/crm/LeadDetailSheet";
+import { LeadCard } from "@/components/crm/LeadCard";
+import { CardSettingsDialog } from "@/components/crm/CardSettingsDialog";
+import { loadCardPrefs, saveCardPrefs, type CardPrefs } from "@/lib/crm/cardPrefs";
 import { StageEditorDialog } from "@/components/crm/StageEditorDialog";
 import { PipelineManagerDialog } from "@/components/crm/PipelineManagerDialog";
 import { LeadListView } from "@/components/crm/LeadListView";
@@ -174,6 +177,15 @@ export function CrmPipelinePage() {
   }, [loadPipeline, boardFiltersKey]);
 
   const { members: teamMembers } = useTeamMembers();
+  // CRM-U06: cartonașul personalizat de fiecare om (titlu + câmpuri), ținut în acest browser.
+  const [cardPrefs, setCardPrefs] = useState<CardPrefs>(() => loadCardPrefs());
+  const [cardSettingsOpen, setCardSettingsOpen] = useState(false);
+  const updateCardPrefs = (next: CardPrefs) => {
+    setCardPrefs(next);
+    saveCardPrefs(next);
+  };
+  const ownerNameOf = (id: string | null | undefined) =>
+    id ? teamMembers.find((m) => m.id === id)?.fullName ?? null : null;
   // Butoanele administrative apar doar pentru cine le poate folosi. Ascunderea e curtoazie:
   // apărarea e pe server (`requireCrmPermission`), nu aici.
   const { can } = useCrmPermissions();
@@ -598,6 +610,10 @@ export function CrmPipelinePage() {
                 </Button>
               )}
               <SavedViewsMenu currentFilters={currentFilters} onApply={applySavedView} onToast={setToast} />
+              <Button variant="outline" onClick={() => setCardSettingsOpen(true)}>
+                <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                Personalizează
+              </Button>
             </div>
           </div>
 
@@ -649,15 +665,17 @@ export function CrmPipelinePage() {
                     // Fără cutie gri: cartonașele albe se citesc pe fundalul paginii, iar coloana
                     // se desenează singură prin aliniere. Cutia apare DOAR când tragi un card —
                     // atunci chiar ai nevoie să vezi unde îl lași.
-                    "flex flex-col gap-2 rounded-2xl px-1.5 pb-3 transition-colors",
-                    isHover && "bg-primary/[0.07] ring-1 ring-inset ring-primary/30"
+                    // CRM-U06: coloana e o listă (fundal gri deschis), cartonașele albe stau în ea —
+                    // ca listele din Google Tasks. La tragere se colorează ținta.
+                    "flex flex-col gap-2 rounded-2xl bg-muted/60 p-2 transition-colors",
+                    isHover && "bg-primary/10 ring-1 ring-inset ring-primary/30"
                   )}
                   aria-label={`Coloana ${stage.label}`}
                 >
                   <StageHeader stage={stage} count={columnCount} valueSum={columnValueSum} />
                   <div className="flex min-h-[96px] flex-col gap-2">
                     {columnLeads.length === 0 ? (
-                      <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border/80 text-xs text-muted-foreground">
+                      <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted-foreground">
                         {hasActiveFilters ? "Niciun rezultat" : "Trage aici"}
                       </div>
                     ) : (
@@ -674,6 +692,8 @@ export function CrmPipelinePage() {
                           onChangeStage={(next) => requestStageChange(lead, next)}
                           onOpen={() => setSelectedLeadId(lead.id)}
                           stages={stages}
+                          prefs={cardPrefs}
+                          ownerName={ownerNameOf(lead.assignedTo)}
                         />
                       ))
                     )}
@@ -708,6 +728,8 @@ export function CrmPipelinePage() {
                           onChangeStage={(next) => requestStageChange(lead, next)}
                           onOpen={() => setSelectedLeadId(lead.id)}
                           stages={stages}
+                          prefs={cardPrefs}
+                          ownerName={ownerNameOf(lead.assignedTo)}
                         />
                       ))}
                     </div>
@@ -740,6 +762,13 @@ export function CrmPipelinePage() {
           setLostReasonFor(null);
           if (target) void applyStageChange(target.leadId, target.toStage, reason);
         }}
+      />
+
+      <CardSettingsDialog
+        open={cardSettingsOpen}
+        prefs={cardPrefs}
+        onChange={updateCardPrefs}
+        onClose={() => setCardSettingsOpen(false)}
       />
 
       <LeadDetailSheet
@@ -815,152 +844,19 @@ export function CrmPipelinePage() {
  * rămâne pe cartonașe. Antetul e lipicios, ca să știi pe ce coloană ești și după ce derulezi.
  */
 function StageHeader({ stage, count, valueSum }: { stage: CrmStage; count: number; valueSum: number }) {
-  const { bg, fg } = stageColorClasses(stage.color);
-  // Lipicios doar pe desktop: pe telefon secțiunile sunt una sub alta, iar un antet agățat de
-  // marginea de sus ar pluti peste cardurile altei etape.
+  const { fg } = stageColorClasses(stage.color);
+  // CRM-U06: antet ca la o listă Google Tasks — punct de culoare, nume, număr, suma dedesubt; fără
+  // bara colorată de sub fiecare coloană. Lipicios doar pe desktop.
   return (
-    <div className="pb-2.5 pt-1 lg:sticky lg:top-0 lg:z-10 lg:bg-background/85 lg:backdrop-blur-sm">
+    <div className="px-1.5 pb-2 pt-1 lg:sticky lg:top-0 lg:z-10">
       <div className="flex items-center gap-2">
         <span className={cn("h-2 w-2 shrink-0 rounded-full bg-current", fg)} aria-hidden="true" />
-        <p className="truncate text-[13px] font-semibold tracking-tight text-foreground">{stage.label}</p>
-        <span className="ml-auto shrink-0 rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
-          {count}
-        </span>
+        <p className="truncate text-sm font-medium text-foreground">{stage.label}</p>
+        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">{count}</span>
       </div>
-      <p className="mt-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+      <p className="mt-0.5 pl-4 text-xs tabular-nums text-muted-foreground">
         {valueSum > 0 ? formatCentsShort(valueSum) : "—"}
       </p>
-      <div className={cn("mt-2 h-[3px] w-full rounded-full", bg)} aria-hidden="true" />
-    </div>
-  );
-}
-
-// ─── Cardul de lead (desktop draggable + select de stadiu pt. mobil/tastatură) ──
-
-function LeadCard({
-  lead,
-  isDragging,
-  onDragStart,
-  onDragEnd,
-  onChangeStage,
-  onOpen,
-  stages,
-}: {
-  lead: CrmLead;
-  isDragging: boolean;
-  onDragStart: () => void;
-  onDragEnd: () => void;
-  onChangeStage: (stage: CrmLeadStage) => void;
-  onOpen: () => void;
-  stages: readonly CrmStage[];
-}) {
-  const { title, subtitle } = leadCardLines(lead);
-  const task = lead.nextTask ?? null;
-  const dueAt = task?.dueAt ? new Date(task.dueAt) : null;
-  // „Restant" = scadența a trecut. Nu e o nuanță de stil: e singurul semnal de pe tablă care
-  // spune unde se pierde o vânzare chiar acum.
-  const overdue = dueAt !== null && dueAt.getTime() < Date.now();
-  return (
-    <div
-      draggable
-      data-overdue={overdue ? "true" : undefined}
-      onDragStart={(e) => {
-        onDragStart();
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", lead.id);
-      }}
-      onDragEnd={onDragEnd}
-      className={cn(
-        "group relative cursor-grab rounded-xl border border-border/70 bg-card p-3 active:cursor-grabbing",
-        "transition-[border-color,box-shadow] duration-150 hover:border-foreground/20 hover:shadow-[0_6px_20px_-12px_hsl(222_47%_11%/0.45)]",
-        isDragging && "opacity-40"
-      )}
-    >
-      {/* Restanța: o dungă subțire ÎN interiorul cardului, nu o bordură de 4px care împinge tot
-          textul la dreapta și taie colțurile rotunjite. Se vede la fel de bine din capătul
-          celălalt al ecranului, dar nu deformează cartonașul. */}
-      {overdue && (
-        <span className="absolute inset-y-2.5 left-0 w-[3px] rounded-full bg-destructive" aria-hidden="true" />
-      )}
-      {/* Buton real (nu doar onClick pe div-ul draggable) — tastatură + cititor de ecran, și nu
-          intră în conflict cu select-ul de stadiu de mai jos, care rămâne un element FRATE, nu
-          copil al butonului (un `<select>` în interiorul unui `<button>` ar fi HTML invalid). */}
-      <button
-        type="button"
-        onClick={onOpen}
-        className="w-full rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`Deschide lead ${title}`}
-      >
-        {/* Un singur rând tare: CE vinzi, plus cât face. Suma stă pe aceeași linie cu titlul —
-            coloana de bani se citește vertical, fără să sari peste trei rânduri de card. */}
-        <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-foreground line-clamp-2">
-            {title}
-          </p>
-          {lead.valueCents > 0 && (
-            <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
-              {formatCentsShort(lead.valueCents)}
-            </span>
-          )}
-        </div>
-        {/* Firma: gri, nu albastru. Albastrul e culoarea acțiunilor din aplicație; pus pe fiecare
-            card, tabla arăta a listă de linkuri și nu mai spunea nimic despre ce e apăsabil. */}
-        {subtitle && <p className="mt-1 truncate text-[11.5px] text-muted-foreground">{subtitle}</p>}
-        {task && (
-          <p
-            className={cn(
-              "mt-2.5 flex items-center gap-1.5 text-[11px]",
-              overdue ? "font-semibold text-destructive" : "text-muted-foreground"
-            )}
-          >
-            <Bell className="h-3 w-3 shrink-0" aria-hidden="true" />
-            <span className="truncate">{task.title}</span>
-            {dueAt && (
-              <span className="ml-auto shrink-0 tabular-nums">
-                {dueAt.toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit" })}
-              </span>
-            )}
-          </p>
-        )}
-        <div className="mt-2.5 flex items-center gap-1.5 border-t border-border/60 pt-2 text-[10.5px] text-muted-foreground">
-          <span className="truncate">{crmSourceLabel(lead.source)}</span>
-          <span aria-hidden="true">·</span>
-          <span className="tabular-nums">
-            {new Date(lead.createdAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "2-digit" })}
-          </span>
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-muted-foreground/70">
-            {lead.phone && <Phone className="h-3 w-3" aria-label="Are telefon" />}
-            {lead.email && <Mail className="h-3 w-3" aria-label="Are email" />}
-          </span>
-        </div>
-      </button>
-      {/* Mutarea din select rămâne calea de la tastatură și singura de pe telefon (unde nu există
-          drag). Pe desktop nu mai ține loc în pagină: stă ABSOLUT peste subsolul cardului și apare
-          la hover sau la focus. Înainte era doar transparent — adică fiecare cartonaș purta o
-          casetă de formular invizibilă de 40px, iar cardurile arătau pe jumătate goale. */}
-      <div
-        className={cn(
-          "mt-2 lg:absolute lg:inset-x-2 lg:bottom-2 lg:mt-0 lg:rounded-lg lg:bg-card lg:opacity-0 lg:transition-opacity",
-          "lg:pointer-events-none lg:group-hover:pointer-events-auto lg:group-hover:opacity-100",
-          "lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100"
-        )}
-      >
-        <Label htmlFor={`crm-stage-${lead.id}`} className="sr-only">
-          Mutare stadiu pentru {title}
-        </Label>
-        <Select
-          id={`crm-stage-${lead.id}`}
-          className="lg:[&>select]:h-8 lg:[&>select]:text-xs"
-          value={lead.stage}
-          onChange={(e) => onChangeStage(e.target.value)}
-        >
-          {stages.map((s) => (
-            <option key={s.key} value={s.key}>
-              {s.label}
-            </option>
-          ))}
-        </Select>
-      </div>
     </div>
   );
 }
