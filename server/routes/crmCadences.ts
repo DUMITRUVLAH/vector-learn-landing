@@ -41,7 +41,7 @@ import {
 import { leads } from "../db/schema/leads";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
-import { enrollLeadInCadence, processDueEnrollments } from "../lib/crm/cadences";
+import { enrollLeadInCadence, findActiveEnrollment, processDueEnrollments } from "../lib/crm/cadences";
 import { previewDueReengagements, runReengagement } from "../lib/crm/reengagement";
 import { logCrmAudit } from "../lib/crm/audit";
 
@@ -88,6 +88,28 @@ const ruleSchema = z.object({
 
 const updateRuleSchema = ruleSchema.partial();
 
+/**
+ * „Înscrie în cadență” fără cadență e o regulă care nu poate rula niciodată: reactivarea o sare
+ * în tăcere, iar managerul crede că clienții pierduți sunt urmăriți. Refuzul are forma unei
+ * erori zod (ca restul validărilor rutei), ca ecranul să afișeze mesajul, nu un cod.
+ */
+const CADENCE_REQUIRED = {
+  success: false,
+  error: {
+    name: "ZodError",
+    issues: [{ code: "custom", path: ["cadenceId"], message: "Alege cadența în care se înscriu clienții." }],
+  },
+} as const;
+
+/** Cadența aleasă trebuie să fie a ACESTUI workspace — la creare ȘI la editare. */
+async function ownsCadence(tenantId: string, cadenceId: string): Promise<boolean> {
+  const [cadence] = await db
+    .select({ id: crmCadences.id })
+    .from(crmCadences)
+    .where(and(eq(crmCadences.id, cadenceId), eq(crmCadences.tenantId, tenantId)));
+  return !!cadence;
+}
+
 // ─── Reactivare (ÎNAINTE de /:id — „reengagement" nu e un identificator) ─────
 
 crmCadencesRoutes.get("/reengagement/rules", async (c) => {
@@ -108,6 +130,7 @@ crmCadencesRoutes.get("/reengagement/rules", async (c) => {
 crmCadencesRoutes.post("/reengagement/rules", manageCadences, zValidator("json", ruleSchema), async (c) => {
   const user = c.get("user");
   const body = c.req.valid("json");
+  if (body.action === "enroll_cadence" && !body.cadenceId) return c.json(CADENCE_REQUIRED, 400);
 
   const [{ maxOrder }] = await db
     .select({ maxOrder: sql<number>`coalesce(max(${crmReengagementRules.orderIndex}), -1)::int` })
@@ -127,11 +150,7 @@ crmCadencesRoutes.post("/reengagement/rules", manageCadences, zValidator("json",
   if (body.taskTitle !== undefined) values.taskTitle = body.taskTitle;
   // O cadență din alt workspace n-are ce căuta pe regula asta.
   if (body.cadenceId) {
-    const [cadence] = await db
-      .select({ id: crmCadences.id })
-      .from(crmCadences)
-      .where(and(eq(crmCadences.id, body.cadenceId), eq(crmCadences.tenantId, user.tenantId)));
-    if (!cadence) return c.json({ error: "not_found" }, 404);
+    if (!(await ownsCadence(user.tenantId, body.cadenceId))) return c.json({ error: "not_found" }, 404);
     values.cadenceId = body.cadenceId;
   }
 
@@ -153,6 +172,20 @@ crmCadencesRoutes.patch("/reengagement/rules/:id", manageCadences, zValidator("j
   const user = c.get("user");
   const id = c.req.param("id");
   const body = c.req.valid("json");
+
+  const [current] = await db
+    .select({ action: crmReengagementRules.action, cadenceId: crmReengagementRules.cadenceId })
+    .from(crmReengagementRules)
+    .where(and(eq(crmReengagementRules.id, id), eq(crmReengagementRules.tenantId, user.tenantId)));
+  if (!current) return c.json({ error: "not_found" }, 404);
+  // Aceleași reguli ca la creare. Fără ele, editarea era ușa din spate: POST refuza cadența
+  // altui client cu 404, iar PATCH o lega cu 200 — și reactivarea înscria clienții noștri în ea.
+  if (body.cadenceId && !(await ownsCadence(user.tenantId, body.cadenceId))) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  const nextAction = body.action ?? current.action;
+  const nextCadenceId = body.cadenceId !== undefined ? body.cadenceId : current.cadenceId;
+  if (nextAction === "enroll_cadence" && !nextCadenceId) return c.json(CADENCE_REQUIRED, 400);
 
   const updates: Partial<NewCrmReengagementRule> = { updatedAt: new Date() };
   if (body.name !== undefined) updates.name = body.name;
@@ -274,6 +307,10 @@ crmCadencesRoutes.post(
   async (c) => {
     const user = c.get("user");
     const { leadId, cadenceId } = c.req.valid("json");
+    // Deja în cadența asta, activ → 409 cu înscrierea existentă, nu una nouă. Nu 200 cu cea
+    // veche: fișa adaugă răspunsul în listă, deci ar arăta aceeași înscriere de două ori.
+    const active = await findActiveEnrollment(user.tenantId, leadId, cadenceId);
+    if (active) return c.json({ error: "already_enrolled", enrollment: active }, 409);
     const row = await enrollLeadInCadence(user.tenantId, leadId, cadenceId);
     // Lead sau cadență din alt workspace → 404, nu 403.
     if (!row) return c.json({ error: "not_found" }, 404);

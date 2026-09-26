@@ -14,6 +14,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmCaptureSources, type NewCrmCaptureSource } from "../db/schema/crmCaptureSources";
+import { crmPipelines } from "../db/schema/crmPipelines";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireCrmPermission } from "../middleware/requireCrmPermission";
 
@@ -30,6 +31,19 @@ const createSchema = z.object({
 });
 
 const updateSchema = createSchema.partial().extend({ active: z.boolean().optional() });
+
+/**
+ * Pâlnia aleasă trebuie să fie a ACESTUI workspace. Endpointul public de captare scrie
+ * `pipeline_id` direct pe lead, fără altă verificare: un id străin ar pune leadurile firmei
+ * într-o pâlnie pe care n-o vede nimeni din echipă (și ar dezvălui că id-ul altui client există).
+ */
+async function ownsPipeline(tenantId: string, pipelineId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: crmPipelines.id })
+    .from(crmPipelines)
+    .where(and(eq(crmPipelines.id, pipelineId), eq(crmPipelines.tenantId, tenantId)));
+  return !!row;
+}
 
 crmCaptureSourcesRoutes.get("/", async (c) => {
   const user = c.get("user");
@@ -49,6 +63,9 @@ crmCaptureSourcesRoutes.get("/", async (c) => {
 crmCaptureSourcesRoutes.post("/", manage, zValidator("json", createSchema), async (c) => {
   const user = c.get("user");
   const body = c.req.valid("json");
+  if (body.pipelineId && !(await ownsPipeline(user.tenantId, body.pipelineId))) {
+    return c.json({ error: "pipeline_not_found" }, 404);
+  }
 
   const values: NewCrmCaptureSource = {
     tenantId: user.tenantId,
@@ -70,6 +87,9 @@ crmCaptureSourcesRoutes.patch("/:id", manage, zValidator("json", updateSchema), 
   const user = c.get("user");
   const id = c.req.param("id");
   const body = c.req.valid("json");
+  if (body.pipelineId && !(await ownsPipeline(user.tenantId, body.pipelineId))) {
+    return c.json({ error: "pipeline_not_found" }, 404);
+  }
 
   const updates: Partial<NewCrmCaptureSource> = { updatedAt: new Date() };
   if (body.name !== undefined) updates.name = body.name;

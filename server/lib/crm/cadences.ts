@@ -81,6 +81,12 @@ export async function enrollLeadInCadence(
     .where(and(eq(crmCadences.id, cadenceId), eq(crmCadences.tenantId, tenantId)));
   if (!cadence) return null;
 
+  // Idempotentă pe (lead, cadență) activă, pentru TOATE căile (manual, etapă, reactivare): două
+  // înscrieri active în aceeași cadență aprind fiecare pas de două ori — clientul primește două
+  // apeluri, agentul două taskuri identice.
+  const existing = await findActiveEnrollment(tenantId, leadId, cadenceId);
+  if (existing) return existing;
+
   const steps = cadence.steps ?? [];
   const now = new Date();
   const hasSteps = steps.length > 0;
@@ -97,6 +103,27 @@ export async function enrollLeadInCadence(
     })
     .returning();
   return row;
+}
+
+/** Înscrierea ACTIVĂ a leadului în cadență, dacă există. */
+export async function findActiveEnrollment(
+  tenantId: string,
+  leadId: string,
+  cadenceId: string
+): Promise<CrmCadenceEnrollment | null> {
+  const [row] = await db
+    .select()
+    .from(crmCadenceEnrollments)
+    .where(
+      and(
+        eq(crmCadenceEnrollments.tenantId, tenantId),
+        eq(crmCadenceEnrollments.leadId, leadId),
+        eq(crmCadenceEnrollments.cadenceId, cadenceId),
+        eq(crmCadenceEnrollments.status, "active")
+      )
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 /**
@@ -122,6 +149,9 @@ export async function advanceEnrollment(
     .from(crmCadences)
     .where(and(eq(crmCadences.id, enrollment.cadenceId), eq(crmCadences.tenantId, tenantId)));
   if (!cadence) return enrollment;
+  // Cadența oprită nu aprinde nimic. Înscrierea rămâne activă (nu o anulăm): comutatorul
+  // „Pornit/oprit” e o pauză, iar la repornire urmărirea continuă de unde a rămas.
+  if (!cadence.enabled) return enrollment;
 
   const steps = cadence.steps ?? [];
   const step = steps[enrollment.currentStep];
@@ -176,18 +206,16 @@ export interface ProcessResult {
  * acum" din interfață, care n-are voie să atingă datele altui client).
  */
 export async function processDueEnrollments(now: Date = new Date(), tenantId?: string): Promise<ProcessResult> {
-  const where = tenantId
-    ? and(
-        eq(crmCadenceEnrollments.tenantId, tenantId),
-        eq(crmCadenceEnrollments.status, "active"),
-        isNotNull(crmCadenceEnrollments.nextFireAt),
-        lte(crmCadenceEnrollments.nextFireAt, now)
-      )
-    : and(
-        eq(crmCadenceEnrollments.status, "active"),
-        isNotNull(crmCadenceEnrollments.nextFireAt),
-        lte(crmCadenceEnrollments.nextFireAt, now)
-      );
+  const where = and(
+    tenantId ? eq(crmCadenceEnrollments.tenantId, tenantId) : undefined,
+    eq(crmCadenceEnrollments.status, "active"),
+    isNotNull(crmCadenceEnrollments.nextFireAt),
+    lte(crmCadenceEnrollments.nextFireAt, now),
+    // Doar cadențele pornite. Filtrul e în interogare, nu doar în `advanceEnrollment`: altfel
+    // înscrierile unei cadențe oprite ar ocupa plafonul de 500 la fiecare rulare și le-ar
+    // împinge pe cele pornite spre rulări viitoare.
+    eq(crmCadences.enabled, true)
+  );
 
   const dueRows = await db
     .select({
@@ -197,6 +225,10 @@ export async function processDueEnrollments(now: Date = new Date(), tenantId?: s
       nextFireAt: crmCadenceEnrollments.nextFireAt,
     })
     .from(crmCadenceEnrollments)
+    .innerJoin(
+      crmCadences,
+      and(eq(crmCadences.id, crmCadenceEnrollments.cadenceId), eq(crmCadences.tenantId, crmCadenceEnrollments.tenantId))
+    )
     .where(where)
     .orderBy(asc(crmCadenceEnrollments.nextFireAt))
     // Plafon: un cron nu are voie să ruleze nelimitat într-o funcție serverless cu timp limitat.

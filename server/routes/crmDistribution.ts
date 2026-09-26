@@ -58,6 +58,9 @@ export const crmDistributionRoutes = new Hono<{ Variables: AuthVariables }>();
 crmDistributionRoutes.use("/*", requireAuth);
 // Repartizarea hotărăște cine ia contactele — și, implicit, cine ia comisionul.
 crmDistributionRoutes.post("/*", requireCrmPermission("assignment.manage"));
+// Și PUT: setarea de întoarcere în rezervă ia contactele de la agenți. Un agent care o poate
+// opri își păstrează lotul neatins la nesfârșit — deci o schimbă doar cine repartizează.
+crmDistributionRoutes.put("/*", requireCrmPermission("assignment.manage"));
 
 /**
  * Câte lead-uri poate muta o singură cerere. Nu e o limită de business, ci una de cerere HTTP:
@@ -140,6 +143,25 @@ interface DistributionPlan {
 }
 
 /**
+ * „Etapă deschisă”: nici câștigată, nici pierdută. O singură definiție pentru repartizare ȘI
+ * pentru rezervă — altfel rezerva numără clienții pierduți pe care repartizarea nu-i dă, iar
+ * managerul vede 11 în stoc, cere 11 și primește 10.
+ */
+async function openStageCondition(tenantId: string) {
+  const closed = await db
+    .select({ key: crmPipelineStages.key })
+    .from(crmPipelineStages)
+    .where(
+      and(
+        eq(crmPipelineStages.tenantId, tenantId),
+        sql`(${crmPipelineStages.isWon} = true OR ${crmPipelineStages.isLost} = true)`
+      )
+    );
+  const closedKeys = [...new Set(closed.map((s) => s.key))];
+  return closedKeys.length > 0 ? notInArray(leads.stage, closedKeys) : undefined;
+}
+
+/**
  * Ce se va întâmpla (sau ce s-a întâmplat): aceeași funcție pentru previzualizare și execuție.
  * Nu scrie nimic — doar alege.
  */
@@ -172,17 +194,8 @@ async function buildPlan(tenantId: string, input: DistributionInput): Promise<Di
     conditions.push(eq(leads.stage, input.stage));
   } else {
     // Fără etapă cerută: orice etapă DESCHISĂ. Un lot de sunat nu conține clienți existenți.
-    const closed = await db
-      .select({ key: crmPipelineStages.key })
-      .from(crmPipelineStages)
-      .where(
-        and(
-          eq(crmPipelineStages.tenantId, tenantId),
-          sql`(${crmPipelineStages.isWon} = true OR ${crmPipelineStages.isLost} = true)`
-        )
-      );
-    const closedKeys = [...new Set(closed.map((s) => s.key))];
-    if (closedKeys.length > 0) conditions.push(notInArray(leads.stage, closedKeys));
+    const open = await openStageCondition(tenantId);
+    if (open) conditions.push(open);
   }
 
   conditions.push(...segmentConditions(tenantId, parseSegmentFilters(input.filters)));
@@ -550,6 +563,9 @@ crmDistributionRoutes.get("/pool", async (c) => {
   conditions.push(...segmentConditions(user.tenantId, parseSegmentFilters(query)));
 
   try {
+    // Aceeași regulă ca repartizarea fără etapă: rezerva = ce se poate da, nu clienții închiși.
+    const open = await openStageCondition(user.tenantId);
+    if (open) conditions.push(open);
     const [{ cnt }] = await db
       .select({ cnt: sql<number>`count(*)::int` })
       .from(leads)

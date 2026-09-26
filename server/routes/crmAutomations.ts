@@ -25,6 +25,8 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, max } from "drizzle-orm"
 import { db } from "../db/client";
 import { leads, leadInteractions, leadTags } from "../db/schema/leads";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
+import { crmPipelines } from "../db/schema/crmPipelines";
+import { ensureTenantPipeline } from "../lib/crm/pipelines";
 import { crmLeadTasks } from "../db/schema/crmTasks";
 import { crmAutomations, crmAutomationRuns } from "../db/schema/crmAutomations";
 import { users } from "../db/schema/users";
@@ -259,6 +261,22 @@ export async function runAutomations(opts: {
   return outcomes;
 }
 
+/**
+ * Pâlnia efectivă a leadului: `pipeline_id` dacă e o pâlnie a acestui workspace, altfel
+ * implicita (regula NULL = implicita din `lib/crm/pipelines`). `null` doar degradat — atunci
+ * apelantul verifică etapa pe tot workspace-ul, ca înainte de pâlniile multiple.
+ */
+async function leadPipelineId(tenantId: string, pipelineId: string | null): Promise<string | null> {
+  if (pipelineId) {
+    const [own] = await db
+      .select({ id: crmPipelines.id })
+      .from(crmPipelines)
+      .where(and(eq(crmPipelines.id, pipelineId), eq(crmPipelines.tenantId, tenantId)));
+    if (own) return own.id;
+  }
+  return (await ensureTenantPipeline(tenantId))?.id ?? null;
+}
+
 async function applyAction(ctx: {
   tenantId: string;
   userId: string | null;
@@ -340,13 +358,34 @@ async function applyAction(ctx: {
       if (lead.stage === action.stageKey) return { detail: "deja în etapă" };
       if (ctx.depth >= MAX_AUTOMATION_DEPTH) return { detail: "oprit: lanț prea lung" };
 
-      // Etapa țintă trebuie să existe în pâlnia ACESTUI workspace. O cheie
-      // necunoscută ar face lead-ul invizibil: există în bază, în nicio coloană.
+      // Etapa țintă trebuie să existe în pâlnia LEADULUI, nu doar undeva în
+      // workspace. Cheile se repetă între pâlnii („new” e peste tot), dar
+      // „negotiation” există doar în SPANCO: un lead din pâlnia implicită mutat
+      // acolo ar rămâne în bază fără nicio coloană pe tabla lui — invizibil.
+      const pipelineId = await leadPipelineId(tenantId, lead.pipelineId);
       const [target] = await db
         .select({ key: crmPipelineStages.key, isLost: crmPipelineStages.isLost })
         .from(crmPipelineStages)
-        .where(and(eq(crmPipelineStages.tenantId, tenantId), eq(crmPipelineStages.key, action.stageKey)));
-      if (!target) return { detail: `etapa „${action.stageKey}" nu există` };
+        .where(
+          and(
+            eq(crmPipelineStages.tenantId, tenantId),
+            eq(crmPipelineStages.key, action.stageKey),
+            // Degradat (pâlniile nu pot fi citite): păstrăm verificarea pe workspace.
+            pipelineId ? eq(crmPipelineStages.pipelineId, pipelineId) : undefined
+          )
+        );
+      if (!target) {
+        const [elsewhere] = await db
+          .select({ key: crmPipelineStages.key })
+          .from(crmPipelineStages)
+          .where(and(eq(crmPipelineStages.tenantId, tenantId), eq(crmPipelineStages.key, action.stageKey)))
+          .limit(1);
+        return {
+          detail: elsewhere
+            ? `sărit: etapa „${action.stageKey}” nu e în pâlnia leadului`
+            : `etapa „${action.stageKey}” nu există`,
+        };
+      }
 
       const from = lead.stage;
       const [moved] = await db
