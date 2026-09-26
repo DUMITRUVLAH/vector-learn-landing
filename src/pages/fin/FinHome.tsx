@@ -1,285 +1,284 @@
 /**
- * CORE-004: FinDesk home page — /app/fin
- * Overview with module cards, each linking to its real route.
- * Empty-state friendly: cards show "în curând" for unbuilt modules.
- * Design system: Vector 365 semantic tokens, zero hardcoded hex.
- * CORE: backlog/fin/FIN-CORE.md §1.3
+ * NAV-05: FinDesk — ecranul de start (/business/fin/).
+ *
+ * Înainte: 15 carduri, dintre care 13 gri, marcate „În curând" — deși toate modulele existau și
+ * mergeau. Primul lucru pe care îl vedea contabilul era că produsul pare neterminat, iar nimic de pe
+ * ecran nu-i spunea ce are de făcut.
+ *
+ * Acum ecranul răspunde, în ordine, la trei întrebări:
+ *   1. Ce e urgent? — obligații fiscale restante și termenele din următoarele 14 zile, facturi restante.
+ *   2. Cum stăm? — patru cifre: restanțe, de încasat, venitul lunii, următorul termen.
+ *   3. Unde merg? — toate modulele, pe aceleași grupe ca meniul (o singură sursă: `finNav.ts`).
+ *
+ * Fiecare bloc se încarcă separat: dacă un API pică, celelalte rămân pe ecran.
  */
-import { useEffect, useState } from "react";
-import {
-  Building2,
-  Handshake,
-  FileText,
-  Zap,
-  ShoppingCart,
-  ScanLine,
-  Landmark,
-  Calculator,
-  Wallet,
-  BarChart3,
-  CalendarDays,
-  PackageSearch,
-  Shield,
-  ArrowRight,
-  Loader2,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowRight, Building2, CalendarClock, CheckCircle2, Plus, Receipt, TrendingUp, Wallet } from "lucide-react";
 import { FinLayout } from "./FinLayout";
 import { Link } from "@/router/HashRouter";
-import { getFinMe, type FinRole } from "@/lib/api/fin";
+import { getFinMe, type FinOrgProfile } from "@/lib/api/fin";
+import { getFinAging, getFinMetrics, type FinMetricsResponse } from "@/lib/api/finInsight";
+import { listCalendar } from "@/lib/api/finCalendar";
+import { buildTodos, DUE_SOON_DAYS, formatDate, nextDeadline, obligationLabel, todayIso, type FinTodo } from "@/lib/fin/finTodos";
+import { formatFinMoney } from "@/lib/api/finInvoices";
+import { visibleFinNavGroups } from "@/lib/fin/finNav";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
+import { Card, KpiTile, PastelIcon } from "@/components/ds";
 import { cn } from "@/lib/utils";
 
-// ─── Module card definitions ──────────────────────────────────────────────────
+/** Rezultatul unui bloc: încărcare, date, sau eșec — fiecare bloc își are starea lui. */
+type Load<T> = { status: "loading" } | { status: "ok"; data: T } | { status: "error" };
 
-interface ModuleCard {
-  id: string;
-  label: string;
-  description: string;
-  href: string;
-  icon: typeof Building2;
-  available: boolean;
+function useLoad<T>(fetcher: () => Promise<T>): Load<T> {
+  const [state, setState] = useState<Load<T>>({ status: "loading" });
+  useEffect(() => {
+    let alive = true;
+    fetcher()
+      .then((data) => alive && setState({ status: "ok", data }))
+      .catch(() => alive && setState({ status: "error" }));
+    return () => {
+      alive = false;
+    };
+    // fetcher-ul e o funcție stabilă, definită la nivel de modul
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return state;
 }
 
-// FIX-502 (2026-06-17): All hrefs updated from /app/fin/* to /business/fin/* — same mapping as FinNav.
-const MODULES: ModuleCard[] = [
-  {
-    id: "company",
-    label: "Compania mea",
-    description: "Profil fiscal, serie de facturare, configurare workspace",
-    href: "/business/fin/onboarding",
-    icon: Building2,
-    available: true,
-  },
-  {
-    id: "parties",
-    label: "Parteneri",
-    description: "Clienți, furnizori, IDNO/IBAN, sold și aging",
-    href: "/business/fin/parties",
-    icon: Handshake,
-    available: false,
-  },
-  {
-    id: "agreements",
-    label: "Acorduri",
-    description: "Contracte recurente și servicii",
-    href: "/business/fin/agreements",
-    icon: FileText,
-    available: false,
-  },
-  {
-    id: "invoices",
-    label: "Facturi",
-    description: "Emitere, numerotare, TVA, remindere",
-    href: "/business/fin/invoices",
-    icon: FileText,
-    available: false,
-  },
-  {
-    id: "einvoice",
-    label: "e-Factura SFS",
-    description: "Trimitere electronică SFS Moldova",
-    href: "/business/fin/einvoices",
-    icon: Zap,
-    available: false,
-  },
-  {
-    id: "cash",
-    label: "Încasări",
-    description: "Extras bancar, reconciliere, alocare plăți",
-    href: "/business/fin/cash",
-    icon: Landmark,
-    available: false,
-  },
-  {
-    id: "expenses",
-    label: "Cheltuieli",
-    description: "Cheltuieli pe categorii, TVA deductibil",
-    href: "/business/fin/expenses",
-    icon: ShoppingCart,
-    available: false,
-  },
-  {
-    id: "capture",
-    label: "Invoice Reporting",
-    description: "OCR automat — extrage vendor/sumă/TVA din documente",
-    href: "/business/fin/captures",
-    icon: ScanLine,
-    available: false,
-  },
-  {
-    id: "tax",
-    label: "TVA & Declarații",
-    description: "Motor TVA, declarații MD/RO, export PDF",
-    href: "/business/fin/tax",
-    icon: Calculator,
-    available: false,
-  },
-  {
-    id: "payroll",
-    label: "Salarii",
-    description: "Calcul brut↔net, cote ANAF/SFS, state de plată",
-    href: "/business/fin/payroll",
-    icon: Wallet,
-    available: true,
-  },
-  {
-    id: "assets",
-    label: "Mijloace fixe",
-    description: "Registru, amortizare lunară, casare",
-    href: "/business/fin/assets",
-    icon: PackageSearch,
-    available: false,
-  },
-  {
-    id: "insight",
-    label: "Insight CFO",
-    description: "Dashboard: venituri, cheltuieli, profit, cashflow 60z",
-    href: "/business/fin/ledger",
-    icon: BarChart3,
-    available: false,
-  },
-  {
-    id: "calendar",
-    label: "Calendar fiscal",
-    description: "Obligații fiscale, termene, period close",
-    href: "/business/fin/calendar",
-    icon: CalendarDays,
-    available: false,
-  },
-  {
-    id: "bulk",
-    label: "Operațiuni în masă",
-    description: "Facturi recurente bulk, import CSV, raport erori",
-    href: "/business/fin/mass",
-    icon: PackageSearch,
-    available: false,
-  },
-  {
-    id: "security",
-    label: "Securitate",
-    description: "GDPR, audit AI, export date, retenție",
-    href: "/business/fin/settings/security",
-    icon: Shield,
-    available: false,
-  },
-];
+const fetchProfile = () => getFinMe().then((me) => me?.profile ?? null);
+const fetchAging = () => getFinAging();
+const fetchMetrics = () => getFinMetrics({ period: "last_6m" });
+const fetchObligations = () => listCalendar().then((r) => r.obligations);
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Blocuri ──────────────────────────────────────────────────────────────────
+
+function SetupBanner() {
+  return (
+    <Card tone="dashboard" className="mb-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-3">
+        <PastelIcon tone="indigo" size={40}>
+          <Building2 className="h-5 w-5" />
+        </PastelIcon>
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Configurează firma ca să emiți prima factură</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Denumirea, IDNO-ul, regimul TVA și seria de facturare apar pe fiecare act. Durează două minute.
+          </p>
+        </div>
+      </div>
+      <Link
+        to="/business/fin/onboarding"
+        className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground no-underline hover:bg-primary/90 hover:no-underline"
+      >
+        Configurează firma
+        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+      </Link>
+    </Card>
+  );
+}
+
+interface TodoPanelProps {
+  todos: FinTodo[];
+  loading: boolean;
+  failed: boolean;
+}
+
+function TodoPanel({ todos, loading, failed }: TodoPanelProps) {
+  return (
+    <Card tone="dashboard" className="p-5" aria-labelledby="fin-todo-title">
+      <h2 id="fin-todo-title" className="mb-3 text-sm font-semibold text-foreground">
+        De făcut acum
+      </h2>
+      {loading ? (
+        <div className="animate-pulse space-y-2" aria-hidden="true">
+          <div className="h-12 rounded-lg bg-muted" />
+          <div className="h-12 rounded-lg bg-muted" />
+        </div>
+      ) : todos.length === 0 ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+          {failed
+            ? "Nu am putut încărca termenele și restanțele. Deschide Calendarul fiscal pentru detalii."
+            : `Nimic urgent: nicio restanță și niciun termen fiscal în următoarele ${DUE_SOON_DAYS} zile.`}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {todos.map((t) => (
+            <li key={t.key}>
+              <Link
+                to={t.href}
+                className="group flex min-h-[44px] items-start gap-3 rounded-lg border border-border/60 px-3 py-2.5 no-underline transition-colors hover:border-primary/30 hover:bg-primary/5 hover:no-underline"
+              >
+                <AlertTriangle
+                  className={cn("mt-0.5 h-4 w-4 shrink-0", t.tone === "danger" ? "text-destructive" : "text-warning")}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-foreground">{t.title}</span>
+                  <span className="block text-xs text-muted-foreground">{t.detail}</span>
+                </span>
+                <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function ModuleMap({ crmEnabled, itparkEnabled }: { crmEnabled: boolean; itparkEnabled: boolean }) {
+  // „Acasă FinDesk" e chiar pagina asta — n-are ce căuta în harta ei.
+  const groups = visibleFinNavGroups({ crmEnabled, itparkEnabled })
+    .map((g) => ({ ...g, items: g.items.filter((it) => it.href !== "/business/fin/") }))
+    .filter((g) => g.items.length > 0);
+
+  return (
+    <section aria-label="Module FinDesk" className="space-y-6">
+      {groups.map((g) => (
+        <div key={g.section ?? "_"}>
+          <h2 className="mb-3 text-3xs font-semibold uppercase tracking-group text-muted-foreground">
+            {g.section ?? "Firma"}
+          </h2>
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {g.items.map((it) => {
+              const Icon = it.icon;
+              return (
+                <li key={it.href}>
+                  <Link
+                    to={it.href}
+                    className="group flex h-full min-h-[44px] items-start gap-3 rounded-xl border border-border/60 bg-card p-4 no-underline transition-colors hover:border-primary/30 hover:bg-primary/5 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <PastelIcon tone={it.tone} size={36}>
+                      <Icon className="h-4 w-4" />
+                    </PastelIcon>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-foreground">{it.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{it.description}</span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// ─── Pagina ───────────────────────────────────────────────────────────────────
 
 export function FinHome() {
-  const [role, setRole] = useState<FinRole | null>(null);
-  const [loading, setLoading] = useState(true);
+  const profile = useLoad<FinOrgProfile | null>(fetchProfile);
+  const aging = useLoad(fetchAging);
+  const metrics = useLoad<FinMetricsResponse>(fetchMetrics);
+  const obligations = useLoad(fetchObligations);
+  const { isEnabled } = useEnabledModules();
+  const today = todayIso();
 
-  useEffect(() => {
-    getFinMe()
-      .then((res) => setRole(res?.member.role as FinRole ?? null))
-      .catch(() => setRole(null))
-      .finally(() => setLoading(false));
-  }, []);
+  const agingData = aging.status === "ok" ? aging.data.aging : null;
+  const obligationsData = obligations.status === "ok" ? obligations.data : null;
+  const todos = useMemo(
+    () => buildTodos({ obligations: obligationsData, aging: agingData, today }),
+    [obligationsData, agingData, today],
+  );
+  const next = obligationsData ? nextDeadline(obligationsData, today) : null;
 
-  if (loading) {
-    return (
-      <FinLayout pageTitle="FinDesk">
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </FinLayout>
-    );
-  }
+  const points = metrics.status === "ok" ? metrics.data.metrics : [];
+  const thisMonth = points[points.length - 1];
+  const receivable = points.reduce((sum, p) => sum + p.receivable, 0);
+  const over30 = agingData ? agingData["31_60"] + agingData["61_90"] + agingData["90_plus"] : 0;
+
+  const companyName = profile.status === "ok" ? profile.data?.legalName : undefined;
+  const needsSetup = profile.status === "ok" && profile.data === null;
 
   return (
     <FinLayout
-      pageTitle="FinDesk"
-      pageDescription="Modulele platformei de gestiune financiară"
+      pageTitle={companyName || "FinDesk"}
+      pageDescription="Ce e urgent, cum stăm și toate modulele de finanțe."
+      actions={
+        <Link
+          to="/business/fin/invoices?nou=1"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground no-underline hover:bg-primary/90 hover:no-underline"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Factură nouă
+        </Link>
+      }
     >
-      <div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-        role="list"
-        aria-label="Module FinDesk"
-      >
-        {MODULES.map((mod) => {
-          const Icon = mod.icon;
+      {needsSetup && <SetupBanner />}
 
-          if (!mod.available) {
-            return (
-              <div
-                key={mod.id}
-                role="listitem"
-                className="rounded-xl border border-border bg-muted/40 p-5 opacity-60 select-none"
-                aria-label={`${mod.label} — în curând`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="rounded-lg bg-muted p-2 shrink-0">
-                    <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-muted-foreground">{mod.label}</p>
-                    <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-2">
-                      {mod.description}
-                    </p>
-                    <span className="mt-2 inline-block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/50">
-                      În curând
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <Link
-              key={mod.id}
-              to={mod.href}
-              role="listitem"
-              className={cn(
-                "group rounded-xl border border-border bg-card p-5 transition-colors",
-                "hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none",
-                "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                "min-h-[44px]"
-              )}
-              aria-label={`Accesează ${mod.label}`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2 shrink-0 group-hover:bg-primary/15 transition-colors">
-                  <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground">{mod.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                    {mod.description}
-                  </p>
-                </div>
-                <ArrowRight
-                  className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0 mt-0.5"
-                  aria-hidden="true"
-                />
-              </div>
-            </Link>
-          );
-        })}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="fin-home-kpis">
+        <KpiTile
+          label="Facturi restante"
+          value={agingData ? formatFinMoney(agingData.total) : "—"}
+          icon={<AlertTriangle className="h-5 w-5" />}
+          tone="rose"
+          href="/business/fin/invoices"
+          loading={aging.status === "loading"}
+          hint={agingData && over30 > 0 ? `${formatFinMoney(over30)} peste 30 de zile` : undefined}
+        />
+        <KpiTile
+          label="De încasat (6 luni)"
+          value={metrics.status === "ok" ? formatFinMoney(receivable) : "—"}
+          icon={<Wallet className="h-5 w-5" />}
+          tone="amber"
+          href="/business/fin/payments"
+          loading={metrics.status === "loading"}
+        />
+        <KpiTile
+          label="Venit luna aceasta"
+          value={thisMonth ? formatFinMoney(thisMonth.revenue) : "—"}
+          icon={<TrendingUp className="h-5 w-5" />}
+          tone="emerald"
+          href="/business/fin/ledger"
+          loading={metrics.status === "loading"}
+          hint={thisMonth ? `Profit: ${formatFinMoney(thisMonth.profit)}` : undefined}
+        />
+        <KpiTile
+          label="Următorul termen fiscal"
+          value={next ? formatDate(next.dueDate) : "—"}
+          icon={<CalendarClock className="h-5 w-5" />}
+          tone="orange"
+          href="/business/fin/calendar"
+          loading={obligations.status === "loading"}
+          hint={next ? obligationLabel(next) : obligations.status === "ok" ? "Niciun termen înregistrat" : undefined}
+        />
       </div>
 
-      {/* Quick actions for owners/accountants */}
-      {role && (role === "owner" || role === "accountant") && (
-        <div className="mt-8 rounded-xl border border-border bg-card/60 p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3">Acțiuni rapide</h2>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to="/business/fin/company"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors min-h-[44px]"
-            >
-              <Building2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-              Configurează firma
-            </Link>
-            <Link
-              to="/business/fin/onboarding"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors min-h-[44px]"
-            >
-              <ArrowRight className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-              Tur de instalare
-            </Link>
-          </div>
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <TodoPanel
+            todos={todos}
+            loading={aging.status === "loading" || obligations.status === "loading"}
+            failed={aging.status === "error" && obligations.status === "error"}
+          />
         </div>
-      )}
+        <Card tone="dashboard" className="p-5">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Acțiuni rapide</h2>
+          <ul className="space-y-2">
+            {[
+              { label: "Emite o factură", href: "/business/fin/invoices?nou=1", icon: Receipt },
+              { label: "Încarcă extrasul bancar", href: "/business/fin/statement/upload", icon: Wallet },
+              { label: "Adaugă o cheltuială", href: "/business/fin/expenses", icon: Plus },
+              { label: "Vezi termenele fiscale", href: "/business/fin/calendar", icon: CalendarClock },
+            ].map((a) => (
+              <li key={a.href}>
+                <Link
+                  to={a.href}
+                  className="flex min-h-[44px] items-center gap-2.5 rounded-lg px-2 text-sm text-foreground no-underline hover:bg-muted hover:no-underline"
+                >
+                  <a.icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  {a.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+
+      <ModuleMap crmEnabled={isEnabled("crm")} itparkEnabled={isEnabled("itpark")} />
     </FinLayout>
   );
 }
