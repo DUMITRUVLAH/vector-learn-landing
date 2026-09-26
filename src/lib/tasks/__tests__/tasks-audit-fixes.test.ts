@@ -13,12 +13,12 @@ const now = () => '2026-08-22T10:00:00.000Z';
 
 function task(over: Partial<BoardTask> = {}): BoardTask {
   return {
-    id: 't1', company_id: 'c1', board_id: 'b1', list_id: 'l1', parent_task_id: null,
+    id: 't1', tenant_id: 'c1', board_id: 'b1', list_id: 'l1', parent_task_id: null,
     title: 'Task', description: null, status: 'todo', priority: 'medium', position: 1024,
     assigned_to: null, assignees: [], assigned_by: null, created_by: 'u1',
     start_date: null, due_date: null, estimated_minutes: null, actual_minutes: null,
     source_module: 'manual', source_id: null, is_private: false, is_recurring: false,
-    recurrence_rule: null, depends_on: null, tags: [], task_set: null, sort_order: 0,
+    recurrence_rule: null, tags: [], task_set: null, sort_order: 0,
     completed_at: null, deleted_at: null,
     created_at: '2026-08-01T10:00:00.000Z', updated_at: '2026-08-01T10:00:00.000Z',
     ...over,

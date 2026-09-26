@@ -15,6 +15,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   Landmark,
   ClipboardList,
+  ListChecks,
   Building2,
   RefreshCw,
   TrendingUp,
@@ -178,6 +179,14 @@ const MODULE_TILES: ModuleTile[] = [
     icon: <Building2 className="h-7 w-7" />,
     tone: "emerald",
     moduleKey: "itpark",
+  },
+  {
+    label: "Task-uri",
+    description: "Boarduri Kanban, task-urile mele, calendar, Gantt, aprobări și echipe.",
+    href: "/business/tasks/boards/me",
+    icon: <ListChecks className="h-7 w-7" />,
+    tone: "rose",
+    moduleKey: "tasks",
   },
 ];
 

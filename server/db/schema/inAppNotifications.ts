@@ -22,6 +22,11 @@ export interface InAppNotificationPayload {
   actor_name?: string;
   /** PAR-111: PAR ID for filtering/deep-link to /business/par/:id */
   par_id?: string;
+  /** TASKS-001: task-ul și boardul lui, pentru deep-link în managerul de task-uri. */
+  task_id?: string;
+  board_id?: string | null;
+  /** TASKS-001: ziua termenului pentru „termen aproape" — cheia de deduplicare. */
+  due_day?: string;
 }
 
 export const inAppNotifications = pgTable(

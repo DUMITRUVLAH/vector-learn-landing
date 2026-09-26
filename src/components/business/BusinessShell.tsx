@@ -45,7 +45,7 @@ import {
   ChevronDown,
   Search,
   Menu,
-  X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon, UserPlus, Inbox, PlugZap } from "lucide-react";
+  X, Activity, KanbanSquare, Package, CalendarClock, History as HistoryIcon, UserPlus, Inbox, PlugZap, ListChecks } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { clearOrphanScrollLock } from "@/lib/scrollLockGuard";
@@ -73,6 +73,31 @@ interface BusinessShellProps {
   pageTitle: string;
   pageDescription?: string;
   actions?: ReactNode;
+  /**
+   * TASKS-001: meniul unui modul care și-l construiește singur (grupuri filtrate pe drepturile
+   * lui, o secțiune dinamică — boardurile —, filele de jos de pe telefon). Shell-ul îl randează
+   * ca pe meniurile focalizate PAR/CRM, fără să știe nimic despre modul.
+   */
+  moduleNav?: ModuleNav;
+  /** Vederile late (Kanban, Calendar) renunță la containerul centrat de `max-w-7xl`. */
+  fullBleed?: boolean;
+}
+
+/** Fila din bara de jos de pe telefon. */
+export interface MobileNavItem {
+  label: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  /** Se aprinde doar pe potrivire exactă (ex. „Boarduri", care e prefixul celorlalte file). */
+  exact?: boolean;
+}
+
+export interface ModuleNav {
+  groups: NavGroup[];
+  /** Secțiune randată sub grupuri, în aceeași zonă derulabilă (ex. lista de boarduri). */
+  extra?: ReactNode;
+  /** Cele cel mult 5 file de jos, pe telefon. Fără ele rămân filele generale. */
+  mobileItems?: MobileNavItem[];
 }
 
 /** PAR role labels used to gate per-feature nav visibility (SHELL-502). */
@@ -97,9 +122,13 @@ function parRoleLabel(roles: string[]): string | null {
   return held.length === 1 ? held[0][1] : `${held[0][1]} +${held.length - 1}`;
 }
 
-interface NavItem {
+export interface NavItem {
   label: string;
   href: string;
+  /** TASKS-001: numărul din pastila rândului (ex. aprobări în așteptare). */
+  count?: number;
+  /** Se aprinde doar pe potrivire exactă (rândul de start al unui modul). */
+  exact?: boolean;
   icon: typeof LayoutDashboard;
   /** HR365 icon-chip tint. One tone per category — never two adjacent. */
   tone: ChipTone;
@@ -127,7 +156,7 @@ interface NavItem {
   onlyWithoutFindesk?: boolean;
 }
 
-interface NavGroup {
+export interface NavGroup {
   section: string | null;
   /** Prefix used to detect if the current path is inside this group (for auto-expand). */
   prefix?: string;
@@ -178,6 +207,16 @@ const NAV_GROUPS: NavGroup[] = [
     prefix: "/business/pontaj",
     items: [
       { label: "Pontajul meu", href: "/business/pontaj", icon: CalendarClock, tone: "amber" },
+    ],
+  },
+  {
+    // TASKS-001: managerul de task-uri — în interiorul lui meniul e al modulului (`moduleNav`),
+    // aici e doar intrarea, vizibilă cât modulul e pornit pentru workspace.
+    section: "Task-uri",
+    prefix: "/business/tasks",
+    items: [
+      { label: "Task-urile mele", href: "/business/tasks/boards/me", icon: ListChecks, tone: "rose" },
+      { label: "Boarduri", href: "/business/tasks/boards", icon: KanbanSquare, tone: "violet", exact: true },
     ],
   },
   {
@@ -348,6 +387,10 @@ const INDEX_HREFS = ["/business/par", "/business/fin/", "/business/crm"];
 
 /** True when `path` should light up `item` — index rows match exactly, the rest by prefix. */
 function isItemActive(item: NavItem, path: string): boolean {
+  if (item.exact) {
+    const bare = path.split("?")[0];
+    return bare === item.href || bare === `${item.href}/`;
+  }
   const isIndexItem = INDEX_HREFS.includes(item.href);
   if (isIndexItem) return path === item.href || path === item.href.replace(/\/$/, "");
   return path.startsWith(item.href) || !!item.alsoActive?.some((href) => path.startsWith(href));
@@ -413,7 +456,7 @@ function SidebarGroup({
       tone={item.tone}
       icon={<item.icon className={gm3 ? "h-5 w-5" : "h-3.5 w-3.5"} />}
       active={isItemActive(item, path)}
-      count={badgeFor(item.href, inboxCount, financeCount)}
+      count={item.count ?? badgeFor(item.href, inboxCount, financeCount)}
       variant={gm3 ? "gm3" : "hr365"}
     />
   ));
@@ -465,8 +508,11 @@ function SidebarBody({
   onLogout,
   onNavigate,
   gm3 = false,
+  extra,
 }: {
   gm3?: boolean;
+  /** TASKS-001: secțiunea dinamică a unui modul, sub grupuri (ex. boardurile). */
+  extra?: ReactNode;
   navGroups: NavGroup[];
   path: string;
   inboxCount: number;
@@ -601,6 +647,7 @@ function SidebarBody({
         {q && shownGroups.length === 0 && (
           <p className="px-3 py-2 text-xs text-muted-foreground">Nicio funcționalitate găsită.</p>
         )}
+        {!q && extra}
       </nav>
 
       {/* User */}
@@ -666,6 +713,8 @@ export function BusinessShell({
   pageTitle,
   pageDescription,
   actions,
+  moduleNav,
+  fullBleed = false,
 }: BusinessShellProps) {
   const { path, navigate } = useRouter();
   const session = useBusinessSession();
@@ -727,23 +776,25 @@ export function BusinessShell({
   // SPLIT-501: inside PAR module → focused PAR-only sidebar.
   const isParModule = path.startsWith("/business/par");
   // Meniul PAR complet: în interiorul modulului SAU când PAR e tot ce are workspace-ul.
-  const useParNav = isParModule || (parOnlyWorkspace && hasPar);
+  const useParNav = !moduleNav && (isParModule || (parOnlyWorkspace && hasPar));
   // CRM-SIDEBAR: la fel pentru CRM — în interiorul modulului meniul e doar al lui.
   const isCrmModule = path.startsWith("/business/crm");
   const crmOnlyWorkspace = enabledModules.length === 1 && enabledModules[0] === "crm";
-  const useCrmNav = !useParNav && (isCrmModule || (crmOnlyWorkspace && isEnabled("crm")));
+  const useCrmNav = !moduleNav && !useParNav && (isCrmModule || (crmOnlyWorkspace && isEnabled("crm")));
   // NAV-01: FinDesk are și el meniu propriu în interiorul modulului — 26 de rânduri plate sub PAR
   // erau exact problema pe care CRM-ul și PAR-ul o rezolvaseră deja.
   const isFinModule = path.startsWith("/business/fin");
   const finOnlyWorkspace = enabledModules.length === 1 && enabledModules[0] === "findesk";
-  const useFinNav = !useParNav && !useCrmNav && (isFinModule || (finOnlyWorkspace && isEnabled("findesk")));
+  const useFinNav = !moduleNav && !useParNav && !useCrmNav && (isFinModule || (finOnlyWorkspace && isEnabled("findesk")));
   // Drepturile se cer numai în CRM: pe restul rutelor n-au ce rând să ascundă.
   const { can: crmCan } = useCrmPermissions({ enabled: useCrmNav });
 
   const availableGroups: NavGroup[] = isPlatformAdmin
     ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform", items: [{ label: "Consola Platformă", href: "/business/platform", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
     : NAV_GROUPS;
-  const baseGroups = useParNav
+  const baseGroups = moduleNav
+    ? moduleNav.groups
+    : useParNav
     ? PAR_NAV_GROUPS
     : useCrmNav
     ? CRM_NAV_GROUPS
@@ -755,6 +806,7 @@ export function BusinessShell({
         // DocMerge apare în sidebar doar când ești pe rutele DocMerge
         if (g.section === "Document Merge") return isEnabled("docmerge") && path.startsWith("/business/docmerge");
         if (g.section === "Pontaj") return isEnabled("pontaj");
+        if (g.section === "Task-uri") return isEnabled("tasks");
         return true;
       });
 
@@ -805,7 +857,9 @@ export function BusinessShell({
   // „Înapoi la module" apare cât timp CHIAR există alt modul de întors; într-un workspace cu un
   // singur modul, meniul lui e tot meniul, deci rămâne rândul de Dashboard.
   const inFocusedModule =
-    (isParModule && !parOnlyWorkspace) || (isCrmModule && !crmOnlyWorkspace) || (isFinModule && !finOnlyWorkspace);
+    (!!moduleNav && enabledModules.length > 1) ||
+    (!moduleNav &&
+      ((isParModule && !parOnlyWorkspace) || (isCrmModule && !crmOnlyWorkspace) || (isFinModule && !finOnlyWorkspace)));
   const showBackToModules = inFocusedModule;
   const showDashboard = !inFocusedModule;
 
@@ -821,6 +875,7 @@ export function BusinessShell({
       userRole={userRole}
       onLogout={handleLogout}
       gm3={useCrmNav}
+      extra={moduleNav?.extra}
     />
   );
 
@@ -865,6 +920,7 @@ export function BusinessShell({
               onLogout={handleLogout}
               onNavigate={() => setDrawerOpen(false)}
               gm3={useCrmNav}
+              extra={moduleNav?.extra}
             />
           </div>
           <button
@@ -915,7 +971,13 @@ export function BusinessShell({
             </main>
           </div>
         ) : (
-        <main className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 max-md:pb-24 sm:px-8">
+        <main
+          className={cn(
+            "w-full px-5 pb-8 pt-2 max-md:pb-24 sm:px-8",
+            // Kanban și Calendar au nevoie de toată lățimea: coloanele se derulează orizontal.
+            fullBleed ? "min-w-0 flex-1" : "mx-auto max-w-7xl",
+          )}
+        >
           {/* An empty pageTitle means the page owns its own header (FinLayout passes ""),
               so we must not emit a stray empty <h1> above it. */}
           {pageTitle ? (
@@ -936,7 +998,9 @@ export function BusinessShell({
           const canApprove = parRoles.some((r) => ["approver", "par_admin"].includes(r)) || preApprover;
           const canAnalyse = parRoles.some((r) => ["approver", "finance", "par_admin"].includes(r));
           const isParAdmin = parRoles.includes("par_admin");
-          const mobileItems = isCrmModule
+          const mobileItems = moduleNav?.mobileItems
+            ? moduleNav.mobileItems.slice(0, 5)
+            : isCrmModule
             ? [
                 { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare },
                 { label: "Astăzi", href: "/business/crm/astazi", icon: CalendarClock },
@@ -967,6 +1031,7 @@ export function BusinessShell({
                 // Ruta ITPark e /business/fin/itpark — „/business/itpark" nu există și ducea la 404.
                 ...(isEnabled("itpark") ? [{ label: "ITPark", href: "/business/fin/itpark", icon: Building2 }] : []),
                 ...(isEnabled("pontaj") ? [{ label: "Pontaj", href: "/business/pontaj", icon: CalendarClock }] : []),
+                ...(isEnabled("tasks") ? [{ label: "Task-uri", href: "/business/tasks/boards/me", icon: ListChecks }] : []),
               ].slice(0, 5);
           // Cinci file încap (≥ 64px fiecare la 320px); a șasea ar fi rupt rândul în două.
           const colsClass =
@@ -979,8 +1044,11 @@ export function BusinessShell({
           <div className={cn("grid", colsClass)}>
           {mobileItems.map((item) => {
             const Icon = item.icon;
+            const bare = path.split("?")[0];
             const active =
-              item.href === "/business/par" || item.href === "/business/crm"
+              "exact" in item && item.exact
+                ? bare === item.href || bare === `${item.href}/`
+                : item.href === "/business/par" || item.href === "/business/crm"
                 ? path === item.href || path === `${item.href}/`
                 : item.href === "/business/fin/" && useFinNav
                 ? path === "/business/fin/" || path === "/business/fin"

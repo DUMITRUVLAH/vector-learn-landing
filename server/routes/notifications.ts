@@ -44,6 +44,12 @@ const KIND_TITLES: Record<string, string> = {
   lead_converted: "Lead convertit",
   budget: "Buget",
   system: "Notificare",
+  // TASKS-001: notificările managerului de task-uri.
+  task_assigned: "Task atribuit",
+  task_approval: "Aprobare cerută",
+  task_mention: "Mențiune într-un task",
+  task_comment: "Comentariu nou",
+  task_due_soon: "Termen aproape",
 };
 
 interface NotifPayload {
@@ -52,6 +58,8 @@ interface NotifPayload {
   lead_id?: string;
   interaction_id?: string;
   actor_name?: string;
+  task_id?: string;
+  board_id?: string | null;
 }
 
 function mapNotification(row: typeof inAppNotifications.$inferSelect) {
@@ -60,6 +68,12 @@ function mapNotification(row: typeof inAppNotifications.$inferSelect) {
   let link: string | null = null;
   if (payload.par_id) link = `#/business/par/${payload.par_id}`;
   else if (payload.lead_id) link = `#/app/leads/${payload.lead_id}`;
+  // Task-ul se deschide pe boardul lui; unul personal (fără board), în „Task-urile mele".
+  else if (payload.task_id) {
+    link = payload.board_id
+      ? `#/business/tasks/boards/${payload.board_id}?task=${payload.task_id}`
+      : `#/business/tasks/boards/me?task=${payload.task_id}`;
+  }
   return {
     id: row.id,
     tenantId: row.tenantId,

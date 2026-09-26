@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { lockBodyScroll } from "@/lib/scrollLock";
 import { Button, type ButtonProps } from "@/components/ds";
 import {
+  LayerContext,
   Slot,
   focusableIn,
   mergeRefs,
@@ -127,7 +128,7 @@ const Surface = forwardRef<HTMLDivElement, SurfaceProps>(function Surface(
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => (ctx.open ? lockBodyScroll() : undefined), [ctx.open]);
-  useDismissableLayer({
+  const layerId = useDismissableLayer({
     open: ctx.open,
     onDismiss: () => ctx.setOpen(false),
     elements: () => [panelRef.current],
@@ -175,7 +176,7 @@ const Surface = forwardRef<HTMLDivElement, SurfaceProps>(function Surface(
         }}
         {...props}
       >
-        {children}
+        <LayerContext.Provider value={layerId}>{children}</LayerContext.Provider>
         {showClose && (
           <button
             type="button"

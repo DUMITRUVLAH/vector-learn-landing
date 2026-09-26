@@ -17,6 +17,7 @@ import {
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import {
+  LayerContext,
   Slot,
   mergeRefs,
   useAnchoredPosition,
@@ -75,7 +76,7 @@ export const PopoverTrigger = forwardRef<HTMLElement, PopoverTriggerProps>(funct
 ) {
   const { open, setOpen, triggerRef, contentId } = usePopover("PopoverTrigger");
   const handlers = {
-    "aria-haspopup": "dialog",
+    "aria-haspopup": "dialog" as const,
     "aria-expanded": open,
     "aria-controls": open ? contentId : undefined,
     "data-state": open ? "open" : "closed",
@@ -140,10 +141,11 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(fu
   const contentRef = useRef<HTMLDivElement | null>(null);
   const position = useAnchoredPosition(triggerRef, contentRef, { open, side, align, sideOffset, collisionPadding });
 
-  useDismissableLayer({
+  const layerId = useDismissableLayer({
     open,
     onDismiss: () => setOpen(false),
     elements: () => [contentRef.current, triggerRef.current],
+    closeOnFocusOutside: true,
     onEscapeKeyDown,
     onPointerDownOutside: (event) => {
       onPointerDownOutside?.(event);
@@ -172,7 +174,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(fu
       )}
       {...props}
     >
-      {children}
+      <LayerContext.Provider value={layerId}>{children}</LayerContext.Provider>
     </div>,
     document.body,
   );

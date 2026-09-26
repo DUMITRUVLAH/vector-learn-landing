@@ -134,6 +134,7 @@ import { finCronRoutes } from "./routes/finCron";
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 import { pontajRoutes } from "./routes/pontaj";
+import { tasksRoutes } from "./routes/tasks";
 // CRM module (CRM Faza 1) — pipeline de leaduri + catalog de produse
 import { crmHealthRoutes } from "./routes/crmHealth";
 import { crmLeadsRoutes } from "./routes/crmLeads";
@@ -468,6 +469,13 @@ app.use("/api/pontaj/*", requireAuth);
 app.use("/api/pontaj", requireTenantModule("pontaj"));
 app.use("/api/pontaj/*", requireTenantModule("pontaj"));
 app.route("/api/pontaj", pontajRoutes);
+// TASKS-001: managerul de task-uri (boarduri, echipe, aprobări). Modulul e OPRIT implicit și se
+// pornește per workspace din Consola Platformă; gardul e aici, nu doar în meniu.
+app.use("/api/tasks", requireAuth);
+app.use("/api/tasks/*", requireAuth);
+app.use("/api/tasks", requireTenantModule("tasks"));
+app.use("/api/tasks/*", requireTenantModule("tasks"));
+app.route("/api/tasks", tasksRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);

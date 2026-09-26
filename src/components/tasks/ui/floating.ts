@@ -15,7 +15,9 @@
  */
 import {
   cloneElement,
+  createContext,
   isValidElement,
+  useContext,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -35,13 +37,16 @@ export type Align = "start" | "center" | "end";
 
 // ─── Ref-uri ────────────────────────────────────────────────────────────────
 
-export function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
+/** Orice fel de ref primim: callback, `useRef(null)` sau `RefObject<T | null>` din context. */
+export type AnyRef<T> = Ref<T> | RefObject<T | null> | MutableRefObject<T | null> | undefined;
+
+export function assignRef<T>(ref: AnyRef<T>, value: T | null): void {
   if (!ref) return;
   if (typeof ref === "function") ref(value);
   else (ref as MutableRefObject<T | null>).current = value;
 }
 
-export function mergeRefs<T>(...refs: Array<Ref<T> | undefined>): (value: T | null) => void {
+export function mergeRefs<T>(...refs: Array<AnyRef<T>>): (value: T | null) => void {
   return (value) => {
     for (const ref of refs) assignRef(ref, value);
   };
@@ -63,7 +68,7 @@ export function Slot({
   children,
   slotRef,
   ...props
-}: { children: ReactNode; slotRef?: Ref<HTMLElement> } & Record<string, unknown>): ReactElement | null {
+}: { children: ReactNode; slotRef?: AnyRef<HTMLElement> } & Record<string, unknown>): ReactElement | null {
   if (!isValidElement(children)) return null;
   const child = children as ReactElement<Record<string, unknown>>;
   const merged: Record<string, unknown> = { ...props };
@@ -79,7 +84,7 @@ export function Slot({
   if (typeof props.className === "string" && typeof child.props.className === "string") {
     merged.className = `${child.props.className} ${props.className}`;
   }
-  merged.ref = mergeRefs(elementRef(child) as Ref<HTMLElement>, slotRef);
+  merged.ref = mergeRefs(elementRef(child) as AnyRef<HTMLElement>, slotRef);
   return cloneElement(child, merged);
 }
 
@@ -87,11 +92,19 @@ export function Slot({
 
 interface Layer {
   id: number;
+  /** Stratul în interiorul căruia s-a deschis acesta (submeniu → meniu, popover → dialog). */
+  parent: number | null;
   elements: () => Array<HTMLElement | null>;
 }
 
 const layers: Layer[] = [];
 let nextLayerId = 1;
+
+/**
+ * Stratul curent, transmis prin context. Contextul React trece prin portaluri, deci un popover
+ * randat în panoul unui dialog își cunoaște părintele chiar dacă DOM-ul lui stă în `body`.
+ */
+export const LayerContext = createContext<number | null>(null);
 
 function layerIndex(id: number): number {
   return layers.findIndex((layer) => layer.id === id);
@@ -102,13 +115,23 @@ function isTopLayer(id: number): boolean {
   return layers.length > 0 && layers[layers.length - 1].id === id;
 }
 
-/** Ținta e într-un strat deschis DUPĂ `id` (un submeniu, un popover din popover)? */
-function insideLayerAbove(id: number, target: Node): boolean {
-  const index = layerIndex(id);
-  for (let i = index + 1; i < layers.length; i += 1) {
-    if (layers[i].elements().some((el) => el?.contains(target))) return true;
+/** `candidate` s-a deschis (direct sau indirect) din `ancestor`? */
+function isDescendant(candidate: Layer, ancestor: number): boolean {
+  let parent = candidate.parent;
+  for (let guard = 0; parent !== null && guard < 50; guard += 1) {
+    if (parent === ancestor) return true;
+    parent = layers.find((l) => l.id === parent)?.parent ?? null;
   }
   return false;
+}
+
+/**
+ * Ținta e într-un strat deschis DIN acesta (un submeniu, un popover din popover)? Un dialog
+ * deschis dintr-o opțiune de meniu NU e descendent — e randat de pagină — deci mutarea focusului
+ * în el închide meniul, exact ca în Radix. Altfel meniul (z-80) rămânea peste dialog (z-50).
+ */
+function insideDescendantLayer(id: number, target: Node): boolean {
+  return layers.some((layer) => isDescendant(layer, id) && layer.elements().some((el) => el?.contains(target)));
 }
 
 export interface DismissOptions {
@@ -118,29 +141,39 @@ export interface DismissOptions {
   elements: () => Array<HTMLElement | null>;
   /** `false` = click-ul în afară nu închide (AlertDialog). */
   closeOnOutside?: boolean;
+  /** Focusul plecat în afară închide stratul (meniuri, popover-e); dialogurile își țin focusul. */
+  closeOnFocusOutside?: boolean;
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
   onPointerDownOutside?: (event: PointerEvent) => void;
 }
 
 /**
- * Înregistrează stratul cât e deschis și îl închide la Escape / click în afară — doar dacă e
- * stratul de SUS. Ordinea deschiderii dă ordinea straturilor, exact cum le vede omul pe ecran.
+ * Înregistrează stratul cât e deschis și îl închide la Escape (doar stratul de sus), la click în
+ * afară și — pentru straturile nemodale — la focus mutat în afară. Întoarce id-ul stratului, pe
+ * care componenta îl dă mai departe prin `LayerContext` conținutului ei.
  */
 export function useDismissableLayer({
   open,
   onDismiss,
   elements,
   closeOnOutside = true,
+  closeOnFocusOutside = false,
   onEscapeKeyDown,
   onPointerDownOutside,
-}: DismissOptions): void {
-  const latest = useRef({ onDismiss, elements, closeOnOutside, onEscapeKeyDown, onPointerDownOutside });
-  latest.current = { onDismiss, elements, closeOnOutside, onEscapeKeyDown, onPointerDownOutside };
+}: DismissOptions): number {
+  const parent = useContext(LayerContext);
+  const idRef = useRef(0);
+  if (idRef.current === 0) idRef.current = nextLayerId++;
+  const latest = useRef({ onDismiss, elements, closeOnOutside, closeOnFocusOutside, onEscapeKeyDown, onPointerDownOutside });
+  latest.current = { onDismiss, elements, closeOnOutside, closeOnFocusOutside, onEscapeKeyDown, onPointerDownOutside };
 
   useEffect(() => {
     if (!open) return;
-    const id = nextLayerId++;
-    layers.push({ id, elements: () => latest.current.elements() });
+    const id = idRef.current;
+    layers.push({ id, parent, elements: () => latest.current.elements() });
+
+    const isInside = (target: Node) =>
+      latest.current.elements().some((el) => el?.contains(target)) || insideDescendantLayer(id, target);
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !isTopLayer(id)) return;
@@ -151,23 +184,30 @@ export function useDismissableLayer({
     };
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (!target || !latest.current.closeOnOutside) return;
-      if (latest.current.elements().some((el) => el?.contains(target))) return;
-      if (insideLayerAbove(id, target)) return;
+      if (!target || !latest.current.closeOnOutside || isInside(target)) return;
       latest.current.onPointerDownOutside?.(event);
       if (event.defaultPrevented) return;
+      latest.current.onDismiss("outside");
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !latest.current.closeOnFocusOutside || isInside(target)) return;
       latest.current.onDismiss("outside");
     };
 
     document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("focusin", onFocusIn, true);
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("focusin", onFocusIn, true);
       const index = layerIndex(id);
       if (index >= 0) layers.splice(index, 1);
     };
-  }, [open]);
+  }, [open, parent]);
+
+  return idRef.current;
 }
 
 // ─── Ancorare ───────────────────────────────────────────────────────────────

@@ -85,6 +85,8 @@ const CrmApiPage = lazyWithTimeout(() => import("./pages/business/crm/CrmApiPage
 // PONTAJ-001: tabelul de pontaj self-service.
 const PontajPage = lazyWithTimeout(() => import("./pages/business/pontaj/PontajPage").then((m) => ({ default: m.PontajPage })));
 const PontajOrgPage = lazyWithTimeout(() => import("./pages/business/pontaj/PontajOrgPage").then((m) => ({ default: m.PontajOrgPage })));
+// TASKS-001: managerul de task-uri — un singur punct de intrare; paginile lui se încarcă separat.
+const TasksApp = lazyWithTimeout(() => import("./pages/business/tasks/TasksApp").then((m) => ({ default: m.TasksApp })));
 const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
 const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
 const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
@@ -449,6 +451,9 @@ function Routes() {
   // (requireTenantModule) — ruta rămâne montată, iar pagina arată refuzul explicit.
   if (path.startsWith("/business/pontaj/organizatie")) return <BusinessGuardPage><PontajOrgPage /></BusinessGuardPage>;
   if (path.startsWith("/business/pontaj")) return <BusinessGuardPage><PontajPage /></BusinessGuardPage>;
+  // TASKS-001: boarduri, task-urile mele, Gantt, aprobări, echipe. Gardul de modul e pe server
+  // (requireTenantModule("tasks")); modulul arată singur refuzul explicit când e oprit.
+  if (path.startsWith("/business/tasks")) return <BusinessGuardPage><TasksApp /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;

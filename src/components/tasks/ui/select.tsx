@@ -26,6 +26,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  LayerContext,
   mergeRefs,
   useAnchoredPosition,
   useControllableOpen,
@@ -178,10 +179,11 @@ export const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(func
     matchAnchorWidth: true,
   });
 
-  useDismissableLayer({
+  const layerId = useDismissableLayer({
     open: ctx.open,
     onDismiss: () => ctx.setOpen(false),
     elements: () => [contentRef.current, ctx.triggerRef.current],
+    closeOnFocusOutside: true,
   });
 
   // Focus pe opțiunea aleasă (sau pe prima) la deschidere; înapoi pe trigger la închidere.
@@ -241,7 +243,7 @@ export const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(func
       onKeyDown={onKeyDown}
       {...props}
     >
-      {children}
+      <LayerContext.Provider value={layerId}>{children}</LayerContext.Provider>
     </div>,
     document.body,
   );

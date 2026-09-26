@@ -26,7 +26,7 @@ const now = () => FIXED_NOW;
 function task(overrides: Partial<BoardTask> = {}): BoardTask {
   return {
     id: overrides.id ?? Math.random().toString(36).slice(2),
-    company_id: 'c1',
+    tenant_id: 'c1',
     board_id: 'b1',
     list_id: null,
     parent_task_id: null,
@@ -48,8 +48,7 @@ function task(overrides: Partial<BoardTask> = {}): BoardTask {
     is_private: false,
     is_recurring: false,
     recurrence_rule: null,
-    depends_on: null,
-    tags: [],
+        tags: [],
     sort_order: 0,
     completed_at: null,
     deleted_at: null,
@@ -416,7 +415,7 @@ describe('tags', () => {
 
 describe('statusuri', () => {
   it('fiecare status are meta vizual', async () => {
-    const { STATUS_META } = await import('./meta');
+    const { STATUS_META } = await import('../meta');
     const statuses: TaskStatus[] = ['todo', 'in_progress', 'pending', 'done'];
     for (const s of statuses) expect(STATUS_META[s]).toBeTruthy();
   });

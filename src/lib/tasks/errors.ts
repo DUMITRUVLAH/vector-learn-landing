@@ -5,7 +5,7 @@
 // citim. Tiparele de text rămân pentru mesajele libere (ex. validări), ca în
 // sursa din HR365, unde regulile trăiau în excepții SQL.
 
-type TFunc = (key: string, options?: Record<string, unknown>) => string;
+type TFunc = (key: string) => string;
 
 interface DbError {
   code?: string;

@@ -6,14 +6,12 @@ import {
 } from '../analytics';
 import { plannedAdhocCounts, taskSetProgress } from '../filters';
 import type { BoardTask } from '../types';
-import roTasks from '@/i18n/locales/ro/tasks.json';
-import enTasks from '@/i18n/locales/en/tasks.json';
-import ruTasks from '@/i18n/locales/ru/tasks.json';
+import { en as enTasks, ro as roTasks } from '../i18n';
 
 function task(overrides: Partial<BoardTask> = {}): BoardTask {
   return {
     id: overrides.id ?? Math.random().toString(36).slice(2),
-    company_id: 'c1',
+    tenant_id: 'c1',
     board_id: 'b1',
     list_id: null,
     parent_task_id: null,
@@ -35,8 +33,7 @@ function task(overrides: Partial<BoardTask> = {}): BoardTask {
     is_private: false,
     is_recurring: false,
     recurrence_rule: null,
-    depends_on: null,
-    tags: [],
+        tags: [],
     sort_order: 0,
     completed_at: null,
     deleted_at: null,
@@ -348,24 +345,18 @@ describe('taskSetProgress', () => {
   });
 });
 
-function translationLeafPaths(value: unknown, prefix = ''): string[] {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return [prefix];
-  return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) =>
-    translationLeafPaths(child, prefix ? `${prefix}.${key}` : key),
-  );
-}
-
 describe('task board translations', () => {
-  it('RU și EN acoperă fiecare cheie folosită de namespace-ul RO', () => {
-    // Formele de plural NU se compară între limbi: categoriile diferă de la o limbă la
-    // alta (româna are `few`, engleza nu), deci o paritate 1:1 ar cere engleza să conțină
-    // o formă pe care nu o poate folosi niciodată. Pluralurile au gardul lor, care
-    // verifică fiecare limbă după categoriile ei CLDR: `src/i18n/plural-forms.test.ts`.
-    const faraPlural = (key: string) => !/_(zero|one|two|few|many|other)$/.test(key);
-    const expected = translationLeafPaths(roTasks.board).filter(faraPlural).sort();
-    const english = new Set(translationLeafPaths(enTasks.board));
-    const russian = new Set(translationLeafPaths(ruTasks.board));
-    expect(expected.filter((key) => !english.has(key))).toEqual([]);
-    expect(expected.filter((key) => !russian.has(key))).toEqual([]);
+  it('EN acoperă fiecare cheie din RO (și nimic în plus)', () => {
+    // `Translated<typeof ro>` o garantează deja la compilare; testul o păzește și la
+    // rulare, pentru cheile construite dinamic (`status.${value}`).
+    expect(Object.keys(enTasks).sort()).toEqual(Object.keys(roTasks).sort());
+  });
+  it('nicio valoare goală și nicio interpolare rămasă în forma i18next', () => {
+    for (const dict of [roTasks, enTasks] as Record<string, string>[]) {
+      for (const [key, value] of Object.entries(dict)) {
+        expect(value.trim(), key).not.toBe('');
+        expect(value, key).not.toMatch(/\{\{/);
+      }
+    }
   });
 });

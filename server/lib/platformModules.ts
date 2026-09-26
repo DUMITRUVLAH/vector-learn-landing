@@ -74,6 +74,17 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     defaultEnabled: false,
   },
   {
+    key: "tasks",
+    label: "Task-uri — Boarduri și echipe",
+    description:
+      "Managerul de task-uri: boarduri Kanban, listă, calendar și Gantt, task-urile mele, aprobări, echipe și reguli de vizibilitate.",
+    route: "/business/tasks",
+    // OPRIT implicit: un modul nou nu apare peste noapte în meniul unui client plătitor — și, la
+    // un workspace care are doar PAR, l-ar scoate din modul „un singur modul" (tabloul PAR
+    // focalizat). Se aprinde per workspace din Consola Platformă.
+    defaultEnabled: false,
+  },
+  {
     key: "docmerge",
     label: "Document Merge",
     description: "Generare de documente în masă din șablon + Excel.",

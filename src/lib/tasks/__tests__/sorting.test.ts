@@ -18,7 +18,7 @@ const NAMES = { [ANA]: 'Ana Pop', [BOGDAN]: 'Bogdan Rusu' };
  */
 function task(over: Partial<BoardTask> & { id: string }): BoardTask {
   return {
-    company_id: 'c1',
+    tenant_id: 'c1',
     board_id: 'b1',
     list_id: null,
     parent_task_id: null,
@@ -40,8 +40,7 @@ function task(over: Partial<BoardTask> & { id: string }): BoardTask {
     is_private: false,
     is_recurring: false,
     recurrence_rule: null,
-    depends_on: null,
-    tags: [],
+        tags: [],
     sort_order: 0,
     completed_at: null,
     deleted_at: null,

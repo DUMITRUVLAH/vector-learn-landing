@@ -22,6 +22,7 @@ import { createPortal } from "react-dom";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  LayerContext,
   Slot,
   mergeRefs,
   useAnchoredPosition,
@@ -114,7 +115,7 @@ export const DropdownMenuTrigger = forwardRef<HTMLElement, DropdownMenuTriggerPr
 ) {
   const { open, setOpen, triggerRef, contentId } = useRoot("DropdownMenuTrigger");
   const handlers = {
-    "aria-haspopup": "menu",
+    "aria-haspopup": "menu" as const,
     "aria-expanded": open,
     "aria-controls": open ? contentId : undefined,
     "data-state": open ? "open" : "closed",
@@ -165,10 +166,11 @@ export const DropdownMenuContent = forwardRef<HTMLDivElement, DropdownMenuConten
   const contentRef = useRef<HTMLDivElement | null>(null);
   const position = useAnchoredPosition(triggerRef, contentRef, { open, side, align, sideOffset, collisionPadding });
 
-  useDismissableLayer({
+  const layerId = useDismissableLayer({
     open,
     onDismiss: () => setOpen(false),
     elements: () => [contentRef.current, triggerRef.current],
+    closeOnFocusOutside: true,
   });
 
   // La deschidere, prima opțiune primește focusul; la închidere, focusul se întoarce pe trigger.
@@ -209,7 +211,7 @@ export const DropdownMenuContent = forwardRef<HTMLDivElement, DropdownMenuConten
       }}
       {...props}
     >
-      {children}
+      <LayerContext.Provider value={layerId}>{children}</LayerContext.Provider>
     </div>,
     document.body,
   );
@@ -347,8 +349,9 @@ export const DropdownMenuSubContent = forwardRef<HTMLDivElement, HTMLAttributes<
       align: "start",
       sideOffset: 2,
     });
-    useDismissableLayer({
+    const layerId = useDismissableLayer({
       open: sub.open,
+      closeOnFocusOutside: true,
       onDismiss: (reason) => {
         sub.setOpen(false);
         // Escape închide doar submeniul; focusul revine pe rândul care l-a deschis.
@@ -384,7 +387,7 @@ export const DropdownMenuSubContent = forwardRef<HTMLDivElement, HTMLAttributes<
         }}
         {...props}
       >
-        {children}
+        <LayerContext.Provider value={layerId}>{children}</LayerContext.Provider>
       </div>,
       document.body,
     );

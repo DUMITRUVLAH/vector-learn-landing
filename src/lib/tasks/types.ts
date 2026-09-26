@@ -112,6 +112,8 @@ export interface BoardTask {
   approver_ids?: string[] | null;
   approved_at?: string | null;
   approved_by?: string | null;
+  /** Task generat dintr-un șablon (raportul „planificat vs. ad-hoc"). */
+  source_template_id?: string | null;
 }
 
 export interface TaskActivity {
