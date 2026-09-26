@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/tasks/ui";
 import { cn } from "@/lib/utils";
 import { useTasksT } from "@/lib/tasks/useTasksT";
 import { toast } from "@/lib/tasks/toast";
-import { attachmentUrl, type CommentAttachment } from "@/lib/tasks/api";
+import { ALLOWED_ATTACHMENT_TYPES, attachmentUrl, type CommentAttachment } from "@/lib/tasks/api";
 
 function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -162,7 +162,8 @@ export function AttachmentPicker({ files, onChange, disabled, className }: Attac
 
       <label
         className={cn(
-          "inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground",
+          // Inputul e `sr-only`, nu `hidden`: rămâne focusabil cu Tab, iar inelul se vede pe etichetă.
+          "inline-flex cursor-pointer items-center gap-1 rounded-sm text-[11px] text-muted-foreground transition-colors focus-within:ring-2 focus-within:ring-ring hover:text-foreground",
           disabled && "pointer-events-none opacity-50",
         )}
       >
@@ -171,10 +172,14 @@ export function AttachmentPicker({ files, onChange, disabled, className }: Attac
         <input
           type="file"
           multiple
-          className="hidden"
+          accept={[...ALLOWED_ATTACHMENT_TYPES].join(",")}
+          className="sr-only"
           disabled={disabled}
           onChange={(e) => {
-            const picked = Array.from(e.target.files ?? []);
+            const all = Array.from(e.target.files ?? []);
+            // Tipurile pe care serverul le refuză oricum: spus pe loc, nu după trimitere.
+            const picked = all.filter((f) => ALLOWED_ATTACHMENT_TYPES.has(f.type));
+            if (picked.length < all.length) toast.error(t("board.attachments.typeNotAllowed"));
             // Limita e verificată aici pentru un mesaj clar; serverul are
             // oricum propriile limite, dar acolo eroarea e criptică.
             const tooBig = picked.filter((f) => f.size > MAX_MB * 1024 * 1024);

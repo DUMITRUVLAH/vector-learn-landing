@@ -29,6 +29,9 @@ const REQUESTOR = process.env.TASKS_REQUESTOR ?? "requestor@atic.demo.io";
 const APPROVER = process.env.TASKS_APPROVER ?? "approver@atic.demo.io";
 const API_ONLY = process.argv.includes("--api");
 const SHOTS = process.env.SHOTS_DIR ?? "";
+// VIEWPORT=390x844 = telefon; DARK=1 = tema întunecată (clasa `.dark`, ca în Tailwind).
+const [VIEW_W, VIEW_H] = (process.env.VIEWPORT ?? "1440x900").split("x").map(Number);
+const DARK = process.env.DARK === "1";
 const stamp = Date.now().toString(36);
 
 let failures = 0;
@@ -148,7 +151,7 @@ async function browserFlow(ctx) {
   }
   console.log(`\n— Browser —`);
   const browser = await chromium.launch({ executablePath, headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const page = await browser.newPage({ viewport: { width: VIEW_W, height: VIEW_H } });
   const jsErrors = [];
   const badApi = [];
   page.on("pageerror", (e) => jsErrors.push(e.message.split("\n")[0]));
@@ -156,6 +159,7 @@ async function browserFlow(ctx) {
     if (r.url().includes("/api/") && r.status() >= 500) badApi.push(`${r.status()} ${r.url().replace(BASE, "")}`);
   });
   const shot = async (name) => {
+    if (DARK) await page.evaluate(() => document.documentElement.classList.add("dark"));
     if (!SHOTS) return;
     mkdirSync(SHOTS, { recursive: true });
     await page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage: false });
@@ -207,6 +211,11 @@ async function browserFlow(ctx) {
       await page.waitForTimeout(1200);
       const created = await ctx.admin("GET", `/boards/${ctx.boardId}/tasks`);
       check((created.json.tasks ?? []).some((t) => t.title === title), "task creat din interfață ajunge în baza de date", created.json.tasks?.map((t) => t.title));
+      // Board reîncărcat: compozitorul coloanei rămâne deschis după Enter, iar blur-ul lui la
+      // apăsarea pe card mută conținutul sub cursor — clicul n-ar mai ateriza pe card.
+      // `goto` pe același URL nu reîncarcă (doar hash-ul e același), deci `reload`.
+      await page.reload({ waitUntil: "networkidle" });
+      await page.waitForTimeout(600);
       await page.getByText(title).first().click().catch(() => {});
       await page.waitForTimeout(800);
       check(page.url().includes("task="), "clic pe card deschide panoul task-ului (?task=)", page.url());

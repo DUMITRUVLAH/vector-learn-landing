@@ -449,7 +449,8 @@ export interface CommentAttachment {
 
 export const MAX_ATTACHMENT_COUNT = 10;
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const ALLOWED_ATTACHMENT_TYPES = new Set([
+/** Tipurile acceptate — aceeași listă ca pe server; interfața le filtrează înainte de încărcare. */
+export const ALLOWED_ATTACHMENT_TYPES: ReadonlySet<string> = new Set([
   "application/pdf",
   "image/png",
   "image/jpeg",

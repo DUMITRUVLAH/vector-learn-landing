@@ -12,6 +12,7 @@ import { PONTAJ_ENSURE_STATEMENTS } from "./ensure/pontaj";
 import { COMMS_ENSURE_STATEMENTS } from "./ensure/comms";
 import { CONT_PLATA_ENSURE_STATEMENTS } from "./ensure/contPlata";
 import { TASKS_ENSURE_STATEMENTS } from "./ensure/tasks";
+import { ensureIndexStatement, type IndexConfigLike } from "./ensureIndexStatement";
 
 /**
  * Self-healing schema sync — runs at deploy AFTER migrations (see scripts/vercel-migrate.mjs).
@@ -912,25 +913,12 @@ async function ensureIndexes(sql: ReturnType<typeof postgres>): Promise<number> 
     }
 
     for (const builder of Object.values(config ?? {})) {
-      const cfg = (builder as { config?: { name?: string; columns?: unknown[]; unique?: boolean; where?: unknown } })
-        ?.config;
-      if (!cfg?.name || !Array.isArray(cfg.columns) || cfg.columns.length === 0) continue;
-      if (existing.has(cfg.name)) continue;
-      // Un index PARȚIAL (`.where(...)`) nu se poate reconstrui de aici: instrucțiunea de mai jos
-      // n-are clauza WHERE, deci ar crea varianta COMPLETĂ. Pentru un index unic asta schimbă
-      // regula de business — „un singur board implicit per workspace" devenea „un singur board
-      // per workspace". Indecșii parțiali vin doar din migrare și din ENSURE_STATEMENTS.
-      if (cfg.where) continue;
-
-      const cols = cfg.columns
-        .map((col) => (col as { name?: string })?.name)
-        .filter((n): n is string => typeof n === "string");
-      if (cols.length !== cfg.columns.length) continue; // expresie, nu simple coloane — o sărim
-
-      const unique = cfg.unique ? "UNIQUE " : "";
-      const stmt = `CREATE ${unique}INDEX IF NOT EXISTS "${cfg.name}" ON "${tableName}" (${cols
-        .map((cn) => `"${cn}"`)
-        .join(", ")})`;
+      const cfg = (builder as { config?: IndexConfigLike })?.config;
+      if (!cfg?.name || existing.has(cfg.name)) continue;
+      // Parțialii și indecșii pe expresii nu se pot reconstrui fidel de aici (vezi funcția).
+      const stmt = ensureIndexStatement(tableName, cfg);
+      if (!stmt) continue;
+      const cols = (cfg.columns ?? []).map((col) => (col as { name?: string })?.name);
       try {
         await sql.unsafe(stmt);
         console.log(`[sync-schema] +index ${cfg.name} on ${tableName}(${cols.join(", ")})`);
